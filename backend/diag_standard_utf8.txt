@@ -1,0 +1,71 @@
+﻿
+========================================
+  Kitchen Master ΓÇô MongoDB Diagnostics
+========================================
+
+Γ£à MONGODB_URI found: mongodb:<hidden>@ac-qw2clxx-shard-00-00.f5fzwb6.mongodb.net:27017,ac-qw2clxx-shard-00-01.f5fzwb6.mongodb.net:27017,ac-qw2clxx-shard-00-02.f5fzwb6.mongodb.net:27017/kitchenmaster?replicaSet=atlas-11mwmn-shard-0&ssl=true&authSource=admin&retryWrites=true&w=majority
+≡ƒöì Cluster hostname: ac-qw2clxx-shard-00-00.f5fzwb6.mongodb.net:27017,ac-qw2clxx-shard-00-01.f5fzwb6.mongodb.net:27017,ac-qw2clxx-shard-00-02.f5fzwb6.mongodb.net:27017
+
+--- DNS Test ---
+node : Γ¥î DNS A 
+record FAILED: 
+EBADNAME ΓÇô queryA 
+EBADNAME ac-qw2clxx-sha
+rd-00-00.f5fzwb6.mongod
+b.net:27017,ac-qw2clxx-
+shard-00-01.f5fzwb6.mon
+godb.net:27017,ac-qw2cl
+xx-shard-00-02.f5fzwb6.
+mongodb.net:27017
+At line:1 char:1
++ node test-mongo.js > 
+diag_standard.txt 2>&1
++ ~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (Γ¥î DNS A rec   
+ or...ngodb.net:270    
+17:String) [], Rem    
+oteException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+   This usually means 
+a firewall/ISP is 
+blocking DNS, or the 
+hostname is wrong.
+Γ¥î DNS SRV record 
+FAILED: EBADNAME ΓÇô 
+querySrv EBADNAME _mong
+odb._tcp.ac-qw2clxx-sha
+rd-00-00.f5fzwb6.mongod
+b.net:27017,ac-qw2clxx-
+shard-00-01.f5fzwb6.mon
+godb.net:27017,ac-qw2cl
+xx-shard-00-02.f5fzwb6.
+mongodb.net:27017
+   This means your 
+network cannot resolve 
+MongoDB Atlas SRV 
+records.
+   Fix options:
+   ΓÇó Change DNS to 
+8.8.8.8 (Google) or 
+1.1.1.1 (Cloudflare)
+   ΓÇó Whitelist your 
+IP in Atlas ΓåÆ 
+Security ΓåÆ Network 
+Access
+   ΓÇó Or use a 
+standard mongodb:// 
+URI instead of 
+mongodb+srv://
+
+--- Mongoose Connection Test ---
+Γ£à SUCCESS! Host: ac-qw2clxx-shard-00-00.f5fzwb6.mongodb.net
+   Database: kitchenmaster
+
+≡ƒÄë MongoDB is connected and working correctly!
+

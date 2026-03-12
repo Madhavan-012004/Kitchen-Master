@@ -1,0 +1,3 @@
+
+🔌 Connecting to MongoDB... (Attempt 1/5)
+   URI: mongodb:<hidden>@ac-qw2clxx-shard-00-00.f5fzwb6.mongodb.net:27017,ac-qw2clxx-shard-00-01.f5fzwb6.mongodb.net:27017,ac-qw2clxx-shard-00-02.f5fzwb6.mongodb.net:27017/kitchenmaster?replicaSet=atlas-11mwmn-shard-0&ssl=true&authSource=admin&retryWrites=true&w=majority

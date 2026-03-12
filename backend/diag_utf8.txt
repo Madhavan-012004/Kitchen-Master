@@ -1,0 +1,10 @@
+﻿Starting DB check script...
+URI Length: 287
+Connected to DB successfully!
+Found 5 recent orders
+Order KM-114669-991: status=pending
+Order KM-210796-035: status=paid
+Order KOT-TEST-001: status=paid
+Order KM-485281-024: status=paid
+Order KM-764943-960: status=paid
+Disconnected.

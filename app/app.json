@@ -1,0 +1,59 @@
+{
+  "expo": {
+    "name": "Kitchen Master",
+    "slug": "kitchen-master",
+    "version": "1.0.0",
+    "sdkVersion": "54.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "scheme": "kitchenmaster",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1A1A2E"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.kitchenmaster.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Kitchen Master needs microphone access for Voice-to-KOT ordering.",
+        "NSCameraUsageDescription": "Kitchen Master needs camera access to scan and digitize menus.",
+        "NSPhotoLibraryUsageDescription": "Kitchen Master needs photo access to upload menu images for AI digitization."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1A1A2E"
+      },
+      "package": "com.kitchenmaster.app",
+      "permissions": [
+        "RECORD_AUDIO",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "ACCESS_NETWORK_STATE",
+        "VIBRATE"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Kitchen Master to use the camera."
+        }
+      ],
+      "expo-font"
+    ],
+    "extra": {
+      "API_URL": "http://YOUR_PC_LAN_IP:5001",
+      "eas": {
+        "projectId": "kitchen-master"
+      }
+    }
+  }
+}
