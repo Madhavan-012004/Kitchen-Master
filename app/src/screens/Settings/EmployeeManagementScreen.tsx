@@ -7,11 +7,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { authAPI } from '../../api/auth';
-import { Colors, Typography, Spacing, Radius, Shadows, Gradients } from '../../theme';
+import { useAppTheme, Typography, Spacing, Radius, Shadows } from '../../theme';
 
 const ROLES = ['manager', 'waiter', 'kitchen', 'inventory', 'biller'];
 
 export default function EmployeeManagementScreen({ navigation }: any) {
+    const { colors, gradients, isDark } = useAppTheme();
+    const themedStyles = React.useMemo(() => createStyles(colors, gradients, isDark), [colors, gradients, isDark]);
     const [employees, setEmployees] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -20,9 +22,11 @@ export default function EmployeeManagementScreen({ navigation }: any) {
     const [editId, setEditId] = useState<string | null>(null);
     const [form, setForm] = useState({ name: '', email: '', password: '', role: 'waiter', assignedTables: [] as string[] });
 
-    const getAlreadyAssignedTables = () => {
+    const getAlreadyAssignedTables = (excludeId?: string | null) => {
         const assigned = new Set<string>();
         employees.forEach(emp => {
+            const empId = emp._id || emp.id;
+            if (excludeId && empId === excludeId) return;
             if (emp.role === 'waiter' && Array.isArray(emp.assignedTables)) {
                 emp.assignedTables.forEach((t: string) => assigned.add(t));
             }
@@ -89,20 +93,20 @@ export default function EmployeeManagementScreen({ navigation }: any) {
     };
 
     const renderEmployeeCard = ({ item }: { item: any }) => (
-        <View style={styles.employeeCard}>
-            <View style={styles.employeeHeader}>
-                <View style={styles.employeeAvatar}>
-                    <Text style={styles.avatarText}>{item.name.charAt(0).toUpperCase()}</Text>
+        <View style={themedStyles.employeeCard}>
+            <View style={themedStyles.employeeHeader}>
+                <View style={themedStyles.employeeAvatar}>
+                    <Text style={themedStyles.avatarText}>{item.name.charAt(0).toUpperCase()}</Text>
                 </View>
-                <View style={styles.employeeInfo}>
-                    <Text style={styles.employeeName}>{item.name}</Text>
-                    <Text style={styles.employeeEmail}>{item.email}</Text>
+                <View style={themedStyles.employeeInfo}>
+                    <Text style={themedStyles.employeeName}>{item.name}</Text>
+                    <Text style={themedStyles.employeeEmail}>{item.email}</Text>
                 </View>
-                <View style={styles.roleBadge}>
-                    <Text style={styles.roleText}>{item.role.toUpperCase()}</Text>
+                <View style={[themedStyles.roleBadge, { backgroundColor: colors.primary + '1A', borderColor: colors.primary + '33' }]}>
+                    <Text style={[themedStyles.roleText, { color: colors.primary }]}>{item.role.toUpperCase()}</Text>
                 </View>
                 <TouchableOpacity
-                    style={styles.editBtn}
+                    style={themedStyles.editBtn}
                     onPress={() => {
                         setForm({
                             name: item.name,
@@ -115,129 +119,132 @@ export default function EmployeeManagementScreen({ navigation }: any) {
                         setFormVisible(true);
                     }}
                 >
-                    <Ionicons name="pencil" size={16} color={Colors.primary} />
+                    <Ionicons name="pencil" size={16} color={colors.primary} />
                 </TouchableOpacity>
             </View>
             {item.role === 'waiter' && item.assignedTables && item.assignedTables.length > 0 && (
-                <View style={styles.tablesWrap}>
-                    <Text style={styles.tablesLabel}>Assigned Tables:</Text>
-                    <Text style={styles.tablesText}>{item.assignedTables.join(', ')}</Text>
+                <View style={themedStyles.tablesWrap}>
+                    <Text style={themedStyles.tablesLabel}>Assigned Tables:</Text>
+                    <Text style={themedStyles.tablesText}>{item.assignedTables.join(', ')}</Text>
                 </View>
             )}
         </View>
     );
 
     return (
-        <LinearGradient colors={Gradients.background} style={styles.container}>
-            <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
-            <SafeAreaView style={styles.safe}>
+        <LinearGradient colors={gradients.background} style={themedStyles.container}>
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor="transparent" translucent />
+            <SafeAreaView style={themedStyles.safe} edges={['top']}>
                 {/* Header */}
-                <View style={styles.header}>
-                    <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-                        <Ionicons name="chevron-back" size={24} color={Colors.white} />
+                <View style={themedStyles.header}>
+                    <TouchableOpacity style={themedStyles.backBtn} onPress={() => navigation.goBack()}>
+                        <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Staff Management</Text>
-                    <TouchableOpacity style={styles.addBtnHeader} onPress={() => {
+                    <Text style={themedStyles.headerTitle}>Staff Management</Text>
+                    <TouchableOpacity style={themedStyles.addBtnHeader} onPress={() => {
                         setForm({ name: '', email: '', password: '', role: 'waiter', assignedTables: [] });
                         setEditId(null);
                         setFormVisible(!formVisible);
                     }}>
-                        <Ionicons name={formVisible ? "close" : "add"} size={24} color={Colors.primary} />
+                        <Ionicons name={formVisible ? "close" : "add"} size={24} color={colors.primary} />
                     </TouchableOpacity>
                 </View>
 
                 {formVisible ? (
                     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-                        <ScrollView contentContainerStyle={styles.formContainer}>
-                            <View style={styles.formCard}>
-                                <Text style={styles.sectionTitle}>{editId ? 'Edit Staff Member' : 'Add New Staff Member'}</Text>
+                        <ScrollView contentContainerStyle={themedStyles.formContainer}>
+                            <View style={themedStyles.formCard}>
+                                <Text style={themedStyles.sectionTitle}>{editId ? 'Edit Staff Member' : 'Add New Staff Member'}</Text>
 
-                                <Text style={styles.label}>Full Name</Text>
-                                <View style={styles.inputWrap}>
-                                    <Ionicons name="person-outline" size={20} color={Colors.textMuted} style={styles.inputIcon} />
-                                    <TextInput style={styles.input} placeholderTextColor={Colors.textMuted} placeholder="Staff Name" value={form.name} onChangeText={(t) => setForm({ ...form, name: t })} />
+                                <Text style={themedStyles.label}>Full Name</Text>
+                                <View style={themedStyles.inputWrap}>
+                                    <Ionicons name="person-outline" size={20} color={colors.textMuted} style={themedStyles.inputIcon} />
+                                    <TextInput style={themedStyles.input} placeholderTextColor={colors.textMuted} placeholder="Staff Name" value={form.name} onChangeText={(t) => setForm({ ...form, name: t })} />
                                 </View>
 
-                                <Text style={styles.label}>Email Address</Text>
-                                <View style={styles.inputWrap}>
-                                    <Ionicons name="mail-outline" size={20} color={Colors.textMuted} style={styles.inputIcon} />
-                                    <TextInput style={styles.input} placeholderTextColor={Colors.textMuted} placeholder="staff@restaurant.com" keyboardType="email-address" value={form.email} autoCapitalize="none" onChangeText={(t) => setForm({ ...form, email: t })} />
+                                <Text style={themedStyles.label}>Email Address</Text>
+                                <View style={themedStyles.inputWrap}>
+                                    <Ionicons name="mail-outline" size={20} color={colors.textMuted} style={themedStyles.inputIcon} />
+                                    <TextInput style={themedStyles.input} placeholderTextColor={colors.textMuted} placeholder="staff@restaurant.com" keyboardType="email-address" value={form.email} autoCapitalize="none" onChangeText={(t) => setForm({ ...form, email: t })} />
                                 </View>
 
-                                <Text style={styles.label}>Account Password {editId && '(Optional to keep current)'}</Text>
-                                <View style={styles.inputWrap}>
-                                    <Ionicons name="lock-closed-outline" size={20} color={Colors.textMuted} style={styles.inputIcon} />
-                                    <TextInput style={styles.input} placeholderTextColor={Colors.textMuted} placeholder={editId ? "Leave blank to keep same" : "Create a password"} secureTextEntry value={form.password} onChangeText={(t) => setForm({ ...form, password: t })} />
+                                <Text style={themedStyles.label}>Account Password {editId && '(Optional)'}</Text>
+                                <View style={themedStyles.inputWrap}>
+                                    <Ionicons name="lock-closed-outline" size={20} color={colors.textMuted} style={themedStyles.inputIcon} />
+                                    <TextInput style={themedStyles.input} placeholderTextColor={colors.textMuted} placeholder={editId ? "Leave blank to keep same" : "Create a password"} secureTextEntry value={form.password} onChangeText={(t) => setForm({ ...form, password: t })} />
                                 </View>
 
-                                <Text style={styles.label}>Assign Role</Text>
-                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.roleChips}>
+                                <Text style={themedStyles.label}>Assign Role</Text>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={themedStyles.roleChips}>
                                     {ROLES.map((r) => (
-                                        <TouchableOpacity key={r} style={[styles.chip, form.role === r && styles.chipActive]} onPress={() => setForm({ ...form, role: r })}>
-                                            <Text style={[styles.chipText, form.role === r && styles.chipTextActive]}>{r.toUpperCase()}</Text>
+                                        <TouchableOpacity key={r} style={[themedStyles.chip, form.role === r && themedStyles.chipActive]} onPress={() => setForm({ ...form, role: r })}>
+                                            <Text style={[themedStyles.chipText, form.role === r && themedStyles.chipTextActive]}>{r.toUpperCase()}</Text>
                                         </TouchableOpacity>
                                     ))}
                                 </ScrollView>
 
                                 {form.role === 'waiter' && (
                                     <>
-                                        <Text style={styles.label}>Assign Tables</Text>
-                                        <View style={styles.tableGrid}>
-                                            {Array.from({ length: 20 }, (_, i) => `Table ${i + 1}`).map(t => {
-                                                const alreadyAssigned = getAlreadyAssignedTables();
-                                                const isSelected = form.assignedTables.includes(t);
-                                                const isAssignedToOther = alreadyAssigned.has(t) && !isSelected;
-                                                return (
-                                                    <TouchableOpacity
-                                                        key={t}
-                                                        style={[
-                                                            styles.tableGridBtn,
-                                                            isSelected && styles.tableGridBtnActive,
-                                                            isAssignedToOther && styles.tableGridBtnDisabled
-                                                        ]}
-                                                        disabled={isAssignedToOther}
-                                                        onPress={() => {
-                                                            setForm(prev => {
-                                                                const current = prev.assignedTables;
-                                                                return {
-                                                                    ...prev,
-                                                                    assignedTables: current.includes(t)
-                                                                        ? current.filter(x => x !== t)
-                                                                        : [...current, t]
-                                                                };
-                                                            });
-                                                        }}
-                                                    >
-                                                        <Text style={[
-                                                            styles.tableGridText,
-                                                            isSelected && styles.tableGridTextActive,
-                                                            isAssignedToOther && styles.tableGridTextDisabled
-                                                        ]}>
-                                                            {t.replace('Table ', '')}
-                                                        </Text>
-                                                    </TouchableOpacity>
-                                                );
-                                            })}
+                                        <Text style={themedStyles.label}>Assign Tables</Text>
+                                        <View style={themedStyles.tableGrid}>
+                                            {(() => {
+                                                const alreadyAssigned = getAlreadyAssignedTables(editId);
+                                                return Array.from({ length: 20 }, (_, i) => `Table ${i + 1}`).map(t => {
+                                                    const isSelected = form.assignedTables.includes(t);
+                                                    const isAssignedToOther = alreadyAssigned.has(t);
+                                                    
+                                                    // Strictly do not show if assigned to someone else
+                                                    if (isAssignedToOther) return null;
+
+                                                    return (
+                                                        <TouchableOpacity
+                                                            key={t}
+                                                            style={[
+                                                                themedStyles.tableGridBtn,
+                                                                isSelected && themedStyles.tableGridBtnActive
+                                                            ]}
+                                                            onPress={() => {
+                                                                setForm(prev => {
+                                                                    const current = prev.assignedTables;
+                                                                    return {
+                                                                        ...prev,
+                                                                        assignedTables: current.includes(t)
+                                                                            ? current.filter(x => x !== t)
+                                                                            : [...current, t]
+                                                                    };
+                                                                });
+                                                            }}
+                                                        >
+                                                            <Text style={[
+                                                                themedStyles.tableGridText,
+                                                                isSelected && themedStyles.tableGridTextActive
+                                                            ]}>
+                                                                {t.replace('Table ', '')}
+                                                            </Text>
+                                                        </TouchableOpacity>
+                                                    );
+                                                });
+                                            })()}
                                         </View>
                                     </>
                                 )}
 
-                                <TouchableOpacity style={styles.saveBtn} onPress={handleCreateEmployee} disabled={isSaving}>
-                                    <LinearGradient colors={['#FF8A5C', '#FF6B35']} style={styles.saveGradient}>
-                                        {isSaving ? <ActivityIndicator color={Colors.white} /> : <Text style={styles.saveBtnText}>{editId ? 'Save Changes' : 'Create Account'}</Text>}
+                                <TouchableOpacity style={themedStyles.saveBtn} onPress={handleCreateEmployee} disabled={isSaving}>
+                                    <LinearGradient colors={gradients.primary} style={themedStyles.saveGradient}>
+                                        {isSaving ? <ActivityIndicator color={colors.white} /> : <Text style={themedStyles.saveBtnText}>{editId ? 'Save Changes' : 'Create Account'}</Text>}
                                     </LinearGradient>
                                 </TouchableOpacity>
                             </View>
                         </ScrollView>
                     </KeyboardAvoidingView>
                 ) : (
-                    <View style={styles.listContainer}>
+                    <View style={themedStyles.listContainer}>
                         {isLoading ? (
-                            <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 40 }} />
+                            <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
                         ) : employees.length === 0 ? (
-                            <View style={styles.emptyWrap}>
-                                <Ionicons name="people-outline" size={60} color={Colors.textMuted} />
-                                <Text style={styles.emptyText}>No staff members added yet.</Text>
+                            <View style={themedStyles.emptyWrap}>
+                                <Ionicons name="people-outline" size={60} color={colors.textMuted} />
+                                <Text style={themedStyles.emptyText}>No staff members added yet.</Text>
                             </View>
                         ) : (
                             <FlatList
@@ -255,70 +262,68 @@ export default function EmployeeManagementScreen({ navigation }: any) {
     );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any, gradients: any, isDark: boolean) => StyleSheet.create({
     container: { flex: 1 },
     safe: { flex: 1 },
     header: {
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-        paddingHorizontal: Spacing.lg, paddingTop: Spacing.xl, paddingBottom: Spacing.md,
+        paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.sm,
     },
     backBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-start', marginLeft: -8 },
     addBtnHeader: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-end', marginRight: -8 },
-    headerTitle: { ...Typography.h3, color: Colors.textPrimary },
+    headerTitle: { ...Typography.h3, color: colors.textPrimary },
     listContainer: { flex: 1, paddingHorizontal: Spacing.lg },
     employeeCard: {
-        backgroundColor: Colors.card, borderRadius: Radius.lg, padding: Spacing.md,
-        marginBottom: Spacing.md, borderWidth: 1, borderColor: Colors.glassBorder, ...Shadows.sm
+        backgroundColor: colors.card, borderRadius: Radius.lg, padding: Spacing.md,
+        marginBottom: Spacing.md, borderWidth: 1, borderColor: colors.border, ...Shadows.sm
     },
     employeeHeader: { flexDirection: 'row', alignItems: 'center' },
-    employeeAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,107,53,0.15)', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-    avatarText: { ...Typography.h4, color: Colors.primary },
+    employeeAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.primary + '26', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+    avatarText: { ...Typography.h4, color: colors.primary },
     employeeInfo: { flex: 1 },
-    employeeName: { ...Typography.body1, color: Colors.textPrimary, fontWeight: '600' },
-    employeeEmail: { ...Typography.caption, color: Colors.textMuted, marginTop: 2 },
-    roleBadge: { backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: Radius.round },
-    roleText: { ...Typography.caption, color: Colors.textSecondary, fontWeight: '700', fontSize: 10 },
-    editBtn: { marginLeft: 10, padding: 8, backgroundColor: 'rgba(255,107,53,0.1)', borderRadius: Radius.round },
+    employeeName: { ...Typography.body1, color: colors.textPrimary, fontWeight: '600' },
+    employeeEmail: { ...Typography.caption, color: colors.textMuted, marginTop: 2 },
+    roleBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: Radius.round, borderWidth: 1 },
+    roleText: { ...Typography.caption, fontWeight: '700', fontSize: 10 },
+    editBtn: { marginLeft: 10, padding: 8, backgroundColor: colors.primary + '1A', borderRadius: Radius.round },
     emptyWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: '30%' },
-    emptyText: { ...Typography.body1, color: Colors.textMuted },
+    emptyText: { ...Typography.body1, color: colors.textMuted },
     formContainer: { padding: Spacing.lg },
     formCard: {
-        backgroundColor: Colors.card, borderRadius: Radius.xl, padding: Spacing.lg,
-        borderWidth: 1, borderColor: Colors.glassBorder, ...Shadows.md
+        backgroundColor: colors.card, borderRadius: Radius.xl, padding: Spacing.lg,
+        borderWidth: 1, borderColor: colors.border, ...Shadows.md
     },
-    sectionTitle: { ...Typography.h4, color: Colors.textPrimary, marginBottom: Spacing.lg },
-    label: { ...Typography.body2, color: Colors.textSecondary, marginBottom: 8, marginTop: Spacing.md },
+    sectionTitle: { ...Typography.h4, color: colors.textPrimary, marginBottom: Spacing.lg },
+    label: { ...Typography.body2, color: colors.textSecondary, marginBottom: 8, marginTop: Spacing.md },
     inputWrap: {
         flexDirection: 'row', alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: Radius.md,
-        borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 14, height: 50
+        backgroundColor: colors.glass, borderRadius: Radius.md,
+        borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14, height: 50
     },
     inputIcon: { marginRight: 10 },
-    input: { flex: 1, color: Colors.textPrimary, ...Typography.body1 },
+    input: { flex: 1, color: colors.textPrimary, ...Typography.body1 },
     roleChips: { flexDirection: 'row', marginBottom: Spacing.xl, marginTop: 4 },
     chip: {
         paddingHorizontal: 16, paddingVertical: 10, borderRadius: Radius.round,
-        backgroundColor: Colors.glass, borderWidth: 1, borderColor: Colors.border,
+        backgroundColor: colors.glass, borderWidth: 1, borderColor: colors.border,
         marginRight: 8, height: 40, justifyContent: 'center'
     },
-    chipActive: { backgroundColor: 'rgba(255,107,53,0.15)', borderColor: Colors.primary },
-    chipText: { ...Typography.buttonSm, color: Colors.textMuted },
-    chipTextActive: { color: Colors.primary },
+    chipActive: { backgroundColor: colors.primary + '26', borderColor: colors.primary },
+    chipText: { ...Typography.buttonSm, color: colors.textMuted },
+    chipTextActive: { color: colors.primary },
     saveBtn: { borderRadius: Radius.lg, overflow: 'hidden', marginTop: Spacing.md },
     saveGradient: { paddingVertical: 16, alignItems: 'center', justifyContent: 'center' },
-    saveBtnText: { ...Typography.h5, color: Colors.white },
-    tablesWrap: { flexDirection: 'row', alignItems: 'center', marginTop: Spacing.sm, paddingTop: Spacing.sm, borderTopWidth: 1, borderTopColor: Colors.border, gap: 6 },
-    tablesLabel: { ...Typography.body2, color: Colors.textSecondary },
-    tablesText: { ...Typography.body2, color: Colors.primary, fontWeight: '600' },
+    saveBtnText: { ...Typography.h5, color: colors.white },
+    tablesWrap: { flexDirection: 'row', alignItems: 'center', marginTop: Spacing.sm, paddingTop: Spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, gap: 6 },
+    tablesLabel: { ...Typography.body2, color: colors.textSecondary },
+    tablesText: { ...Typography.body2, color: colors.primary, fontWeight: '600' },
     tableGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: Spacing.xs },
     tableGridBtn: {
         width: 44, height: 44, borderRadius: Radius.md,
-        backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 1, borderColor: Colors.border,
+        backgroundColor: colors.glass, borderWidth: 1, borderColor: colors.border,
         justifyContent: 'center', alignItems: 'center'
     },
-    tableGridBtnActive: { backgroundColor: 'rgba(255,107,53,0.15)', borderColor: Colors.primary },
-    tableGridBtnDisabled: { backgroundColor: 'rgba(255,255,255,0.02)', borderColor: 'rgba(255,255,255,0.05)', opacity: 0.5 },
-    tableGridText: { ...Typography.buttonSm, color: Colors.textSecondary },
-    tableGridTextActive: { color: Colors.primary, fontWeight: '700' },
-    tableGridTextDisabled: { color: 'rgba(255,255,255,0.2)' }
+    tableGridBtnActive: { backgroundColor: colors.primary + '26', borderColor: colors.primary },
+    tableGridText: { ...Typography.buttonSm, color: colors.textSecondary },
+    tableGridTextActive: { color: colors.primary, fontWeight: '700' },
 });

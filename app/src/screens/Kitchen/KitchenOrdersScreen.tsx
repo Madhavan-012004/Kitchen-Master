@@ -6,26 +6,50 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Typography, Spacing, Radius, Shadows, Gradients } from '../../theme';
+import { useAppTheme, Typography, Spacing, Radius, Shadows } from '../../theme';
 import api from '../../api/client';
 import { useSocket } from '../../hooks/useSocket';
+import { NotificationBell } from '../../components/NotificationBell';
+import Toast from 'react-native-toast-message';
 
 export default function KitchenOrdersScreen() {
+    const { colors, gradients, isDark } = useAppTheme();
+    const themedStyles = React.useMemo(() => createStyles(colors, gradients, isDark), [colors, gradients, isDark]);
     const [orders, setOrders] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const [serverStatus, setServerStatus] = useState<'checking' | 'up' | 'down' | null>(null);
+
+    const checkConnection = async () => {
+        setServerStatus('checking');
+        try {
+            await api.get('/status');
+            setServerStatus('up');
+            Toast.show({ type: 'success', text1: 'Server Connected', text2: 'Backend is reachable!' });
+            fetchOrders();
+        } catch (e) {
+            setServerStatus('down');
+            Toast.show({ type: 'error', text1: 'Connection Failed', text2: 'Please check your IP settings.' });
+        }
+    };
 
     const fetchOrders = async () => {
         try {
-            // Fetch ALL unpaid orders so tickets never disappear until billing is complete
             const response = await api.get('/orders?paymentStatus=unpaid&limit=50');
-            // Sort oldest first for kitchen
             const sorted = (response.data.data.orders || []).sort(
                 (a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
             );
             setOrders(sorted);
-        } catch (error) {
-            console.error('Failed to fetch kitchen orders', error);
+        } catch (error: any) {
+            const errorMsg = error.response?.data?.message || error.message;
+            const baseUrl = error.config?.baseURL || 'unknown';
+            console.error('Failed to fetch kitchen orders', errorMsg, 'at', baseUrl);
+            if (isLoading) {
+                Alert.alert(
+                    'Network Error',
+                    `Could not reach server at ${baseUrl}\n\nError: ${errorMsg}\n\nPlease check your Server IP in Settings.`
+                );
+            }
         } finally {
             setIsLoading(false);
             setIsRefreshing(false);
@@ -36,33 +60,27 @@ export default function KitchenOrdersScreen() {
 
     useEffect(() => {
         fetchOrders();
-        // Fallback: Set up a polling interval for the kitchen display (e.g. every 10 seconds)
         const interval = setInterval(fetchOrders, 10000);
         return () => clearInterval(interval);
     }, []);
 
-    // Socket.io Real-time listeners
     useEffect(() => {
         if (!socket) return;
 
-        // 1. New Order received
         socket.on('kot:new', (data: any) => {
             if (!data.order) return;
             setOrders(prev => {
-                // Prevent duplicates if polling already caught it
                 if (prev.find(o => o._id === data.order._id)) return prev;
                 const newOrders = [...prev, data.order];
                 return newOrders.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
             });
         });
 
-        // 2. Existing Order updated (Add-ons)
         socket.on('kot:update', (data: any) => {
             if (!data.order) return;
             setOrders(prev => {
                 const index = prev.findIndex(o => o._id === data.order._id);
                 if (index === -1) {
-                    // If not found (maybe it was settled but now unpaid add-on?), add it
                     const newOrders = [...prev, data.order];
                     return newOrders.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
                 }
@@ -72,7 +90,6 @@ export default function KitchenOrdersScreen() {
             });
         });
 
-        // 3. Item status update (Ready/Served)
         socket.on('kot:itemUpdate', (data: any) => {
             setOrders(prev => prev.map(order => {
                 if (order._id === data.orderId) {
@@ -85,10 +102,8 @@ export default function KitchenOrdersScreen() {
             }));
         });
 
-        // 4. Order status update (Paid/Cancelled)
         socket.on('kot:statusUpdate', (data: any) => {
             if (data.status === 'paid' || data.status === 'cancelled') {
-                // Remove from kitchen display
                 setOrders(prev => prev.filter(o => o._id !== data.orderId));
             }
         });
@@ -105,14 +120,12 @@ export default function KitchenOrdersScreen() {
         try {
             await api.patch(`/orders/${orderId}/items/${itemId}/status`, { status: 'ready' });
 
-            // Optimistically update the UI
             setOrders(prevOrders =>
                 prevOrders.map(order => {
                     if (order._id === orderId) {
                         const updatedItems = order.items.map((item: any) =>
                             item._id === itemId ? { ...item, status: 'ready' } : item
                         );
-                        // We NO LONGER REMOVE the order from the array here, because we want it to stay until checkout!
                         return { ...order, items: updatedItems };
                     }
                     return order;
@@ -137,108 +150,171 @@ export default function KitchenOrdersScreen() {
         return `${diffMins} min ago`;
     };
 
-    const renderOrderItem = ({ item }: { item: any }) => {
-        // Only show items that are 'preparing' or 'pending' or 'ready'. Hide 'served' completely.
-        const visibleItems = item.items.filter((foodItem: any) => foodItem.status !== 'served');
+    const askExtraTime = async (orderId: string) => {
+        try {
+            await api.patch(`/orders/${orderId}/notes`, { notes: `⏳ Kitchen needs 10 more mins.` });
+            Toast.show({ type: 'success', text1: 'Notification Sent', text2: 'Staff informed about the 10min delay.' });
+            fetchOrders();
+        } catch (error: any) {
+            Toast.show({ type: 'error', text1: 'Failed', text2: error.response?.data?.message || 'Could not send notification' });
+        }
+    };
 
+    const renderOrderItem = ({ item }: { item: any }) => {
+        const groupByName = (arr: any[]) => {
+            const map: Record<string, any> = {};
+            arr.forEach(foodItem => {
+                const key = foodItem.name.toLowerCase();
+                if (map[key]) {
+                    map[key] = { ...map[key], quantity: map[key].quantity + foodItem.quantity };
+                } else {
+                    map[key] = { ...foodItem };
+                }
+            });
+            return Object.values(map);
+        };
+
+        const rawWaiting = item.items.filter((f: any) => 
+            f.status !== 'served' && f.status !== 'SERVED' && 
+            f.status !== 'ready' && f.status !== 'READY' &&
+            f.status !== 'cancelled' && f.status !== 'CANCELLED'
+        );
+        const rawCompleted = item.items.filter((f: any) => f.status === 'ready' || f.status === 'READY');
+        const waitingGroups = groupByName(rawWaiting);
+        const completedGroups = groupByName(rawCompleted);
+        const allServed = rawWaiting.length === 0 && rawCompleted.length === 0;
 
         return (
-            <View style={styles.orderCard}>
-                <View style={styles.cardHeader}>
-                    <View style={styles.headerLeft}>
-                        <View style={styles.tableBadge}>
-                            <Ionicons name="restaurant" size={16} color={Colors.white} />
-                            <Text style={styles.tableText}>{item.tableNumber}</Text>
+            <View style={themedStyles.orderCard}>
+                <View style={themedStyles.cardHeader}>
+                    <View style={themedStyles.headerLeft}>
+                        <View style={themedStyles.tableBadge}>
+                            <Ionicons name="restaurant" size={16} color={colors.white} />
+                            <Text style={themedStyles.tableText}>{item.tableNumber}</Text>
                         </View>
                         {item.waiterName && (
-                            <View style={styles.waiterBadge}>
-                                <Ionicons name="person" size={12} color={Colors.primary} />
-                                <Text style={styles.waiterNameText}>{item.waiterName}</Text>
+                            <View style={themedStyles.waiterBadge}>
+                                <Ionicons name="person" size={12} color={colors.primary} />
+                                <Text style={themedStyles.waiterNameText}>{item.waiterName}</Text>
                             </View>
                         )}
-                        <Text style={styles.orderTime}>{formatTime(item.createdAt)}</Text>
+                        <Text style={themedStyles.orderTime}>{formatTime(item.createdAt)}</Text>
                     </View>
-                    <View style={styles.waitTimeBadge}>
-                        <Ionicons name="time-outline" size={14} color={Colors.warning} />
-                        <Text style={styles.waitTimeText}>{getWaitTime(item.createdAt)}</Text>
+                    <View style={themedStyles.waitTimeBadge}>
+                        <Ionicons name="time-outline" size={14} color={colors.warning} />
+                        <Text style={themedStyles.waitTimeText}>{getWaitTime(item.createdAt)}</Text>
                     </View>
                 </View>
 
                 {item.notes ? (
-                    <View style={styles.notesContainer}>
-                        <Ionicons name="warning" size={16} color="#FF6B35" />
-                        <Text style={styles.notesText}>{item.notes}</Text>
+                    <View style={themedStyles.notesContainer}>
+                        <Ionicons name="warning" size={16} color={colors.primary} />
+                        <Text style={themedStyles.notesText}>{item.notes}</Text>
                     </View>
                 ) : null}
 
-                {visibleItems.length === 0 ? (
-                    <View style={{ padding: 12, alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 8 }}>
-                        <Ionicons name="checkmark-done-circle" size={24} color={Colors.success} style={{ marginBottom: 4 }} />
-                        <Text style={{ color: Colors.textSecondary, fontSize: 13 }}>All items served.</Text>
-                        <Text style={{ color: Colors.textMuted, fontSize: 11 }}>Waiting for Bill Settlement.</Text>
+                {allServed ? (
+                    <View style={themedStyles.allServedContainer}>
+                        <Ionicons name="checkmark-done-circle" size={24} color={colors.success} style={{ marginBottom: 4 }} />
+                        <Text style={{ color: colors.textSecondary, fontSize: 13 }}>All items served.</Text>
+                        <Text style={{ color: colors.textMuted, fontSize: 11 }}>Waiting for Bill Settlement.</Text>
                     </View>
                 ) : (
-                    <View style={styles.itemsList}>
-                        {visibleItems.map((foodItem: any, index: number) => {
-                            const isReady = foodItem.status === 'ready';
-                            return (
-                                <View key={foodItem._id || index} style={styles.foodRow}>
-                                    <View style={styles.foodRowContent}>
-                                        <Text style={[styles.foodQty, isReady && styles.textStrikethrough]}>{foodItem.quantity}x</Text>
-                                        <View style={styles.foodDetails}>
-                                            <Text style={[styles.foodName, isReady && styles.textStrikethrough]}>{foodItem.name}</Text>
-                                            {foodItem.notes ? <Text style={styles.itemNotesText}>Note: {foodItem.notes}</Text> : null}
+                    <View style={themedStyles.itemsList}>
+                        {waitingGroups.map((foodItem: any, index: number) => (
+                            <View key={`w-${foodItem.name}-${index}`} style={themedStyles.foodRow}>
+                                <View style={themedStyles.foodRowContent}>
+                                    <Text style={themedStyles.foodQty}>{foodItem.quantity}x</Text>
+                                    <View style={themedStyles.foodDetails}>
+                                        <Text style={themedStyles.foodName}>{foodItem.name}</Text>
+                                        {foodItem.notes ? <Text style={themedStyles.itemNotesText}>Note: {foodItem.notes}</Text> : null}
+                                    </View>
+                                </View>
+                                <TouchableOpacity
+                                    style={themedStyles.itemReadyBtn}
+                                    onPress={() => markItemAsReady(item._id, foodItem._id)}
+                                >
+                                    <Ionicons name="checkmark" size={18} color={colors.white} />
+                                    <Text style={themedStyles.itemReadyText}>Ready</Text>
+                                </TouchableOpacity>
+                            </View>
+                        ))}
+
+                        {completedGroups.length > 0 && (
+                            <>
+                                <View style={themedStyles.completedDivider}>
+                                    <View style={themedStyles.completedDividerLine} />
+                                    <Text style={themedStyles.completedDividerLabel}>Completed</Text>
+                                    <View style={themedStyles.completedDividerLine} />
+                                </View>
+                                {completedGroups.map((foodItem: any, index: number) => (
+                                    <View key={`c-${foodItem.name}-${index}`} style={[themedStyles.foodRow, { opacity: 0.65 }]}>
+                                        <View style={themedStyles.foodRowContent}>
+                                            <Text style={[themedStyles.foodQty, themedStyles.textStrikethrough]}>{foodItem.quantity}x</Text>
+                                            <View style={themedStyles.foodDetails}>
+                                                <Text style={[themedStyles.foodName, themedStyles.textStrikethrough]}>{foodItem.name}</Text>
+                                            </View>
+                                        </View>
+                                        <View style={themedStyles.itemDoneBadge}>
+                                            <Ionicons name="checkmark-done" size={16} color={colors.success} />
+                                            <Text style={themedStyles.itemDoneText}>Ready</Text>
                                         </View>
                                     </View>
-
-                                    {!isReady ? (
-                                        <TouchableOpacity
-                                            style={styles.itemReadyBtn}
-                                            onPress={() => markItemAsReady(item._id, foodItem._id)}
-                                        >
-                                            <Ionicons name="checkmark" size={18} color={Colors.white} />
-                                            <Text style={styles.itemReadyText}>Ready</Text>
-                                        </TouchableOpacity>
-                                    ) : (
-                                        <View style={styles.itemDoneBadge}>
-                                            <Ionicons name="checkmark-done" size={16} color={Colors.success} />
-                                            <Text style={styles.itemDoneText}>Ready</Text>
-                                        </View>
-                                    )}
-                                </View>
-                            );
-                        })}
+                                ))}
+                            </>
+                        )}
                     </View>
+                )}
+
+                {!allServed && (
+                    <TouchableOpacity 
+                        style={themedStyles.extraTimeBtn}
+                        onPress={() => askExtraTime(item._id)}
+                    >
+                        <Ionicons name="time-outline" size={18} color={colors.warning} />
+                        <Text style={themedStyles.extraTimeBtnText}>⏱️ Extra 10 Mins</Text>
+                    </TouchableOpacity>
                 )}
             </View>
         );
     };
 
     return (
-        <LinearGradient colors={Gradients.background} style={styles.container}>
-            <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
-            <SafeAreaView style={styles.safe}>
-                <View style={styles.header}>
-                    <View>
-                        <Text style={styles.headerTitle}>Kitchen Display</Text>
-                        <Text style={styles.headerSubtitle}>Active Orders (KOT)</Text>
+        <LinearGradient colors={gradients.background} style={themedStyles.container}>
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor="transparent" translucent />
+            <SafeAreaView style={themedStyles.safe} edges={['top']}>
+                <View style={themedStyles.header}>
+                    <View style={{ flex: 1 }}>
+                        <Text style={themedStyles.headerTitle}>Kitchen Display</Text>
+                        <Text style={themedStyles.headerSubtitle}>Active Orders (KOT)</Text>
                     </View>
-                    <TouchableOpacity style={styles.refreshBtn} onPress={() => { setIsRefreshing(true); fetchOrders(); }}>
-                        <Ionicons name="reload" size={20} color={Colors.primary} />
+                    <NotificationBell />
+                    <TouchableOpacity 
+                        style={[themedStyles.refreshBtn, { marginRight: 10, borderColor: serverStatus === 'up' ? colors.success : serverStatus === 'down' ? colors.error : colors.border }]} 
+                        onPress={checkConnection}
+                    >
+                        <Ionicons 
+                            name={serverStatus === 'up' ? 'checkmark-circle' : serverStatus === 'down' ? 'alert-circle' : 'pulse-outline'} 
+                            size={20} 
+                            color={serverStatus === 'up' ? colors.success : serverStatus === 'down' ? colors.error : colors.primary} 
+                        />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={themedStyles.refreshBtn} onPress={() => { setIsRefreshing(true); fetchOrders(); }}>
+                        <Ionicons name="reload" size={20} color={colors.primary} />
                     </TouchableOpacity>
                 </View>
 
                 {isLoading && orders.length === 0 ? (
-                    <View style={styles.loadingContainer}>
-                        <ActivityIndicator size="large" color={Colors.primary} />
-                        <Text style={styles.loadingText}>Loading tickets...</Text>
+                    <View style={themedStyles.loadingContainer}>
+                        <ActivityIndicator size="large" color={colors.primary} />
+                        <Text style={themedStyles.loadingText}>Loading tickets...</Text>
                     </View>
                 ) : (
                     <FlatList
                         data={orders}
                         keyExtractor={(item) => item._id}
                         renderItem={renderOrderItem}
-                        contentContainerStyle={styles.listContent}
+                        contentContainerStyle={themedStyles.listContent}
                         showsVerticalScrollIndicator={false}
                         refreshing={isRefreshing}
                         onRefresh={() => {
@@ -246,10 +322,10 @@ export default function KitchenOrdersScreen() {
                             fetchOrders();
                         }}
                         ListEmptyComponent={
-                            <View style={styles.emptyWrap}>
-                                <Ionicons name="checkmark-done-circle-outline" size={60} color={Colors.success} />
-                                <Text style={styles.emptyText}>All caught up!</Text>
-                                <Text style={styles.emptySubtext}>No active orders to prepare.</Text>
+                            <View style={themedStyles.emptyWrap}>
+                                <Ionicons name="checkmark-done-circle-outline" size={60} color={colors.success} />
+                                <Text style={themedStyles.emptyText}>All caught up!</Text>
+                                <Text style={themedStyles.emptySubtext}>No active orders to prepare.</Text>
                             </View>
                         }
                     />
@@ -259,29 +335,29 @@ export default function KitchenOrdersScreen() {
     );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any, gradients: any, isDark: boolean) => StyleSheet.create({
     container: { flex: 1 },
     safe: { flex: 1 },
     header: {
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
         paddingHorizontal: Spacing.lg, paddingTop: Spacing.xl, paddingBottom: Spacing.md,
     },
-    headerTitle: { ...Typography.h2, color: Colors.textPrimary },
-    headerSubtitle: { ...Typography.body2, color: Colors.textMuted, marginTop: 4 },
+    headerTitle: { ...Typography.h2, color: colors.textPrimary },
+    headerSubtitle: { ...Typography.body2, color: colors.textMuted, marginTop: 4 },
     refreshBtn: {
-        width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,107,53,0.1)',
-        justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,107,53,0.3)'
+        width: 44, height: 44, borderRadius: 22, backgroundColor: colors.primary + '1A',
+        justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: colors.primary + '33'
     },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
-    loadingText: { ...Typography.body2, color: Colors.textMuted },
+    loadingText: { ...Typography.body2, color: colors.textMuted },
     listContent: { paddingHorizontal: Spacing.lg, paddingBottom: 100 },
     emptyWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 120 },
-    emptyText: { ...Typography.h4, color: Colors.textPrimary },
-    emptySubtext: { ...Typography.body2, color: Colors.textMuted },
+    emptyText: { ...Typography.h4, color: colors.textPrimary },
+    emptySubtext: { ...Typography.body2, color: colors.textMuted },
 
     orderCard: {
-        backgroundColor: Colors.card, borderRadius: Radius.xl,
-        borderWidth: 1, borderColor: Colors.glassBorder,
+        backgroundColor: colors.card, borderRadius: Radius.xl,
+        borderWidth: 1, borderColor: colors.border,
         padding: Spacing.lg, marginBottom: Spacing.lg,
         ...Shadows.sm
     },
@@ -289,35 +365,49 @@ const styles = StyleSheet.create({
     headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
     tableBadge: {
         flexDirection: 'row', alignItems: 'center', gap: 6,
-        backgroundColor: Colors.primary, paddingHorizontal: 10, paddingVertical: 6,
+        backgroundColor: colors.primary, paddingHorizontal: 10, paddingVertical: 6,
         borderRadius: Radius.md
     },
-    tableText: { ...Typography.buttonSm, color: Colors.white },
-    waiterBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,107,53,0.15)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: Radius.sm },
-    waiterNameText: { ...Typography.caption, color: Colors.primary, fontWeight: '600' },
-    orderTime: { ...Typography.caption, color: Colors.textMuted },
-    waitTimeBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,183,77,0.1)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: Radius.sm },
-    waitTimeText: { ...Typography.caption, color: Colors.warning, fontWeight: '700' },
+    tableText: { ...Typography.buttonSm, color: colors.white },
+    waiterBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.primary + '26', paddingHorizontal: 6, paddingVertical: 2, borderRadius: Radius.sm },
+    waiterNameText: { ...Typography.caption, color: colors.primary, fontWeight: '600' },
+    orderTime: { ...Typography.caption, color: colors.textMuted },
+    waitTimeBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.warning + '1A', paddingHorizontal: 8, paddingVertical: 4, borderRadius: Radius.sm },
+    waitTimeText: { ...Typography.caption, color: colors.warning, fontWeight: '700' },
 
     notesContainer: {
         flexDirection: 'row', alignItems: 'flex-start', gap: 8,
-        backgroundColor: 'rgba(255,107,53,0.08)', padding: Spacing.md,
+        backgroundColor: colors.primary + '14', padding: Spacing.md,
         borderRadius: Radius.md, marginBottom: Spacing.md,
-        borderLeftWidth: 3, borderLeftColor: '#FF6B35'
+        borderLeftWidth: 3, borderLeftColor: colors.primary
     },
-    notesText: { ...Typography.body2, color: Colors.textPrimary, flex: 1 },
+    notesText: { ...Typography.body2, color: colors.textPrimary, flex: 1 },
 
     itemsList: { marginBottom: Spacing.sm },
-    foodRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.sm, paddingBottom: Spacing.sm, borderBottomWidth: 1, borderBottomColor: Colors.border },
+    foodRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.sm, paddingBottom: Spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
     foodRowContent: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-    foodQty: { ...Typography.h5, color: Colors.primary, width: 32 },
+    foodQty: { ...Typography.h5, color: colors.primary, width: 32 },
     foodDetails: { flex: 1 },
-    foodName: { ...Typography.h5, color: Colors.white },
-    itemNotesText: { ...Typography.caption, color: Colors.warning, marginTop: 2, fontStyle: 'italic' },
-    textStrikethrough: { textDecorationLine: 'line-through', color: Colors.textMuted },
+    foodName: { ...Typography.h5, color: colors.textPrimary },
+    itemNotesText: { ...Typography.caption, color: colors.warning, marginTop: 2, fontStyle: 'italic' },
+    textStrikethrough: { textDecorationLine: 'line-through', color: colors.textMuted },
 
-    itemReadyBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0, 214, 143, 0.15)', borderWidth: 1, borderColor: 'rgba(0, 214, 143, 0.3)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: Radius.md },
-    itemReadyText: { ...Typography.buttonSm, color: '#00D68F' },
+    itemReadyBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.success + '26', borderWidth: 1, borderColor: colors.success + '4D', paddingHorizontal: 12, paddingVertical: 6, borderRadius: Radius.md },
+    itemReadyText: { ...Typography.buttonSm, color: colors.success },
     itemDoneBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6 },
-    itemDoneText: { ...Typography.caption, color: Colors.success, fontWeight: 'bold' },
+    itemDoneText: { ...Typography.caption, color: colors.success, fontWeight: 'bold' },
+
+    completedDivider: { flexDirection: 'row', alignItems: 'center', gap: 8, marginVertical: Spacing.sm },
+    completedDividerLine: { flex: 1, height: 1, backgroundColor: colors.success + '33' },
+    completedDividerLabel: { fontSize: 10, fontWeight: '700', color: colors.success, textTransform: 'uppercase', letterSpacing: 1 },
+    allServedContainer: { padding: 12, alignItems: 'center', backgroundColor: colors.glass, borderRadius: 8, borderWidth: 1, borderColor: colors.border },
+    extraTimeBtn: {
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+        marginTop: 15, paddingVertical: 12, borderRadius: 10,
+        backgroundColor: colors.isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+        borderWidth: 1, borderColor: colors.border,
+    },
+    extraTimeBtnText: {
+        fontSize: 12, color: colors.warning, fontWeight: '700'
+    },
 });

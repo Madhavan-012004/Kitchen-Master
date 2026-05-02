@@ -1,148 +1,157 @@
-// ─── Color Palettes ─────────────────────────────────────────────────
+// ─── Color Palettes — Dark Teal + Neon Lime ─────────────────────────────────
+
 export const DarkColors = {
-    // Primary brand
-    primary: '#FF6B35',
-    primaryDark: '#E55A24',
-    primaryLight: '#FF8A5C',
+    // ── Primary brand: Neon Lime ──
+    primary: '#C6F53D',
+    primaryDark: '#a8d42e',
+    primaryLight: '#d8f76a',
 
-    // Background - Now Gray based as requested
-    background: '#121212',
-    surface: '#1E1E1E',
-    surfaceElevated: '#252525',
-    card: '#252525',
+    // ── Backgrounds: Deep Dark Teal ──
+    background: '#081312',
+    surface: '#0F1D1B',
+    surfaceElevated: '#1A2F2D',
+    card: '#132221',
 
-    // Text - Brighter for better visibility
+    // ── Text ──
     textPrimary: '#FFFFFF',
-    textSecondary: '#E0E0E0',
-    textMuted: '#B0B0B0',
-    textInverse: '#121212',
+    textSecondary: '#B0BFBD',
+    textMuted: '#6B8A87',
+    textInverse: '#0B2221',
 
-    // Accent
-    accent: '#E94560',
-    accentGreen: '#00D68F',
-    accentYellow: '#FFCA28',
+    // ── Accent: Neon Lime for highlights ──
+    accent: '#C6F53D',
+    accentGreen: '#2DD479',
+    accentYellow: '#F59E0B',
     accentBlue: '#4C8EFF',
     accentPurple: '#9B59B6',
+    accentTeal: '#1A8F7E',
 
-    // Status
-    success: '#00D68F',
-    warning: '#FFCA28',
-    error: '#FF5C7C',
+    // ── Status ──
+    success: '#2DD479',
+    warning: '#F59E0B',
+    error: '#F87171',
     info: '#4C8EFF',
 
-    // Borders
-    border: 'rgba(255,255,255,0.12)',
-    borderLight: 'rgba(255,255,255,0.2)',
+    // ── Borders ──
+    border: 'rgba(198, 245, 61, 0.1)',
+    borderLight: 'rgba(198, 245, 61, 0.2)',
 
-    // Glass
-    glass: 'rgba(255,255,255,0.06)',
-    glassStrong: 'rgba(255,255,255,0.1)',
-    glassBorder: 'rgba(255,255,255,0.12)',
+    // ── Glass ──
+    glass: 'rgba(198, 245, 61, 0.05)',
+    glassStrong: 'rgba(198, 245, 61, 0.08)',
+    glassBorder: 'rgba(198, 245, 61, 0.12)',
 
-    // Overlay
-    overlay: 'rgba(0,0,0,0.8)',
+    // ── Overlay ──
+    overlay: 'rgba(0, 0, 0, 0.8)',
 
-    // Whites/Grays
+    // ── Grays ──
     white: '#FFFFFF',
-    gray100: '#F7FAFC',
-    gray200: '#EDF2F7',
-    gray300: '#E2E8F0',
-    gray400: '#CBD5E0',
-    gray500: '#A0AEC0',
-    gray600: '#718096',
-    gray700: '#4A5568',
-    gray800: '#2D3748',
-    gray900: '#1A202C',
+    gray100: '#E8F0EF',
+    gray200: '#D0E0DE',
+    gray300: '#B0BFBD',
+    gray400: '#8A9E9B',
+    gray500: '#6B8A87',
+    gray600: '#4F6E6B',
+    gray700: '#2D5250',
+    gray800: '#1A2F2D',
+    gray900: '#0F1D1B',
 };
 
 export const LightColors = {
-    // Primary brand
-    primary: '#FF6B35',
-    primaryDark: '#E55A24',
-    primaryLight: '#FF8A5C',
+    // ── Primary brand: Neon Lime ──
+    primary: '#C6F53D',
+    primaryDark: '#a8d42e',
+    primaryLight: '#d8f76a',
 
-    // Background
-    background: '#F8FAFC',
-    surface: '#F1F5F9',
+    // ── Backgrounds: Light Teal-tinted ──
+    background: '#F0F6F5',
+    surface: '#E4EDEC',
     surfaceElevated: '#FFFFFF',
     card: '#FFFFFF',
 
-    // Text
-    textPrimary: '#0F172A',
-    textSecondary: '#475569',
-    textMuted: '#64748B',
+    // ── Text ──
+    textPrimary: '#0B2221',
+    textSecondary: '#2B4E4A',
+    textMuted: '#507572',
     textInverse: '#FFFFFF',
 
-    // Accent
-    accent: '#E94560',
+    // ── Accent ──
+    accent: '#C6F53D',
     accentGreen: '#16A34A',
     accentYellow: '#F59E0B',
     accentBlue: '#2563EB',
     accentPurple: '#7C3AED',
+    accentTeal: '#064843',
 
-    // Status
+    // ── Status ──
     success: '#16A34A',
     warning: '#F59E0B',
     error: '#DC2626',
     info: '#2563EB',
 
-    // Borders
-    border: 'rgba(0,0,0,0.08)',
-    borderLight: 'rgba(0,0,0,0.15)',
+    // ── Borders ──
+    border: 'rgba(6, 72, 67, 0.1)',
+    borderLight: 'rgba(6, 72, 67, 0.2)',
 
-    // Glass
-    glass: 'rgba(0,0,0,0.04)',
-    glassStrong: 'rgba(0,0,0,0.08)',
-    glassBorder: 'rgba(0,0,0,0.1)',
+    // ── Glass ──
+    glass: 'rgba(6, 72, 67, 0.03)',
+    glassStrong: 'rgba(6, 72, 67, 0.06)',
+    glassBorder: 'rgba(6, 72, 67, 0.1)',
 
-    // Overlay
-    overlay: 'rgba(0,0,0,0.4)',
+    // ── Overlay ──
+    overlay: 'rgba(0, 0, 0, 0.4)',
 
-    // Whites/Grays
+    // ── Grays / Teal-tinted ──
     white: '#FFFFFF',
-    gray100: '#F7FAFC',
-    gray200: '#EDF2F7',
-    gray300: '#E2E8F0',
-    gray400: '#CBD5E0',
-    gray500: '#A0AEC0',
-    gray600: '#718096',
-    gray700: '#4A5568',
-    gray800: '#2D3748',
-    gray900: '#1A202C',
+    gray100: '#F0F6F5',
+    gray200: '#E4EDEC',
+    gray300: '#D0E0DE',
+    gray400: '#B0BFBD',
+    gray500: '#8A9E9B',
+    gray600: '#507572',
+    gray700: '#2B4E4A',
+    gray800: '#0F2E2C',
+    gray900: '#081312',
 };
 
-// Default export for compatibility (starts as dark)
-export const Colors = DarkColors;
+// ─── Gradient Sets ────────────────────────────────────────────────────────────
+export interface GradientSet {
+    background: readonly [string, string, ...string[]];
+    header: readonly [string, string, ...string[]];
+    primary: readonly [string, string, ...string[]];
+    card: readonly [string, string, ...string[]];
+    success: readonly [string, string, ...string[]];
+    error: readonly [string, string, ...string[]];
+    info: readonly [string, string, ...string[]];
+    purpleCard: readonly [string, string, ...string[]];
+    goldCard: readonly [string, string, ...string[]];
+}
 
-// ─── Gradients ────────────────────────────────────────────────────────
-// ─── Gradients ────────────────────────────────────────────────────────
-export const DarkGradients = {
-    background: ['#121212', '#1E1E1E'] as const,
-    header: ['#252525', '#121212'] as const,
-    primary: ['#FF8A5C', '#FF6B35', '#E55A24'] as const,
-    card: ['#252525', '#1E1E1E'] as const,
-    success: ['#00D68F', '#00B377'] as const,
-    error: ['#FF5C7C', '#E94560'] as const,
-    info: ['#4C8EFF', '#2563EB'] as const,
-    purpleCard: ['#9B59B6', '#6C3483'] as const,
-    goldCard: ['#FFCA28', '#F59E0B'] as const,
+export const DarkGradients: GradientSet = {
+    background: ['#081312', '#0F1D1B'],
+    header: ['#0F1D1B', '#132221'],
+    primary: ['#d8f76a', '#C6F53D', '#a8d42e'],
+    card: ['#132221', '#1A2F2D'],
+    success: ['#2DD479', '#16A34A'],
+    error: ['#F87171', '#DC2626'],
+    info: ['#4C8EFF', '#2563EB'],
+    purpleCard: ['#9B59B6', '#6C3483'],
+    goldCard: ['#F59E0B', '#D97706'],
 };
 
-export const LightGradients = {
-    background: ['#F8FAFC', '#F1F5F9'] as const,
-    header: ['#FFFFFF', '#F1F5F9'] as const,
-    primary: ['#FF8A5C', '#FF6B35', '#E55A24'] as const,
-    card: ['#FFFFFF', '#F1F5F9'] as const,
-    success: ['#16A34A', '#15803D'] as const,
-    error: ['#DC2626', '#B91C1C'] as const,
-    info: ['#2563EB', '#1D4ED8'] as const,
-    purpleCard: ['#7C3AED', '#6D28D9'] as const,
-    goldCard: ['#F59E0B', '#D97706'] as const,
+export const LightGradients: GradientSet = {
+    background: ['#F0F6F5', '#E4EDEC'],
+    header: ['#064843', '#0A6B60'],
+    primary: ['#d8f76a', '#C6F53D', '#a8d42e'],
+    card: ['#FFFFFF', '#F0F6F5'],
+    success: ['#16A34A', '#15803D'],
+    error: ['#DC2626', '#B91C1C'],
+    info: ['#2563EB', '#1D4ED8'],
+    purpleCard: ['#7C3AED', '#6D28D9'],
+    goldCard: ['#F59E0B', '#D97706'],
 };
 
-export const Gradients = DarkGradients;
-
-// ─── Typography ──────────────────────────────────────────────────────
+// ─── Typography ───────────────────────────────────────────────────────────────
 export const Typography = {
     h1: { fontSize: 34, fontWeight: '800' as const, lineHeight: 42, letterSpacing: -0.5 },
     h2: { fontSize: 28, fontWeight: '700' as const, lineHeight: 36, letterSpacing: -0.3 },
@@ -157,7 +166,7 @@ export const Typography = {
     buttonSm: { fontSize: 14, fontWeight: '600' as const, letterSpacing: 0.2 },
 };
 
-// ─── Spacing ─────────────────────────────────────────────────────────
+// ─── Spacing ──────────────────────────────────────────────────────────────────
 export const Spacing = {
     xs: 4,
     sm: 8,
@@ -170,7 +179,7 @@ export const Spacing = {
     massive: 64,
 };
 
-// ─── Border Radius ────────────────────────────────────────────────────
+// ─── Border Radius ────────────────────────────────────────────────────────────
 export const Radius = {
     sm: 8,
     md: 12,
@@ -180,7 +189,7 @@ export const Radius = {
     round: 999,
 };
 
-// ─── Shadows ──────────────────────────────────────────────────────────
+// ─── Shadows ──────────────────────────────────────────────────────────────────
 export const Shadows = {
     sm: {
         shadowColor: '#000',
@@ -204,28 +213,36 @@ export const Shadows = {
         elevation: 16,
     },
     primary: {
-        shadowColor: '#FF6B35',
+        shadowColor: '#C6F53D',
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.5,
+        shadowOpacity: 0.45,
         shadowRadius: 16,
         elevation: 10,
     },
     glow: {
-        shadowColor: '#FF6B35',
+        shadowColor: '#C6F53D',
         shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.8,
+        shadowOpacity: 0.7,
         shadowRadius: 20,
         elevation: 12,
     },
+    teal: {
+        shadowColor: '#064843',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.4,
+        shadowRadius: 12,
+        elevation: 8,
+    },
+    // alias for backward-compatibility
     blue: {
-        shadowColor: '#4C8EFF',
+        shadowColor: '#064843',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.4,
         shadowRadius: 12,
         elevation: 8,
     },
     green: {
-        shadowColor: '#00D68F',
+        shadowColor: '#2DD479',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.4,
         shadowRadius: 12,
@@ -233,17 +250,27 @@ export const Shadows = {
     },
 };
 
-// ─── React Native Paper Theme ────────────────────────────────────────
-// ─── Paper Themes ───────────────────────────────────────────
-export const getPaperTheme = (isDark: boolean) => {
-    const themeColors = isDark ? DarkColors : LightColors;
+// ─── Dynamic Theme Hook ───────────────────────────────────────────────────────
+import { useTheme } from '../context/ThemeContext';
+export const useAppTheme = () => {
+    const { colors, gradients, isDark, theme, toggleTheme } = useTheme();
+    return { colors, gradients, isDark, theme, toggleTheme };
+};
+
+// Default export for compatibility (deprecated — use useAppTheme instead)
+export const Colors = DarkColors;
+export const Gradients = DarkGradients;
+
+// ─── Paper Themes ──────────────────────────────────────────────────────────────
+export const getPaperTheme = (isDark: boolean, baseColors?: typeof DarkColors) => {
+    const themeColors = baseColors || (isDark ? DarkColors : LightColors);
     return {
         dark: isDark,
         colors: {
             primary: themeColors.primary,
-            onPrimary: themeColors.white,
+            onPrimary: themeColors.textInverse,
             primaryContainer: themeColors.primaryDark,
-            secondary: themeColors.accent,
+            secondary: themeColors.accentGreen,
             background: themeColors.background,
             surface: themeColors.surface,
             onSurface: themeColors.textPrimary,

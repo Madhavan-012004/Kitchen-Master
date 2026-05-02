@@ -1,0 +1,18 @@
+{
+  "app": {
+    "pos": "POS",
+    "orders": "Orders",
+    "settings": "Settings",
+    "logout": "Logout",
+    "language": "Language",
+    "english": "English",
+    "tamil": "தமிழ்",
+    "select_language": "Choose your preferred language",
+    "save": "Save",
+    "checkout": "Checkout",
+    "total": "Total",
+    "kitchen": "Kitchen",
+    "menu": "Menu",
+    "analytics": "Analytics"
+  }
+}

@@ -7,6 +7,9 @@ export const authAPI = {
         password: string;
         restaurantName: string;
         phone?: string;
+        address?: string;
+        latitude?: number;
+        longitude?: number;
     }) => apiClient.post('/auth/register', data),
 
     login: (email: string, password: string, latitude?: number, longitude?: number) =>
@@ -29,4 +32,16 @@ export const authAPI = {
     getEmployees: () => apiClient.get('/auth/employees'),
 
     updateEmployee: (id: string, data: any) => apiClient.put(`/auth/employee/${id}`, data),
+
+    // Stakeholder Endpoints
+    stakeholderLogin: (phone: string, password: string, latitude?: number, longitude?: number) =>
+        apiClient.post('/stakeholder/login', { phone, password, latitude, longitude }),
+        
+    getAccessibleRestaurants: () => apiClient.get('/stakeholder/restaurants'),
+    
+    inviteStakeholder: (data: { name: string; phone: string; sharePercentage: number; password?: string }) => 
+        apiClient.post('/stakeholder/invite', data),
+        
+    removeStakeholder: (stakeholderId: string) => 
+        apiClient.post('/stakeholder/remove', { stakeholderId }),
 };

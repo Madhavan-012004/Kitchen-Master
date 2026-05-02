@@ -1,16 +1,55 @@
 import React, { useEffect, useState } from 'react'
 import api from '../api/client.js'
+import { useStakeholder } from '../context/StakeholderContext.jsx'
+import StakeholderRestaurantTabs from '../components/StakeholderRestaurantTabs'
 import './Analytics.css'
 
+// Recharts imports for professional graphics
+import { 
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
+  PieChart, Pie, Cell, Legend, BarChart, Bar
+} from 'recharts'
+
 export default function AnalyticsPage() {
+    const { selectedRestaurantId } = useStakeholder()
     const [data, setData] = useState(null)
     const [period, setPeriod] = useState('7d')
     const [loading, setLoading] = useState(true)
+    const [selectedReport, setSelectedReport] = useState(null)
+    const [reportData, setReportData] = useState(null)
+    const [reportLoading, setReportLoading] = useState(false)
+    const [showSelector, setShowSelector] = useState(false)
+    const [selectedDate, setSelectedDate] = useState('')
+
+    const reports = [
+        { id: 'sales-summary', label: 'Sales Summary', icon: '📊' },
+        { id: 'sales-report', label: 'Sales Report', icon: '📝' },
+        { id: 'monthly-day-wise', label: 'Monthly Day wise Report', icon: '📅' },
+        { id: 'end-day-report', label: 'End Day Report', icon: '🏁' },
+        { id: 'category-item-wise', label: 'Category & Item wise Report', icon: '📁' },
+        { id: 'item-wise-sales', label: 'Item wise sales Report', icon: '🍔' },
+        { id: 'income-expense', label: 'Income & Expense Report', icon: '💸' },
+        { id: 'stock-report', label: 'Stock Report', icon: '📦' },
+        { id: 'recipe-stock', label: 'Recipe Stock Report', icon: '🥘' },
+        { id: 'purchase-item-stock', label: 'Purchase Item Stock Report', icon: '📥' },
+        { id: 'purchase-recipe-stock', label: 'Purchase Recipe Stock Report', icon: '🍲' },
+        { id: 'expiry-date-wise', label: 'Expiry Date Wise Stock Report', icon: '⚠️' },
+        { id: 'total-inventory-valuation', label: 'Total Inventory Valuation', icon: '💰' },
+        { id: 'cashier-wise-sales', label: 'Cashier wise sales Report', icon: '👤' },
+        { id: 'hsn-summary', label: 'HSN Summary', icon: '🔢' },
+        { id: 'cancelled-item-summary', label: 'Cancelled Item Summary', icon: '❌' }
+    ]
 
     const fetchAnalytics = async () => {
         setLoading(true)
         try {
-            const res = await api.get(`/analytics/sales?period=${period}`)
+            let url = `/analytics/sales?period=${period}`
+            if (period === 'custom' && selectedDate) {
+                const from = `${selectedDate}T00:00:00`
+                const to = `${selectedDate}T23:59:59`
+                url += `&from=${from}&to=${to}`
+            }
+            const res = await api.get(url)
             setData(res.data.data)
         } catch (e) {
             console.error(e)
@@ -19,18 +58,80 @@ export default function AnalyticsPage() {
         }
     }
 
+    const fetchReportData = async (reportId) => {
+        setReportLoading(true)
+        try {
+            const res = await api.get(`/analytics/report-data?type=${reportId}`)
+            setReportData(res.data.data)
+        } catch (e) {
+            console.error(e)
+        } finally {
+            setReportLoading(false)
+        }
+    }
+
+    const handleDownload = async (reportId, format = 'pdf') => {
+        try {
+            const mimeMap = {
+                pdf:  'application/pdf',
+                word: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                json: 'application/json',
+            }
+            const extMap = { pdf: 'pdf', word: 'docx', json: 'json' }
+            const res = await api.get(
+                `/analytics/download-report?type=${reportId}&format=${format}`,
+                { responseType: 'blob' }
+            )
+            const blob = new Blob([res.data], { type: mimeMap[format] })
+            const url = window.URL.createObjectURL(blob)
+            const link = document.createElement('a')
+            link.href = url
+            link.setAttribute('download', `${reportId}.${extMap[format]}`)
+            document.body.appendChild(link)
+            link.click()
+            link.remove()
+            window.URL.revokeObjectURL(url)
+        } catch (e) {
+            console.error(e)
+            alert('Failed to download report. Please try again.')
+        }
+    }
+
     useEffect(() => {
         fetchAnalytics()
-    }, [period])
+    }, [period, selectedDate, selectedRestaurantId])
+
+    useEffect(() => {
+        if (selectedReport) {
+            fetchReportData(selectedReport.id)
+        }
+    }, [selectedReport])
+
 
     const kpis = [
         {
             label: 'Total Revenue',
             value: `₹${data?.summary?.totalRevenue?.toLocaleString('en-IN') || 0}`,
             icon: '💰',
-            bg: 'rgba(255, 107, 53, 0.1)',
-            color: '#FF6B35',
+            bg: 'rgba(198, 245, 61, 0.1)',
+            color: 'var(--accent)',
             trend: '+12.5%'
+        },
+        {
+            label: 'Net Profit',
+            value: `₹${Math.round(data?.summary?.netProfit || 0).toLocaleString('en-IN')}`,
+            icon: '💵',
+            bg: 'rgba(0, 214, 143, 0.1)',
+            color: '#00D68F',
+            trend: `${data?.summary?.profitMargin?.toFixed(1) || 0}% Margin`
+        },
+        {
+            label: 'Total Expense',
+            value: `₹${Math.round(data?.summary?.totalExpense || 0).toLocaleString('en-IN')}`,
+            icon: '💸',
+            bg: 'rgba(231, 76, 60, 0.1)',
+            color: '#e74c3c',
+            trend: 'Expenditure'
         },
         {
             label: 'Total Orders',
@@ -39,49 +140,391 @@ export default function AnalyticsPage() {
             bg: 'rgba(76, 142, 255, 0.1)',
             color: '#4C8EFF',
             trend: '+8.2%'
-        },
-        {
-            label: 'Avg Order Value',
-            value: `₹${Math.round(data?.summary?.avgOrderValue || 0)}`,
-            icon: '📈',
-            bg: 'rgba(0, 214, 143, 0.1)',
-            color: '#00D68F',
-            trend: '+4.5%'
-        },
-        {
-            label: 'Items Sold',
-            value: data?.topItems?.reduce((acc, curr) => acc + curr.totalQuantity, 0) || 0,
-            icon: '🍔',
-            bg: 'rgba(157, 80, 187, 0.1)',
-            color: '#9d50bb',
-            trend: '+15.1%'
         }
     ]
 
+    const renderReportView = () => {
+        if (reportLoading) return <div className="loading-centered"><div className="spinner"></div></div>
+        if (!reportData && selectedReport) return <div className="loading-centered">No data available for this report</div>
+
+        const downloadBar = (
+            <div className="export-format-bar">
+                <span className="export-label">Export As:</span>
+                <button className="export-btn export-pdf" onClick={() => handleDownload(selectedReport.id, 'pdf')}>
+                    <span className="export-icon">📄</span> PDF
+                </button>
+                <button className="export-btn export-word" onClick={() => handleDownload(selectedReport.id, 'word')}>
+                    <span className="export-icon">📝</span> Word
+                </button>
+                <button className="export-btn export-json" onClick={() => handleDownload(selectedReport.id, 'json')}>
+                    <span className="export-icon">{'{ }'}</span> JSON
+                </button>
+            </div>
+        )
+
+        switch (selectedReport?.id) {
+            case 'sales-summary':
+                return (
+                    <div className="report-content-view">
+                        <div className="report-summary-grid">
+                            <div className="summary-val-card">
+                                <span className="label">Gross Sales</span>
+                                <span className="val">₹{reportData?.summary?.totalRevenue?.toLocaleString('en-IN') || 0}</span>
+                            </div>
+                            <div className="summary-val-card">
+                                <span className="label">Total Orders</span>
+                                <span className="val">{reportData?.summary?.totalOrders || 0}</span>
+                            </div>
+                            <div className="summary-val-card">
+                                <span className="label">Income</span>
+                                <span className="val">₹{reportData?.income || 0}</span>
+                            </div>
+                            <div className="summary-val-card">
+                                <span className="label">Expense</span>
+                                <span className="val">₹{reportData?.expense || 0}</span>
+                            </div>
+                        </div>
+                        {downloadBar}
+                    </div>
+                )
+            case 'sales-report':
+                return (
+                    <div className="report-content-view">
+                        <div className="report-table-wrapper">
+                            <table className="premium-table">
+                               <thead>
+                                   <tr>
+                                       <th>Order #</th>
+                                       <th>Date</th>
+                                       <th>Customer</th>
+                                       <th>Total</th>
+                                       <th>Status</th>
+                                   </tr>
+                               </thead>
+                               <tbody>
+                                   {reportData?.sales?.map((s, i) => (
+                                       <tr key={i}>
+                                           <td>{s.orderNumber}</td>
+                                           <td>{new Date(s.date).toLocaleDateString()}</td>
+                                           <td>{s.customer || '-'}</td>
+                                           <td>₹{s.total?.toLocaleString()}</td>
+                                           <td><span className={`status-pill ${s.status.toLowerCase()}`}>{s.status}</span></td>
+                                       </tr>
+                                   ))}
+                               </tbody>
+                            </table>
+                        </div>
+                        <div className="report-footer-summary">
+                            <span>Total Revenue: <b>₹{reportData?.totalRevenue?.toLocaleString()}</b></span>
+                        </div>
+                        {downloadBar}
+                    </div>
+                )
+            case 'end-day-report':
+                return (
+                    <div className="report-content-view">
+                        <div className="end-day-summary">
+                            <div className="stat-row">
+                                <span>Total Sales Today</span>
+                                <b>₹{reportData?.totalSales?.toLocaleString()}</b>
+                            </div>
+                            <div className="stat-row">
+                                <span>Total Orders</span>
+                                <b>{reportData?.orderCount}</b>
+                            </div>
+                            <div className="payment-breakdown">
+                                <h4>Payment Modes</h4>
+                                {Object.entries(reportData?.payments || {}).map(([mode, val]) => (
+                                    <div key={mode} className="pay-row">
+                                        <span>{mode}</span>
+                                        <b>₹{val.toLocaleString()}</b>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        {downloadBar}
+                    </div>
+                )
+            case 'category-item-wise':
+            case 'item-wise-sales':
+                return (
+                    <div className="report-content-view">
+                        <div className="report-table-wrapper">
+                            <table className="premium-table">
+                                <thead>
+                                    <tr>
+                                        <th>Item Name</th>
+                                        <th>Quantity Sold</th>
+                                        <th>Total Revenue</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {reportData?.items?.map((item, i) => (
+                                        <tr key={i}>
+                                            <td>{item.name}</td>
+                                            <td>{item.quantity}</td>
+                                            <td>₹{item.revenue?.toLocaleString()}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        {downloadBar}
+                    </div>
+                )
+            case 'income-expense':
+                return (
+                    <div className="report-content-view">
+                        <div className="report-summary-grid mini">
+                            <div className="summary-val-card income">
+                                <span className="label">Total Income</span>
+                                <span className="val">₹{reportData?.totalIncome?.toLocaleString()}</span>
+                            </div>
+                            <div className="summary-val-card expense">
+                                <span className="label">Total Expense</span>
+                                <span className="val">₹{reportData?.totalExpense?.toLocaleString()}</span>
+                            </div>
+                        </div>
+                        <div className="report-table-wrapper">
+                            <table className="premium-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Description</th>
+                                        <th>Type</th>
+                                        <th>Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {reportData?.transactions?.map((t, i) => (
+                                        <tr key={i}>
+                                            <td>{new Date(t.date).toLocaleDateString()}</td>
+                                            <td>{t.description}</td>
+                                            <td><span className={`type-pill ${t.type.toLowerCase()}`}>{t.type}</span></td>
+                                            <td>₹{t.amount?.toLocaleString()}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        {downloadBar}
+                    </div>
+                )
+            case 'stock-report':
+            case 'recipe-stock':
+            case 'total-inventory-valuation':
+                return (
+                    <div className="report-content-view">
+                        <div className="valuation-card-premium">
+                            <div className="val-main">
+                                <span className="val-label">Total Stock Value</span>
+                                <span className="val-amount">₹{reportData?.totalValue?.toLocaleString('en-IN') || reportData?.totalStockValue || 0}</span>
+                            </div>
+                            <div className="val-sub">
+                                <span>Based on {reportData?.count || reportData?.itemCount || 0} Active Items</span>
+                            </div>
+                        </div>
+                        <div className="report-table-wrapper">
+                            <table className="premium-table">
+                                <thead>
+                                    <tr>
+                                        <th>Item Name</th>
+                                        <th>Category</th>
+                                        <th>Current Stock</th>
+                                        <th>Cost/Unit</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {reportData?.items?.map((item, i) => (
+                                        <tr key={i} className={item.currentStock <= item.lowStockThreshold ? 'low-stock-row' : ''}>
+                                            <td>{item.name}</td>
+                                            <td>{item.category}</td>
+                                            <td>{item.currentStock} {item.unit}</td>
+                                            <td>₹{item.costPerUnit}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        {downloadBar}
+                    </div>
+                )
+            case 'purchase-item-stock':
+            case 'purchase-recipe-stock':
+                return (
+                    <div className="report-content-view">
+                         <div className="report-table-wrapper">
+                            <table className="premium-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Item</th>
+                                        <th>Quantity</th>
+                                        <th>By</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {reportData?.purchases?.map((p, i) => (
+                                        <tr key={i}>
+                                            <td>{new Date(p.createdAt).toLocaleString()}</td>
+                                            <td>{p.inventoryItem?.name}</td>
+                                            <td>{p.quantity} {p.inventoryItem?.unit}</td>
+                                            <td>{p.createdBy?.name || 'System'}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        {downloadBar}
+                    </div>
+                )
+            case 'cashier-wise-sales':
+                return (
+                    <div className="report-content-view">
+                        <div className="report-table-wrapper">
+                            <table className="premium-table">
+                                <thead>
+                                    <tr>
+                                        <th>Cashier Name</th>
+                                        <th>Total Sales</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {Object.entries(reportData?.cashiers || {}).map(([name, val]) => (
+                                        <tr key={name}>
+                                            <td>{name}</td>
+                                            <td>₹{val.toLocaleString()}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        {downloadBar}
+                    </div>
+                )
+            case 'cancelled-item-summary':
+                return (
+                    <div className="report-content-view">
+                         <div className="report-summary-grid mini">
+                            <div className="summary-val-card warning">
+                                <span className="label">Cancelled Count</span>
+                                <span className="val">{reportData?.count}</span>
+                            </div>
+                            <div className="summary-val-card error">
+                                <span className="label">Total Loss</span>
+                                <span className="val">₹{reportData?.totalLoss?.toLocaleString()}</span>
+                            </div>
+                        </div>
+                        <div className="report-table-wrapper">
+                            <table className="premium-table">
+                                <thead>
+                                    <tr>
+                                        <th>Order #</th>
+                                        <th>Date</th>
+                                        <th>Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {reportData?.cancelledOrders?.map((o, i) => (
+                                        <tr key={i}>
+                                            <td>{o.orderNumber}</td>
+                                            <td>{new Date(o.createdAt).toLocaleString()}</td>
+                                            <td>₹{o.total?.toLocaleString()}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        {downloadBar}
+                    </div>
+                )
+            default:
+                return (
+                    <div className="report-content-view">
+                        <p>Detailed view for <b>{selectedReport?.label}</b> is coming soon.</p>
+                        {downloadBar}
+                    </div>
+                )
+        }
+    }
+
     return (
         <div className="analytics-container">
+            <StakeholderRestaurantTabs />
             <div className="analytics-header">
                 <div className="header-main">
                     <h1>Restaurant Analytics</h1>
                     <p>Track your business growth and popular dishes</p>
                 </div>
-                <div className="period-switcher">
-                    {[
-                        { id: '1d', label: '1D' },
-                        { id: '7d', label: '1W' },
-                        { id: '30d', label: '1M' },
-                        { id: '90d', label: '3M' }
-                    ].map(p => (
-                        <button
-                            key={p.id}
-                            onClick={() => setPeriod(p.id)}
-                            className={`period-btn ${period === p.id ? 'active' : ''}`}
+                <div className="header-actions">
+                    <div className="report-selector-wrapper">
+                        <button 
+                            className={`report-selector-btn ${showSelector ? 'active' : ''}`}
+                            onClick={() => setShowSelector(!showSelector)}
                         >
-                            {p.label}
+                            📊 {selectedReport ? selectedReport.label : 'Select Report'}
+                            <span className={`chevron ${showSelector ? 'open' : ''}`}>▼</span>
                         </button>
-                    ))}
+                        {showSelector && (
+                            <div className="report-dropdown-premium">
+                                {reports.map(r => (
+                                    <div 
+                                        key={r.id} 
+                                        className={`dropdown-item ${selectedReport?.id === r.id ? 'active' : ''}`}
+                                        onClick={() => {
+                                            setSelectedReport(r)
+                                            setShowSelector(false)
+                                        }}
+                                    >
+                                        <div className="item-content">
+                                            <span className="item-icon">{r.icon}</span>
+                                            <span className="item-label">{r.label}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    <div className="period-switcher">
+                        {[
+                            { id: '1d', label: '1D' },
+                            { id: '7d', label: '1W' },
+                            { id: '30d', label: '1M' },
+                            { id: '90d', label: '3M' }
+                        ].map(p => (
+                            <button
+                                key={p.id}
+                                onClick={() => setPeriod(p.id)}
+                                className={`period-btn ${period === p.id ? 'active' : ''}`}
+                            >
+                                {p.label}
+                            </button>
+                        ))}
+                        
+                        {/* Date Picker Button */}
+                        <div className="period-btn-calendar">
+                            <button
+                                onClick={() => document.getElementById('analytics-date-picker').showPicker()}
+                                className={`period-btn calendar-btn ${period === 'custom' ? 'active' : ''}`}
+                                title="Pick a specific date"
+                            >
+                                📅 {period === 'custom' ? selectedDate : ''}
+                            </button>
+                            <input 
+                                type="date" 
+                                id="analytics-date-picker"
+                                value={selectedDate}
+                                onChange={(e) => {
+                                    setSelectedDate(e.target.value)
+                                    setPeriod('custom')
+                                }}
+                                style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }}
+                            />
+                        </div>
+                    </div>
                 </div>
             </div>
+
 
             {loading ? (
                 <div className="loading" style={{ height: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -94,7 +537,7 @@ export default function AnalyticsPage() {
                             <div key={i} className="kpi-card">
                                 <div className="kpi-icon-row">
                                     <div className="kpi-icon" style={{ background: k.bg }}>{k.icon}</div>
-                                    <div className="kpi-trend">{k.trend}</div>
+                                    <div className="kpi-trend" style={{ color: k.color }}>{k.trend}</div>
                                 </div>
                                 <div>
                                     <div className="kpi-label">{k.label}</div>
@@ -105,54 +548,137 @@ export default function AnalyticsPage() {
                     </div>
 
                     <div className="analytics-main-grid">
-                        <div className="dashboard-card">
-                            <h3 className="card-title">📈 Revenue Trend</h3>
-                            {data?.revenueByDay?.length > 0 ? (
-                                <div className="trend-list">
-                                    {data.revenueByDay.map((d, i) => {
-                                        const maxRev = Math.max(...data.revenueByDay.map(x => x.revenue))
-                                        const width = maxRev > 0 ? (d.revenue / maxRev) * 100 : 0
-                                        return (
-                                            <div key={i} className="trend-item">
-                                                <span className="trend-date">{d._id.slice(5)}</span>
-                                                <div className="trend-bar-container">
-                                                    <div className="trend-bar" style={{ width: `${width}%` }}></div>
-                                                </div>
-                                                <span className="trend-value">₹{d.revenue.toLocaleString('en-IN')}</span>
-                                            </div>
-                                        )
-                                    })}
+                        {/* Financial Performance Area Chart */}
+                        <div className="dashboard-card chart-master">
+                            <div className="card-custom-header">
+                                <h3 className="card-title">📈 Financial Performance</h3>
+                                <div className="custom-legend">
+                                    <div className="legend-item"><span className="dot rev"></span> Revenue</div>
+                                    <div className="legend-item"><span className="dot profit"></span> Profit</div>
                                 </div>
-                            ) : (
-                                <div className="loading" style={{ height: '200px' }}>No trend data found</div>
-                            )}
+                            </div>
+                            <div style={{ width: '100%', height: 350 }}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <AreaChart data={data?.revenueByDay || []}>
+                                        <defs>
+                                            <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.3}/>
+                                                <stop offset="95%" stopColor="var(--accent)" stopOpacity={0}/>
+                                            </linearGradient>
+                                            <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#00D68F" stopOpacity={0.3}/>
+                                                <stop offset="95%" stopColor="#00D68F" stopOpacity={0}/>
+                                            </linearGradient>
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                                        <XAxis 
+                                            dataKey="date" 
+                                            axisLine={false}
+                                            tickLine={false}
+                                            tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 10 }}
+                                            tickFormatter={(val) => val.includes('-') ? val.slice(5) : val}
+                                        />
+                                        <YAxis 
+                                            axisLine={false}
+                                            tickLine={false}
+                                            tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 10 }}
+                                            tickFormatter={(value) => `₹${value >= 1000 ? (value/1000).toFixed(1) + 'k' : value}`}
+                                        />
+                                        <Tooltip 
+                                            contentStyle={{ backgroundColor: '#1e1e2d', border: 'none', borderRadius: '8px', color: '#fff' }}
+                                            itemStyle={{ color: '#fff' }}
+                                        />
+                                        <Area type="monotone" dataKey="revenue" stroke="var(--accent)" fillOpacity={1} fill="url(#colorRev)" strokeWidth={3} />
+                                        <Area type="monotone" dataKey="profit" stroke="#00D68F" fillOpacity={1} fill="url(#colorProfit)" strokeWidth={3} />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            </div>
                         </div>
 
+                        {/* Expense Breakdown Pie Chart */}
                         <div className="dashboard-card">
-                            <h3 className="card-title">🏆 Top Sellers</h3>
-                            {data?.topItems?.length > 0 ? (
-                                <div className="top-items-list">
-                                    {data.topItems.map((item, idx) => (
-                                        <div key={idx} className="top-item-row">
-                                            <div className="item-rank-name">
-                                                <div className="rank-badge" style={{
-                                                    background: idx === 0 ? 'rgba(255, 215, 0, 0.2)' : idx === 1 ? 'rgba(192, 192, 192, 0.2)' : idx === 2 ? 'rgba(205, 127, 50, 0.2)' : 'var(--bg-card)'
-                                                }}>
-                                                    {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '✨'}
-                                                </div>
-                                                <span className="rank-text">{item._id}</span>
-                                            </div>
-                                            <span className="sold-badge">{item.totalQuantity} Sold</span>
+                            <h3 className="card-title">💸 Expenditure Breakdown</h3>
+                            <div style={{ width: '100%', height: 300 }}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie
+                                            data={data?.expenseBreakdown?.length > 0 ? data.expenseBreakdown : [{name: 'No Data', value: 1}]}
+                                            cx="50%"
+                                            cy="50%"
+                                            innerRadius={60}
+                                            outerRadius={90}
+                                            paddingAngle={5}
+                                            dataKey="value"
+                                        >
+                                            {(data?.expenseBreakdown || []).map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={['var(--accent)', '#4C8EFF', '#00D68F', '#9d50bb', '#e74c3c'][index % 5]} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip />
+                                        <Legend />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+
+                        {/* Popular Items */}
+                        <div className="dashboard-card">
+                            <h3 className="card-title">🏆 Popular Items</h3>
+                            <div className="top-items-list">
+                                {data?.topItems?.map((item, idx) => (
+                                    <div key={idx} className="top-item-row">
+                                        <div className="item-rank-name">
+                                            <div className="rank-badge" style={{
+                                                background: idx === 0 ? 'rgba(255, 215, 0, 0.2)' : idx === 1 ? 'rgba(192, 192, 192, 0.2)' : 'rgba(198, 245, 61, 0.1)'
+                                            }}>{idx + 1}</div>
+                                            <span className="rank-text">{item._id}</span>
                                         </div>
-                                    ))}
+                                        <span className="sold-badge">{item.totalQuantity} Sold</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* P&L Analysis */}
+                        <div className="dashboard-card">
+                            <h3 className="card-title">💡 Insight: Net Profit</h3>
+                            <div className="profit-analysis">
+                                <div className="profit-value-row">
+                                    <span className="big-profit">₹{Math.round(data?.summary?.netProfit || 0).toLocaleString('en-IN')}</span>
+                                    <span className={`profit-indicator ${data?.summary?.netProfit >= 0 ? 'pos' : 'neg'}`}>
+                                        {data?.summary?.netProfit >= 0 ? '▲ Positive' : '▼ Negative'}
+                                    </span>
                                 </div>
-                            ) : (
-                                <div className="loading" style={{ height: '200px' }}>No sales data found</div>
-                            )}
+                                <div className="margin-bar-container">
+                                    <div className="margin-label">Profit Margin: {data?.summary?.profitMargin?.toFixed(1) || 0}%</div>
+                                    <div className="margin-bar-bg">
+                                        <div className="margin-bar-fill" style={{ width: `${Math.min(100, Math.max(0, data?.summary?.profitMargin || 0))}%` }}></div>
+                                    </div>
+                                </div>
+                                <p className="profit-desc">
+                                    Calculated as total revenue minus expenditures across selected restaurants for this period.
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </>
             )}
+
+            {/* Report Preview Modal */}
+            {selectedReport && (
+                <div className="report-overlay" onClick={() => setSelectedReport(null)}>
+                    <div className="report-modal" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3>{selectedReport.label}</h3>
+                            <button className="close-modal" onClick={() => setSelectedReport(null)}>✕</button>
+                        </div>
+                        <div className="modal-body">
+                            {renderReportView()}
+                        </div>
+                    </div>
+                </div>
+            )}
+
         </div>
     )
 }

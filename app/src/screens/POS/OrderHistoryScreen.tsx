@@ -6,21 +6,31 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Typography, Spacing, Radius, Shadows, Gradients } from '../../theme';
+import { useAppTheme, Typography, Spacing, Radius, Shadows } from '../../theme';
 import api from '../../api/client';
 import { useAuthStore } from '../../store/useAuthStore';
 
-// Filter Pickers using a simplified custom approach since standard RN Picker varies heavily
-const FilterPill = ({ label, active, onPress }: { label: string, active: boolean, onPress: () => void }) => (
+// Filter Pickers using a simplified custom approach
+const FilterPill = ({ label, active, onPress, colors, themedStyles }: { label: string, active: boolean, onPress: () => void, colors: any, themedStyles: any }) => (
     <TouchableOpacity
-        style={[styles.filterPill, active && styles.filterPillActive]}
+        style={[
+            themedStyles.filterPill, 
+            { backgroundColor: colors.glass, borderColor: colors.border },
+            active && { backgroundColor: colors.primary + '26', borderColor: colors.primary }
+        ]}
         onPress={onPress}
     >
-        <Text style={[styles.filterPillText, active && styles.filterPillTextActive]}>{label}</Text>
+        <Text style={[
+            themedStyles.filterPillText, 
+            { color: colors.textSecondary },
+            active && { color: colors.primary, fontWeight: '700' }
+        ]}>{label}</Text>
     </TouchableOpacity>
 );
 
 export default function OrderHistoryScreen({ navigation }: any) {
+    const { colors, gradients, isDark } = useAppTheme();
+    const themedStyles = React.useMemo(() => createStyles(colors, gradients, isDark), [colors, gradients, isDark]);
     const { user } = useAuthStore();
     const isOwner = user?.role === 'owner';
 
@@ -31,28 +41,38 @@ export default function OrderHistoryScreen({ navigation }: any) {
     // Filters
     const [filterType, setFilterType] = useState('All');
     const [filterStatus, setFilterStatus] = useState('All');
+    const [filterPeriod, setFilterPeriod] = useState('today'); // 'today' | 'week' | 'all'
 
     const fetchHistory = useCallback(async () => {
         try {
             const params = new URLSearchParams();
-            params.append('limit', '50');
+            params.append('limit', '100');
 
-            // Only fetch for today on mobile to keep it fast, can expand if needed
-            const today = new Date().toISOString().split('T')[0];
-            params.append('date', today);
+            if (filterPeriod === 'today') {
+                const today = new Date().toISOString().split('T')[0];
+                params.append('date', today);
+            }
 
             if (filterType !== 'All') params.append('orderType', filterType);
             if (filterStatus !== 'All') params.append('status', filterStatus);
 
-            const response = await api.get(`/orders?${params.toString()}`);
-            setOrders(response.data.data.orders || []);
-        } catch (error) {
-            console.error('Failed to fetch order history', error);
+            const response = await api.get(`/orders/history?${params.toString()}`);
+            let fetched: any[] = response.data.data?.orders || [];
+
+            if (filterPeriod === 'week') {
+                const weekAgo = new Date();
+                weekAgo.setDate(weekAgo.getDate() - 7);
+                fetched = fetched.filter((o: any) => new Date(o.createdAt) >= weekAgo);
+            }
+
+            setOrders(fetched);
+        } catch (error: any) {
+            console.error('Failed to fetch order history', error?.response?.data || error?.message);
         } finally {
             setIsLoading(false);
             setIsRefreshing(false);
         }
-    }, [filterType, filterStatus]);
+    }, [filterType, filterStatus, filterPeriod]);
 
     useEffect(() => {
         setIsLoading(true);
@@ -96,69 +116,67 @@ export default function OrderHistoryScreen({ navigation }: any) {
         return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
     };
 
-    const formatDate = (dateString: string) => {
-        const d = new Date(dateString);
-        return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
-    };
-
-    const getStatusStyle = (status: string) => {
-        switch (status) {
-            case 'preparing': return { bg: '#fffbeb', text: '#b45309', border: '#fde68a' };
-            case 'ready': return { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe' };
-            case 'served': return { bg: '#f5f3ff', text: '#6d28d9', border: '#ddd6fe' };
-            case 'paid': return { bg: '#f0fdf4', text: '#15803d', border: '#bbf7d0' };
-            case 'completed': return { bg: '#f0fdf4', text: '#15803d', border: '#bbf7d0' };
-            case 'cancelled': return { bg: '#fef2f2', text: '#b91c1c', border: '#fecaca' };
-            default: return { bg: '#f1f5f9', text: '#64748b', border: '#e2e8f0' };
-        }
+    const getStatusTheme = (status: string) => {
+        const s = status?.toUpperCase();
+        if (s === 'PREPARING') return { bg: colors.warning + '1A', text: colors.warning, border: colors.warning + '4D' };
+        if (s === 'READY') return { bg: colors.primary + '1A', text: colors.primary, border: colors.primary + '4D' };
+        if (s === 'SERVED') return { bg: (colors.accentPurple || '#A855F7') + '1A', text: colors.accentPurple || '#A855F7', border: (colors.accentPurple || '#A855F7') + '4D' };
+        if (s === 'PAID' || s === 'COMPLETED') return { bg: colors.success + '1A', text: colors.success, border: colors.success + '4D' };
+        if (s === 'CANCELLED') return { bg: colors.error + '1A', text: colors.error, border: colors.error + '4D' };
+        return { bg: colors.border, text: colors.textSecondary, border: colors.border };
     };
 
     const renderOrderItem = ({ item }: { item: any }) => {
-        const statusStyle = getStatusStyle(item.status);
+        const st = getStatusTheme(item.status);
         const isTakeaway = item.orderType === 'takeaway';
 
         return (
-            <View style={styles.orderCard}>
-                <View style={styles.cardHeader}>
-                    <View style={styles.headerLeft}>
-                        <View style={[styles.typeBadge,
-                        { backgroundColor: isTakeaway ? '#faf5ff' : '#eff6ff', borderColor: isTakeaway ? '#e9d5ff' : '#bfdbfe' }
+            <View style={themedStyles.orderCard}>
+                <View style={themedStyles.cardHeader}>
+                    <View style={themedStyles.headerLeft}>
+                        <View style={[themedStyles.typeBadge,
+                        { 
+                            backgroundColor: isTakeaway ? (colors.accentPurple || '#A855F7') + '1A' : colors.primary + '1A', 
+                            borderColor: isTakeaway ? (colors.accentPurple || '#A855F7') + '4D' : colors.primary + '4D' 
+                        }
                         ]}>
-                            <Text style={[styles.typeText, { color: isTakeaway ? '#9333ea' : '#2563eb' }]}>
+                            <Text style={[themedStyles.typeText, { color: isTakeaway ? (colors.accentPurple || '#A855F7') : colors.primary }]}>
                                 {isTakeaway ? '🥡 Takeaway' : '🍽️ Dine-In'}
                             </Text>
                         </View>
-                        <Text style={styles.orderNumberTitle}>
+                        <Text style={themedStyles.orderNumberTitle}>
                             {item.tableNumber ? item.tableNumber : (item.tokenNumber ? `Token ${item.tokenNumber}` : 'Takeaway')}
                         </Text>
                     </View>
-                    <View style={styles.timeBadgeView}>
-                        <Text style={styles.timeBadgeText}>{formatTime(item.createdAt)}</Text>
+                    <View style={themedStyles.timeBadgeView}>
+                        <Text style={themedStyles.timeBadgeText}>{formatTime(item.createdAt)}</Text>
                     </View>
                 </View>
 
-                <View style={styles.cardBody}>
-                    <Text style={styles.itemsCount}>{item.items?.length || 0} Items</Text>
-                    <Text style={styles.itemsPreview} numberOfLines={2}>
+                <View style={themedStyles.cardBody}>
+                    <Text style={themedStyles.itemsCount}>{item.items?.length || 0} Items</Text>
+                    <Text style={themedStyles.itemsPreview} numberOfLines={2}>
                         {item.items?.map((i: any) => `${i.quantity}x ${i.name}`).join(', ')}
                     </Text>
                 </View>
 
-                <View style={styles.cardFooter}>
+                <View style={themedStyles.cardFooter}>
                     <View>
-                        <Text style={styles.totalLabel}>Total</Text>
-                        <Text style={styles.totalValue}>₹{(item.total || item.totalAmount || 0).toFixed(0)}</Text>
+                        <Text style={themedStyles.totalLabel}>Total</Text>
+                        <Text style={themedStyles.totalValue}>₹{(item.total || item.totalAmount || 0).toFixed(0)}</Text>
                     </View>
-                    <View style={styles.footerRight}>
-                        <View style={[styles.statusPill, { backgroundColor: statusStyle.bg, borderColor: statusStyle.border }]}>
-                            <View style={[styles.statusDot, { backgroundColor: statusStyle.text }]} />
-                            <Text style={[styles.statusText, { color: statusStyle.text }]}>
-                                {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+                    <View style={themedStyles.footerRight}>
+                        <View style={[themedStyles.statusPill, { backgroundColor: st.bg, borderColor: st.border }]}>
+                            <View style={[themedStyles.statusDot, { backgroundColor: st.text }]} />
+                            <Text style={[themedStyles.statusText, { color: st.text }]}>
+                                {item.status
+                                    ? item.status.charAt(0).toUpperCase() + item.status.slice(1).toLowerCase()
+                                    : 'Unknown'}
                             </Text>
                         </View>
                         {isOwner && (
-                            <TouchableOpacity onPress={() => handleDelete(item._id)} style={styles.deleteBtn}>
-                                <Ionicons name="trash-outline" size={18} color={Colors.error} />
+                            <TouchableOpacity onPress={() => handleDelete(item._id)} style={themedStyles.deleteBtn}>
+                                <Ionicons name="trash-outline" size={18} color={colors.error} />
                             </TouchableOpacity>
                         )}
                     </View>
@@ -168,62 +186,73 @@ export default function OrderHistoryScreen({ navigation }: any) {
     };
 
     return (
-        <LinearGradient colors={Gradients.background} style={styles.container}>
-            <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
-            <SafeAreaView style={styles.safe}>
-                <View style={styles.header}>
-                    <View style={styles.headerTop}>
-                        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-                            <Ionicons name="chevron-back" size={24} color={Colors.white} />
+        <LinearGradient colors={gradients.background} style={themedStyles.container}>
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor="transparent" translucent />
+            <SafeAreaView style={themedStyles.safe} edges={['top']}>
+                <View style={themedStyles.header}>
+                    <View style={themedStyles.headerTop}>
+                        <TouchableOpacity style={themedStyles.backBtn} onPress={() => navigation.goBack()}>
+                            <Ionicons name="chevron-back" size={24} color={colors.white} />
                         </TouchableOpacity>
-                        <Text style={styles.headerTitle}>Order History</Text>
+                        <Text style={themedStyles.headerTitle}>Order History</Text>
                         {isOwner ? (
-                            <TouchableOpacity style={styles.exportBtn} onPress={handleExport}>
-                                <Ionicons name="download-outline" size={20} color={Colors.white} />
+                            <TouchableOpacity style={themedStyles.exportBtn} onPress={handleExport}>
+                                <Ionicons name="download-outline" size={20} color={colors.white} />
                             </TouchableOpacity>
                         ) : (
-                            <View style={styles.exportBtn} />
+                            <View style={themedStyles.exportBtn} />
                         )}
                     </View>
                 </View>
 
-                {/* Filters Section */}
-                <View style={styles.filtersSection}>
-                    <Text style={styles.filterSectionTitle}>Order Type</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersRow}>
+                {/* Period Filters */}
+                <View style={themedStyles.filtersSection}>
+                    <Text style={themedStyles.filterSectionTitle}>Period</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={themedStyles.filtersRow}>
+                        {[{ key: 'today', label: '📅 Today' }, { key: 'week', label: '📆 This Week' }, { key: 'all', label: '🗂️ All Time' }].map(p => (
+                            <FilterPill key={p.key} label={p.label} active={filterPeriod === p.key} onPress={() => setFilterPeriod(p.key)} colors={colors} themedStyles={themedStyles} />
+                        ))}
+                    </ScrollView>
+
+                    <Text style={[themedStyles.filterSectionTitle, { marginTop: 12 }]}>Order Type</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={themedStyles.filtersRow}>
                         {['All', 'dine-in', 'takeaway'].map(type => (
                             <FilterPill
                                 key={type}
                                 label={type === 'All' ? 'All Types' : (type === 'dine-in' ? 'Dine-In' : 'Takeaway')}
                                 active={filterType === type}
                                 onPress={() => setFilterType(type)}
+                                colors={colors}
+                                themedStyles={themedStyles}
                             />
                         ))}
                     </ScrollView>
 
-                    <Text style={[styles.filterSectionTitle, { marginTop: 12 }]}>Status</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersRow}>
+                    <Text style={[themedStyles.filterSectionTitle, { marginTop: 12 }]}>Status</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={themedStyles.filtersRow}>
                         {['All', 'preparing', 'ready', 'served', 'paid', 'cancelled'].map(status => (
                             <FilterPill
                                 key={status}
                                 label={status.charAt(0).toUpperCase() + status.slice(1)}
                                 active={filterStatus === status}
                                 onPress={() => setFilterStatus(status)}
+                                colors={colors}
+                                themedStyles={themedStyles}
                             />
                         ))}
                     </ScrollView>
                 </View>
 
                 {isLoading ? (
-                    <View style={styles.loadingContainer}>
-                        <ActivityIndicator size="large" color={Colors.primary} />
+                    <View style={themedStyles.loadingContainer}>
+                        <ActivityIndicator size="large" color={colors.primary} />
                     </View>
                 ) : (
                     <FlatList
                         data={orders}
                         keyExtractor={(item) => item._id}
                         renderItem={renderOrderItem}
-                        contentContainerStyle={styles.listContent}
+                        contentContainerStyle={themedStyles.listContent}
                         showsVerticalScrollIndicator={false}
                         refreshing={isRefreshing}
                         onRefresh={() => {
@@ -231,9 +260,9 @@ export default function OrderHistoryScreen({ navigation }: any) {
                             fetchHistory();
                         }}
                         ListEmptyComponent={
-                            <View style={styles.emptyWrap}>
-                                <Ionicons name="receipt-outline" size={60} color={Colors.textMuted} />
-                                <Text style={styles.emptyText}>No orders found.</Text>
+                            <View style={themedStyles.emptyWrap}>
+                                <Ionicons name="receipt-outline" size={60} color={colors.textMuted} />
+                                <Text style={themedStyles.emptyText}>No orders found.</Text>
                             </View>
                         }
                     />
@@ -243,7 +272,7 @@ export default function OrderHistoryScreen({ navigation }: any) {
     );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any, gradients: any, isDark: boolean) => StyleSheet.create({
     container: { flex: 1 },
     safe: { flex: 1 },
     header: {
@@ -254,18 +283,18 @@ const styles = StyleSheet.create({
     },
     backBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-start', marginLeft: -8 },
     exportBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-end', marginRight: -8 },
-    headerTitle: { ...Typography.h3, color: Colors.textPrimary },
+    headerTitle: { ...Typography.h3, color: colors.textPrimary },
 
     filtersSection: {
         paddingHorizontal: Spacing.lg,
         paddingBottom: Spacing.md,
         borderBottomWidth: 1,
-        borderBottomColor: 'rgba(255,255,255,0.05)',
+        borderBottomColor: colors.border,
         marginBottom: Spacing.sm
     },
     filterSectionTitle: {
         ...Typography.caption,
-        color: Colors.textMuted,
+        color: colors.textMuted,
         marginBottom: 8,
         letterSpacing: 0.5,
         textTransform: 'uppercase'
@@ -279,33 +308,24 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         paddingVertical: 8,
         borderRadius: 20,
-        backgroundColor: 'rgba(255,255,255,0.05)',
+        backgroundColor: colors.glass,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)'
-    },
-    filterPillActive: {
-        backgroundColor: 'rgba(255, 107, 53, 0.15)',
-        borderColor: Colors.primary
+        borderColor: colors.border
     },
     filterPillText: {
         ...Typography.body2,
-        color: Colors.textSecondary,
+        color: colors.textSecondary,
         fontWeight: '600'
-    },
-    filterPillTextActive: {
-        color: Colors.primary,
-        fontWeight: '700'
     },
 
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     listContent: { paddingHorizontal: Spacing.lg, paddingBottom: 100 },
     emptyWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 100 },
-    emptyText: { ...Typography.h4, color: Colors.textMuted },
+    emptyText: { ...Typography.h4, color: colors.textMuted },
 
-    // Modern Cards
     orderCard: {
-        backgroundColor: Colors.card, borderRadius: Radius.xl,
-        borderWidth: 1, borderColor: Colors.glassBorder,
+        backgroundColor: colors.card, borderRadius: Radius.xl,
+        borderWidth: 1, borderColor: colors.border,
         padding: 16, marginBottom: Spacing.md,
         ...Shadows.sm
     },
@@ -328,41 +348,43 @@ const styles = StyleSheet.create({
         textTransform: 'uppercase'
     },
     orderNumberTitle: {
-        ...Typography.h4, color: Colors.textPrimary, fontWeight: '800'
+        ...Typography.h4, color: colors.textPrimary, fontWeight: '800'
     },
     timeBadgeView: {
-        backgroundColor: 'rgba(255,255,255,0.05)',
+        backgroundColor: colors.glass,
         paddingHorizontal: 8,
         paddingVertical: 4,
-        borderRadius: 6
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: colors.border
     },
     timeBadgeText: {
         ...Typography.caption,
-        color: Colors.textSecondary,
+        color: colors.textSecondary,
         fontWeight: '600'
     },
 
     cardBody: {
-        paddingVertical: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)',
-        borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)',
+        paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.border,
+        borderBottomWidth: 1, borderBottomColor: colors.border,
         marginBottom: 12
     },
     itemsCount: {
         ...Typography.caption,
-        color: Colors.textMuted,
+        color: colors.textMuted,
         fontWeight: '700',
         textTransform: 'uppercase',
         marginBottom: 4
     },
     itemsPreview: {
         ...Typography.body2,
-        color: Colors.textSecondary,
+        color: colors.textSecondary,
         lineHeight: 20
     },
 
     cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    totalLabel: { ...Typography.caption, color: Colors.textMuted },
-    totalValue: { ...Typography.h3, color: Colors.white, fontWeight: '800' },
+    totalLabel: { ...Typography.caption, color: colors.textMuted },
+    totalValue: { ...Typography.h3, color: colors.textPrimary, fontWeight: '800' },
 
     footerRight: {
         flexDirection: 'row',
@@ -377,5 +399,5 @@ const styles = StyleSheet.create({
     statusDot: { width: 6, height: 6, borderRadius: 3 },
     statusText: { fontSize: 12, fontWeight: '700' },
 
-    deleteBtn: { width: 32, height: 32, backgroundColor: 'rgba(239, 68, 68, 0.1)', borderRadius: Radius.round, justifyContent: 'center', alignItems: 'center' },
+    deleteBtn: { width: 32, height: 32, backgroundColor: colors.error + '1A', borderRadius: Radius.round, justifyContent: 'center', alignItems: 'center' },
 });

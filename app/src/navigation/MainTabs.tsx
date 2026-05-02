@@ -4,11 +4,12 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Colors } from '../theme';
-
-import { useAuthStore } from '../store/useAuthStore';
 import { BlurView } from 'expo-blur';
+import { useAppTheme } from '../theme';
+import { useAuthStore } from '../store/useAuthStore';
+import { useAttendanceStore } from '../store/useAttendanceStore';
+import { useSocket } from '../hooks/useSocket';
+import { useNotificationStore } from '../store/useNotificationStore';
 
 // Screens
 import TablesScreen from '../screens/POS/TablesScreen';
@@ -20,6 +21,7 @@ import EditMenuItemScreen from '../screens/Menu/EditMenuItemScreen';
 import InventoryScreen from '../screens/Inventory/InventoryScreen';
 import AddInventoryScreen from '../screens/Inventory/AddInventoryScreen';
 import AnalyticsScreen from '../screens/Analytics/AnalyticsScreen';
+import ExpenditureScreen from '../screens/Analytics/ExpenditureScreen';
 import AIToolsScreen from '../screens/AI/AIToolsScreen';
 import ProfileScreen from '../screens/Settings/ProfileScreen';
 import EmployeeManagementScreen from '../screens/Settings/EmployeeManagementScreen';
@@ -37,7 +39,7 @@ function POSNavigator() {
     return (
         <POSStack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Tables">
             <POSStack.Screen name="Tables" component={TablesScreen} />
-            <POSStack.Screen name="Billing" component={BillingScreen} />
+            <POSStack.Screen name="Order" component={BillingScreen} />
             <POSStack.Screen name="Checkout" component={CheckoutScreen} />
             <POSStack.Screen name="OrderHistory" component={OrderHistoryScreen} />
         </POSStack.Navigator>
@@ -49,6 +51,7 @@ function InventoryNavigator() {
         <InventoryStack.Navigator screenOptions={{ headerShown: false }}>
             <InventoryStack.Screen name="InventoryList" component={InventoryScreen} />
             <InventoryStack.Screen name="AddInventory" component={AddInventoryScreen} />
+            <InventoryStack.Screen name="Expenditure" component={ExpenditureScreen} />
         </InventoryStack.Navigator>
     );
 }
@@ -82,10 +85,11 @@ const tabIcons: Record<string, { active: any; inactive: any }> = {
 };
 
 function TabBarBackground() {
+    const { isDark } = useAppTheme();
     return (
         <BlurView
-            intensity={40}
-            tint="dark"
+            intensity={Platform.OS === 'ios' ? 40 : 100}
+            tint={isDark ? "dark" : "light"}
             style={[StyleSheet.absoluteFill, { borderRadius: 35, overflow: 'hidden' }]}
         />
     );
@@ -104,10 +108,42 @@ function ProfileNavigator() {
 
 export default function MainTabs() {
     const { user } = useAuthStore();
+    const { isActive } = useAttendanceStore();
+    const { colors, isDark } = useAppTheme();
+    const socket = useSocket();
+    const addNotification = useNotificationStore(s => s.addNotification);
+
+    React.useEffect(() => {
+        if (!socket) return;
+
+        const handleNotification = (data: any) => {
+            if (data.message) {
+                addNotification(data.message);
+            }
+        };
+
+        socket.on('notification:send', handleNotification);
+        return () => {
+            socket.off('notification:send', handleNotification);
+        };
+    }, [socket, addNotification]);
+
     const role = user?.role || 'owner';
 
     const canSeeTab = (tabName: string) => {
-        if (role === 'owner' || role === 'manager') return true;
+        // Owners and stakeholders bypass shift locks
+        if (role === 'owner' || role === 'stakeholder') {
+            if (role === 'stakeholder') return ['Analytics', 'POS', 'Inventory', 'Menu', 'Profile'].includes(tabName);
+            return true;
+        }
+
+        // Lock everything except Profile if shift is not active
+        if (!isActive && tabName !== 'Profile') {
+            return false;
+        }
+
+        // Standard role-based access for active employees
+        if (role === 'manager') return true;
         if (role === 'waiter') return ['POS', 'Menu', 'Profile'].includes(tabName);
         if (role === 'inventory') return ['Inventory', 'Menu', 'Profile'].includes(tabName);
         if (role === 'kitchen') return ['Kitchen', 'Profile'].includes(tabName);
@@ -117,7 +153,7 @@ export default function MainTabs() {
 
     const getTabBarVisibility = (route: any) => {
         const routeName = getFocusedRouteNameFromRoute(route) ?? '';
-        const hiddenRoutes = ['AddInventory', 'EmployeeManagement', 'AppSettings', 'HelpSupport', 'EditMenuItem', 'MenuDigitizer', 'OrderHistory'];
+        const hiddenRoutes = ['AddInventory', 'Expenditure', 'EmployeeManagement', 'AppSettings', 'HelpSupport', 'EditMenuItem', 'MenuDigitizer', 'OrderHistory', 'Checkout', 'Order', 'KitchenOrders'];
         if (hiddenRoutes.includes(routeName)) {
             return 'none';
         }
@@ -132,7 +168,7 @@ export default function MainTabs() {
                 tabBarStyle: {
                     display: getTabBarVisibility(route),
                     position: 'absolute',
-                    backgroundColor: 'rgba(19, 23, 43, 0.85)',
+                    backgroundColor: isDark ? 'rgba(19, 23, 43, 0.85)' : 'rgba(255, 255, 255, 0.85)',
                     borderTopWidth: 0,
                     height: 65,
                     paddingBottom: 0,
@@ -144,20 +180,20 @@ export default function MainTabs() {
                     elevation: 10,
                     shadowColor: '#000',
                     shadowOffset: { width: 0, height: 10 },
-                    shadowOpacity: 0.5,
+                    shadowOpacity: isDark ? 0.5 : 0.1,
                     shadowRadius: 15,
-                    borderColor: 'rgba(255, 255, 255, 0.1)',
+                    borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
                     borderWidth: 1,
                 },
-                tabBarActiveTintColor: Colors.primary,
-                tabBarInactiveTintColor: Colors.textMuted,
+                tabBarActiveTintColor: colors.primary,
+                tabBarInactiveTintColor: colors.textMuted,
                 tabBarLabelStyle: { display: 'none' }, // Disable labels for a cleaner pill button look
                 tabBarIcon: ({ color, focused }) => {
                     const iconSet = tabIcons[route.name] || { active: 'person', inactive: 'person-outline' };
                     return (
                         <View style={focused ? styles.activeIconWrapper : styles.iconWrapper}>
                             {focused && (
-                                <View style={styles.activeGlow} />
+                                <View style={[styles.activeGlow, { backgroundColor: colors.primary + '26' }]} />
                             )}
                             <Ionicons
                                 name={focused ? iconSet.active : iconSet.inactive}
@@ -192,7 +228,7 @@ const styles = StyleSheet.create({
         height: 34,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'rgba(255, 107, 53, 0.12)',
+        backgroundColor: 'rgba(198, 245, 61, 0.12)',
         borderRadius: 12,
     },
     activeGlow: {
@@ -200,6 +236,6 @@ const styles = StyleSheet.create({
         width: 30,
         height: 30,
         borderRadius: 15,
-        backgroundColor: 'rgba(255, 107, 53, 0.15)',
+        backgroundColor: 'rgba(198, 245, 61, 0.15)',
     },
 });

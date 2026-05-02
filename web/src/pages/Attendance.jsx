@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import api from '../api/client.js'
 import { useAuth } from '../context/AuthContext.jsx'
+import StakeholderRestaurantTabs from '../components/StakeholderRestaurantTabs'
 import './Simple.css'
 
 export default function AttendancePage() {
@@ -12,8 +13,8 @@ export default function AttendancePage() {
     const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0])
     const [loading, setLoading] = useState(true)
 
-    const fetchData = async () => {
-        setLoading(true)
+    const fetchData = async (isSilent = false) => {
+        if (!isSilent) setLoading(true)
         try {
             const [activeRes, historyRes] = await Promise.all([
                 api.get('/attendance/active'),
@@ -28,7 +29,11 @@ export default function AttendancePage() {
         }
     }
 
-    useEffect(() => { fetchData() }, [filterDate])
+    useEffect(() => { 
+        fetchData() 
+        const interval = setInterval(() => fetchData(true), 5000) // Auto-refresh every 5 seconds (silent)
+        return () => clearInterval(interval)
+    }, [filterDate])
 
     if (!isManagerOrOwner) return (
         <div className="simple-page">
@@ -42,6 +47,11 @@ export default function AttendancePage() {
         return `${h}h ${m}m`
     }
 
+    const calculateLiveHours = (checkInTime) => {
+        const diffMs = new Date() - new Date(checkInTime)
+        return parseFloat((diffMs / 3600000).toFixed(2))
+    }
+
     const statusColor = (status) => ({
         active: '#22c55e',
         completed: '#3b82f6',
@@ -50,6 +60,7 @@ export default function AttendancePage() {
 
     return (
         <div className="simple-page">
+            <StakeholderRestaurantTabs />
             {/* Header */}
             <div className="simple-header">
                 <div>
@@ -59,25 +70,55 @@ export default function AttendancePage() {
                 <button className="add-btn" onClick={fetchData}>↻ Refresh</button>
             </div>
 
+            <div className="attendance-summary-bar">
+                <div className="summary-card">
+                    <div className="summary-label">👥 Checked In Today</div>
+                    <div className="summary-value">{[...new Set([...activeEmployees, ...history].map(r => r.employeeId?._id))].length}</div>
+                </div>
+                <div className="summary-card">
+                    <div className="summary-label">🕒 Total Hours (Today)</div>
+                    <div className="summary-value">{formatHours(history.reduce((sum, r) => sum + r.totalHours, 0))}</div>
+                </div>
+                <div className="summary-card">
+                    <div className="summary-label">🟢 Currently Active</div>
+                    <div className="summary-value accent">{activeEmployees.length}</div>
+                </div>
+            </div>
+
             {loading ? <div className="loading">Loading...</div> : (
                 <>
                     {/* Currently Working */}
-                    <div style={{ marginBottom: 8 }}>
-                        <h2 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>🟢 Currently Working</h2>
+                    <div style={{ marginBottom: 24 }}>
+                        <div className="section-header">
+                            <h2 className="section-title">🟢 Live Status</h2>
+                            <div className="live-pulse"></div>
+                        </div>
                         {activeEmployees.length === 0
-                            ? <div className="order-row"><span className="order-items">No employees are currently clocked in.</span></div>
-                            : activeEmployees.map(r => (
-                                <div key={r._id} className="order-row">
-                                    <div className="order-row-left">
-                                        <div className="emp-avatar">{r.employeeId?.name?.[0]?.toUpperCase()}</div>
-                                        <div>
-                                            <div className="order-table">{r.employeeId?.name}</div>
-                                            <div className="order-items">{r.employeeId?.role} — checked in {new Date(r.checkInTime).toLocaleTimeString()}</div>
+                            ? <div className="no-data-card">No employees are currently clocked in.</div>
+                            : <div className="active-grid">
+                                {activeEmployees.map(r => (
+                                    <div key={r._id} className="active-card">
+                                        <div className="active-card-top">
+                                            <div className="emp-avatar large">{r.employeeId?.name?.[0]?.toUpperCase()}</div>
+                                            <div className="active-info">
+                                                <div className="active-name">{r.employeeId?.name}</div>
+                                                <div className="active-role">{r.employeeId?.role}</div>
+                                            </div>
+                                            <div className="live-badge">Live</div>
+                                        </div>
+                                        <div className="active-stats">
+                                            <div className="stat-item">
+                                                <div className="stat-label">In Time</div>
+                                                <div className="stat-value">{new Date(r.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                                            </div>
+                                            <div className="stat-item">
+                                                <div className="stat-label">Duration</div>
+                                                <div className="stat-value highlight">{formatHours(calculateLiveHours(r.checkInTime))}</div>
+                                            </div>
                                         </div>
                                     </div>
-                                    <span className="role-badge" style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e', borderColor: 'rgba(34,197,94,0.3)' }}>Active</span>
-                                </div>
-                            ))
+                                ))}
+                            </div>
                         }
                     </div>
 

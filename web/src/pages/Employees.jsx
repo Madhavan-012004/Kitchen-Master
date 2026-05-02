@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import api from '../api/client.js'
+import StakeholderRestaurantTabs from '../components/StakeholderRestaurantTabs'
 import './Simple.css'
 
 export default function EmployeesPage() {
@@ -9,8 +10,9 @@ export default function EmployeesPage() {
     // Modal State
     const [showModal, setShowModal] = useState(false)
     const [isEditing, setIsEditing] = useState(false)
-    const [formData, setFormData] = useState({ _id: '', name: '', email: '', password: '', role: 'waiter', assignedTables: '' })
+    const [formData, setFormData] = useState({ _id: '', name: '', email: '', password: '', role: 'waiter', assignedTables: [] })
     const [saving, setSaving] = useState(false)
+    const [totalTables, setTotalTables] = useState(0)
 
     const fetchEmployees = () => {
         setLoading(true)
@@ -21,10 +23,13 @@ export default function EmployeesPage() {
 
     useEffect(() => {
         fetchEmployees()
+        api.get('/auth/me').then(r => {
+            setTotalTables(r.data.data?.totalTables || 30)
+        }).catch(() => setTotalTables(30))
     }, [])
 
     const openAddModal = () => {
-        setFormData({ _id: '', name: '', email: '', password: '', role: 'waiter', assignedTables: '' })
+        setFormData({ _id: '', name: '', email: '', password: '', role: 'waiter', assignedTables: [] })
         setIsEditing(false)
         setShowModal(true)
     }
@@ -36,7 +41,7 @@ export default function EmployeesPage() {
             email: emp.email,
             password: '', // blank password unless changing
             role: emp.role || 'waiter',
-            assignedTables: (emp.assignedTables || []).join(', ')
+            assignedTables: emp.assignedTables || []
         })
         setIsEditing(true)
         setShowModal(true)
@@ -45,7 +50,7 @@ export default function EmployeesPage() {
     const handleDelete = async (id) => {
         if (!window.confirm('Are you sure you want to delete this staff member?')) return
         try {
-            await api.delete(`/auth/${id}`)
+            await api.delete(`/auth/users/${id}`)
             fetchEmployees()
         } catch (e) {
             alert(e.response?.data?.message || 'Failed to delete staff')
@@ -60,15 +65,15 @@ export default function EmployeesPage() {
                 name: formData.name,
                 email: formData.email,
                 role: formData.role,
-                assignedTables: formData.assignedTables ? formData.assignedTables.split(',').map(t => t.trim()).filter(Boolean) : []
+                assignedTables: formData.assignedTables || []
             }
             if (formData.password) payload.password = formData.password
 
             if (isEditing) {
-                await api.put(`/auth/${formData._id}`, payload)
+                await api.put(`/auth/users/${formData._id}`, payload)
             } else {
                 if (!payload.password) throw new Error("Password is required for new staff")
-                await api.post('/auth/register', payload)
+                await api.post('/auth/employee/register', payload)
             }
             setShowModal(false)
             fetchEmployees()
@@ -81,6 +86,7 @@ export default function EmployeesPage() {
 
     return (
         <div className="simple-page">
+            <StakeholderRestaurantTabs />
             <div className="simple-header">
                 <div>
                     <h1 className="page-title">Staff Management</h1>
@@ -149,14 +155,46 @@ export default function EmployeesPage() {
                             </div>
                             {formData.role === 'waiter' && (
                                 <div className="form-group">
-                                    <label>Assigned Tables (Comma separated numbers)</label>
-                                    <input type="text" placeholder="e.g. 1, 2, 5" value={formData.assignedTables} onChange={e => setFormData({ ...formData, assignedTables: e.target.value })} />
+                                    <label>Assigned Tables (Select one or more)</label>
+                                    <div className="table-selection-grid">
+                                        {(() => {
+                                            const otherAssignments = employees
+                                                .filter(e => e._id !== formData._id)
+                                                .reduce((acc, e) => [...acc, ...(e.assignedTables || [])], []);
+                                            
+                                            return Array.from({ length: totalTables }, (_, i) => i + 1).map(num => {
+                                                const tableStr = String(num);
+                                                const isSelected = formData.assignedTables.includes(tableStr);
+                                                const isTaken = otherAssignments.includes(tableStr);
+                                                
+                                                return (
+                                                    <button
+                                                        key={num}
+                                                        type="button"
+                                                        className={`table-select-btn ${isSelected ? 'active' : ''} ${isTaken ? 'taken' : ''}`}
+                                                        disabled={isTaken}
+                                                        title={isTaken ? "Table already assigned to another staff" : ""}
+                                                        onClick={() => {
+                                                            const current = formData.assignedTables;
+                                                            if (isSelected) {
+                                                                setFormData({ ...formData, assignedTables: current.filter(t => t !== tableStr) });
+                                                            } else {
+                                                                setFormData({ ...formData, assignedTables: [...current, tableStr] });
+                                                            }
+                                                        }}
+                                                    >
+                                                        {num}
+                                                    </button>
+                                                );
+                                            });
+                                        })()}
+                                    </div>
                                 </div>
                             )}
 
                             <div className="modal-actions">
-                                <button type="button" className="cancel-btn" onClick={() => setShowModal(false)}>Cancel</button>
-                                <button type="submit" className="save-btn" disabled={saving}>{saving ? 'Saving...' : 'Save Staff'}</button>
+                                <button type="button" className="cancel-modal-btn" onClick={() => setShowModal(false)}>Cancel</button>
+                                <button type="submit" className="save-modal-btn" disabled={saving}>{saving ? 'Saving...' : 'Save Staff'}</button>
                             </div>
                         </form>
                     </div>

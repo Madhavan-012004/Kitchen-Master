@@ -1,0 +1,316 @@
+package com.probloom.service;
+
+import com.probloom.model.entity.*;
+import com.probloom.repository.*;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+
+import java.time.*;
+import java.util.*;
+
+@Service
+@RequiredArgsConstructor
+public class AnalyticsService {
+
+    private final OrdersRepository orderRepository;
+
+    private final InventoryItemRepository inventoryItemRepository;
+    private final TransactionRepository transactionRepository;
+    private final StockMovementRepository stockMovementRepository;
+    private final ReportService reportService;
+
+    public Map<String, Object> getReportData(String type, User restaurant, LocalDateTime start, LocalDateTime end) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        List<Orders> orders = orderRepository.findByRestaurantAndCreatedAtBetweenOrderByCreatedAtDesc(restaurant, start, end);
+        
+        switch (type) {
+            case "sales-summary":
+                data.put("summary", calculateSummary(orders));
+                List<Transaction> transactions = transactionRepository.findByRestaurantAndDateBetweenOrderByDateDesc(restaurant, start, end);
+                data.put("income", transactions.stream().filter(t -> t.getType() == Transaction.TransactionType.INCOME).mapToDouble(Transaction::getAmount).sum());
+                data.put("expense", transactions.stream().filter(t -> t.getType() == Transaction.TransactionType.EXPENSE).mapToDouble(Transaction::getAmount).sum());
+                break;
+
+            case "sales-report":
+                List<Map<String, Object>> salesList = new ArrayList<>();
+                orders.forEach(o -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("orderNumber", o.getOrderNumber());
+                    m.put("date", o.getCreatedAt());
+                    m.put("customer", o.getCustomerName());
+                    m.put("total", o.getTotal());
+                    m.put("status", o.getStatus());
+                    m.put("payment", o.getPaymentMethod());
+                    salesList.add(m);
+                });
+                data.put("sales", salesList);
+                data.put("totalRevenue", orders.stream().filter(o -> o.getStatus() != Orders.OrderStatus.CANCELLED).mapToDouble(Orders::getTotal).sum());
+                break;
+
+            case "monthly-day-wise":
+                Map<String, Double> daily = new TreeMap<>();
+                orders.stream().filter(o -> o.getStatus() != Orders.OrderStatus.CANCELLED).forEach(o -> {
+                    String date = o.getCreatedAt().toLocalDate().toString();
+                    daily.put(date, daily.getOrDefault(date, 0.0) + o.getTotal());
+                });
+                List<Map<String, Object>> trend = new ArrayList<>();
+                daily.forEach((d, v) -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("date", d);
+                    m.put("revenue", v);
+                    trend.add(m);
+                });
+                data.put("trend", trend);
+                break;
+
+            case "end-day-report":
+                LocalDateTime todayStart = LocalDate.now().atStartOfDay();
+                List<Orders> todayOrders = orders.stream().filter(o -> o.getCreatedAt().isAfter(todayStart)).toList();
+                data.put("totalSales", todayOrders.stream().filter(o -> o.getStatus() != Orders.OrderStatus.CANCELLED).mapToDouble(Orders::getTotal).sum());
+                data.put("orderCount", todayOrders.size());
+                Map<String, Double> payments = new HashMap<>();
+                todayOrders.forEach(o -> payments.merge(o.getPaymentMethod().toString(), o.getTotal(), (a, b) -> a + b));
+                data.put("payments", payments);
+                break;
+
+            case "category-item-wise":
+            case "item-wise-sales":
+                Map<String, Integer> items = new HashMap<>();
+                Map<String, Double> itemRevenue = new HashMap<>();
+                orders.stream().filter(o -> o.getStatus() != Orders.OrderStatus.CANCELLED).forEach(o -> {
+                    o.getItems().forEach(i -> {
+                        items.merge(i.getName(), i.getQuantity(), (a, b) -> a + b);
+                        itemRevenue.merge(i.getName(), i.getQuantity() * i.getPrice(), (a, b) -> a + b);
+                    });
+                });
+                List<Map<String, Object>> itemList = new ArrayList<>();
+                items.forEach((name, qty) -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("name", name);
+                    m.put("quantity", qty);
+                    m.put("revenue", itemRevenue.get(name));
+                    itemList.add(m);
+                });
+                data.put("items", itemList);
+                break;
+
+            case "income-expense":
+                List<Transaction> trans = transactionRepository.findByRestaurantAndDateBetweenOrderByDateDesc(restaurant, start, end);
+                data.put("transactions", trans);
+                data.put("totalIncome", trans.stream().filter(t -> t.getType() == Transaction.TransactionType.INCOME).mapToDouble(Transaction::getAmount).sum());
+                data.put("totalExpense", trans.stream().filter(t -> t.getType() == Transaction.TransactionType.EXPENSE).mapToDouble(Transaction::getAmount).sum());
+                break;
+
+            case "stock-report":
+            case "total-inventory-valuation":
+                List<InventoryItem> invItems = inventoryItemRepository.findByRestaurantAndIsActiveTrueOrderByNameAsc(restaurant);
+                double totalVal = invItems.stream().mapToDouble(i -> (i.getCurrentStock() != null ? i.getCurrentStock() : 0.0) * (i.getCostPerUnit() != null ? i.getCostPerUnit() : 0.0)).sum();
+                data.put("items", invItems);
+                data.put("totalValue", totalVal);
+                data.put("count", invItems.size());
+                break;
+
+            case "purchase-item-stock":
+                List<StockMovement> movements = stockMovementRepository.findByRestaurantAndTypeAndMovementTimestampBetweenOrderByMovementTimestampDesc(restaurant, StockMovement.MovementType.ADD, start, end);
+                data.put("purchases", movements);
+                break;
+
+            case "cashier-wise-sales":
+                Map<String, Double> cashierSales = new HashMap<>();
+                orders.stream().filter(o -> o.getStatus() != Orders.OrderStatus.CANCELLED).forEach(o -> {
+                    String name = o.getCreatedBy() != null ? o.getCreatedBy().getName() : "System";
+                    cashierSales.merge(name, o.getTotal(), (a, b) -> a + b);
+                });
+                data.put("cashiers", cashierSales);
+                break;
+
+            case "cancelled-item-summary":
+                List<Orders> cancelled = orders.stream().filter(o -> o.getStatus() == Orders.OrderStatus.CANCELLED).toList();
+                data.put("cancelledOrders", cancelled);
+                data.put("count", cancelled.size());
+                data.put("totalLoss", cancelled.stream().mapToDouble(Orders::getTotal).sum());
+                break;
+
+            default:
+                data.put("message", "General data for " + type);
+                data.put("ordersCount", orders.size());
+                data.put("revenue", orders.stream().filter(o -> o.getStatus() != Orders.OrderStatus.CANCELLED).mapToDouble(Orders::getTotal).sum());
+        }
+        return data;
+    }
+
+    private Map<String, Object> calculateSummary(List<Orders> orders) {
+        double totalRevenue = orders.stream().filter(o -> o.getStatus() != Orders.OrderStatus.CANCELLED).mapToDouble(Orders::getTotal).sum();
+        long totalOrders = orders.size();
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("totalRevenue", totalRevenue);
+        summary.put("totalOrders", totalOrders);
+        summary.put("avgOrderValue", totalOrders > 0 ? totalRevenue / totalOrders : 0.0);
+        return summary;
+    }
+
+    public byte[] downloadReport(String type, String format, User restaurant, LocalDateTime start, LocalDateTime end) throws Exception {
+        return switch (format.toLowerCase()) {
+            case "word", "docx" -> reportService.generateReportWord(type, restaurant, start, end);
+            case "json"         -> reportService.generateReportJson(type, restaurant, start, end);
+            default             -> reportService.generateReportPDF(type, restaurant, start, end);
+        };
+    }
+
+    public Map<String, Object> getDashboard(List<User> restaurants) {
+        LocalDateTime todayStart = LocalDate.now().atStartOfDay();
+        LocalDateTime todayEnd = LocalDate.now().atTime(LocalTime.MAX);
+        LocalDateTime weekStart = LocalDate.now().minusDays(6).atStartOfDay();
+        LocalDateTime monthStart = LocalDate.now().withDayOfMonth(1).atStartOfDay();
+
+        double totalTodayRevenue = 0.0;
+        long totalTodayOrders = 0;
+        double totalWeekRevenue = 0.0;
+        double totalMonthRevenue = 0.0;
+
+        for (User restaurant : restaurants) {
+            Double todayRevenue = orderRepository.sumRevenueByRestaurantAndDateRange(restaurant, todayStart, todayEnd);
+            Long todayOrders = orderRepository.countOrdersByRestaurantAndDateRange(restaurant, todayStart, todayEnd);
+            Double weekRevenue = orderRepository.sumRevenueByRestaurantAndDateRange(restaurant, weekStart, todayEnd);
+            Double monthRevenue = orderRepository.sumRevenueByRestaurantAndDateRange(restaurant, monthStart, todayEnd);
+
+            totalTodayRevenue += (todayRevenue != null ? todayRevenue : 0.0);
+            totalTodayOrders += (todayOrders != null ? todayOrders : 0L);
+            totalWeekRevenue += (weekRevenue != null ? weekRevenue : 0.0);
+            totalMonthRevenue += (monthRevenue != null ? monthRevenue : 0.0);
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("todayRevenue", totalTodayRevenue);
+        result.put("todayOrders", totalTodayOrders);
+        result.put("weekRevenue", totalWeekRevenue);
+        result.put("monthRevenue", totalMonthRevenue);
+        return result;
+    }
+
+    public Map<String, Object> getSalesAnalytics(List<User> restaurants, String period, LocalDateTime from, LocalDateTime to) {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime start;
+        LocalDateTime end = (to != null) ? to : now;
+
+        String effectivePeriod = period;
+        
+        if (from != null) {
+            start = from;
+            effectivePeriod = "custom";
+        } else {
+            effectivePeriod = period != null ? period : "7d";
+            switch (effectivePeriod) {
+                case "1d": start = now.toLocalDate().atStartOfDay(); break;
+                case "30d": start = now.minusDays(29).toLocalDate().atStartOfDay(); break;
+                case "90d": start = now.minusDays(89).toLocalDate().atStartOfDay(); break;
+                case "7d":
+                default: start = now.minusDays(6).toLocalDate().atStartOfDay(); break;
+            }
+        }
+
+        List<Orders> orders;
+        List<Transaction> transactions;
+
+        if (restaurants.size() == 1) {
+            orders = orderRepository.findByRestaurantAndCreatedAtBetweenOrderByCreatedAtDesc(restaurants.get(0), start, end);
+            transactions = transactionRepository.findByRestaurantAndDateBetweenOrderByDateDesc(restaurants.get(0), start, end);
+        } else {
+            orders = orderRepository.findByRestaurantInAndCreatedAtBetweenOrderByCreatedAtDesc(restaurants, start, end);
+            transactions = transactionRepository.findByRestaurantInAndDateBetweenOrderByDateDesc(restaurants, start, end);
+        }
+        
+        double totalRevenue = 0.0;
+        long totalOrders = 0;
+        Map<String, Double> dailyRevenue = new TreeMap<>();
+        Map<String, Double> dailyExpense = new TreeMap<>();
+        Map<String, Integer> itemSales = new HashMap<>();
+        Map<String, Double> categoryExpenses = new HashMap<>();
+
+        // Process Orders (Revenue)
+        for (Orders o : orders) {
+            if (o.getStatus() == Orders.OrderStatus.CANCELLED) continue;
+            
+            totalRevenue += o.getTotal();
+            totalOrders++;
+            
+            boolean isSingleDay = "1d".equals(effectivePeriod) || "custom".equals(effectivePeriod);
+            String dateKey = isSingleDay 
+                ? String.format("%02d:00", o.getCreatedAt().getHour()) 
+                : o.getCreatedAt().toLocalDate().toString();
+            dailyRevenue.merge(dateKey, o.getTotal(), (a, b) -> a + b);
+            
+            for (OrderItem item : o.getItems()) {
+                itemSales.merge(item.getName(), item.getQuantity(), (a, b) -> a + b);
+            }
+        }
+
+        // Process Transactions (Expenses)
+        double totalExpense = 0.0;
+        for (Transaction t : transactions) {
+            if (t.getType() == Transaction.TransactionType.EXPENSE) {
+                totalExpense += t.getAmount();
+                boolean isSingleDay = "1d".equals(effectivePeriod) || "custom".equals(effectivePeriod);
+                String dateKey = isSingleDay 
+                    ? String.format("%02d:00", t.getDate().getHour()) 
+                    : t.getDate().toLocalDate().toString();
+                dailyExpense.merge(dateKey, t.getAmount(), (a, b) -> a + b);
+                categoryExpenses.merge(t.getCategory(), t.getAmount(), (a, b) -> a + b);
+            }
+        }
+
+        // Prepare revenueTrend for Recharts
+        List<Map<String, Object>> revenueTrend = new ArrayList<>();
+        Set<String> allDates = new TreeSet<>(dailyRevenue.keySet());
+        allDates.addAll(dailyExpense.keySet());
+
+        for (String date : allDates) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("date", date);
+            m.put("revenue", dailyRevenue.getOrDefault(date, 0.0));
+            m.put("expense", dailyExpense.getOrDefault(date, 0.0));
+            m.put("profit", dailyRevenue.getOrDefault(date, 0.0) - dailyExpense.getOrDefault(date, 0.0));
+            revenueTrend.add(m);
+        }
+
+        // Prepare topItems
+        List<Map<String, Object>> topItemsList = new ArrayList<>();
+        itemSales.entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+                .limit(5)
+                .forEach(e -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("_id", e.getKey());
+                    m.put("totalQuantity", e.getValue());
+                    topItemsList.add(m);
+                });
+
+        // Prepare expenseBreakdown
+        List<Map<String, Object>> expenseBreakdown = new ArrayList<>();
+        categoryExpenses.forEach((cat, amt) -> {
+            Map<String, Object> m = new HashMap<>();
+            m.put("name", cat);
+            m.put("value", amt);
+            expenseBreakdown.add(m);
+        });
+
+        double netProfit = totalRevenue - totalExpense;
+        double profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0.0;
+
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("totalRevenue", totalRevenue);
+        summary.put("totalOrders", totalOrders);
+        summary.put("totalExpense", totalExpense);
+        summary.put("netProfit", netProfit);
+        summary.put("profitMargin", profitMargin);
+        summary.put("avgOrderValue", totalOrders > 0 ? totalRevenue / totalOrders : 0.0);
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("summary", summary);
+        response.put("revenueByDay", revenueTrend);
+        response.put("topItems", topItemsList);
+        response.put("expenseBreakdown", expenseBreakdown);
+        
+        return response;
+    }
+}

@@ -1,0 +1,136 @@
+.stakeholder-tabs-container {
+    width: 100%;
+    margin: 0;
+    padding: 0 12px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    position: relative;
+    z-index: 100;
+    flex-shrink: 0;
+    display: flex;
+    align-items: flex-end;
+    height: 48px;
+    overflow: hidden;
+}
+
+.tabs-scroll-area {
+    display: flex;
+    gap: 2px;
+    overflow-x: auto;
+    height: 100%;
+    align-items: flex-end;
+    scrollbar-width: none; /* Hide scrollbar for browser look */
+}
+
+.tabs-scroll-area::-webkit-scrollbar {
+    display: none;
+}
+
+.restaurant-tab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 24px;
+    height: 38px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 10px 10px 0 0;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+    color: var(--text-muted);
+    font-weight: 500;
+    font-size: 0.88rem;
+    position: relative;
+}
+
+/* Tab Separator (Browser Style) */
+.restaurant-tab::after {
+    content: '';
+    position: absolute;
+    right: -1px;
+    top: 25%;
+    height: 50%;
+    width: 1px;
+    background: var(--border);
+    transition: opacity 0.2s;
+}
+
+.restaurant-tab:hover {
+    background: rgba(255, 255, 255, 0.5);
+    color: var(--text-primary);
+}
+
+[data-theme='dark'] .restaurant-tab:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.restaurant-tab.active {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border-color: var(--border);
+    font-weight: 700;
+    height: 40px; /* Slightly taller to hide border below */
+    margin-bottom: -1px; /* Align with bottom border */
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.03);
+}
+
+.restaurant-tab.active::after,
+.restaurant-tab:hover::after,
+.restaurant-tab.active + .restaurant-tab::after {
+    opacity: 0;
+}
+
+/* Chrome-style top accent line */
+.restaurant-tab.active::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--accent);
+    border-radius: 10px 10px 0 0;
+}
+
+.tab-icon {
+    font-size: 1rem;
+    opacity: 0.8;
+}
+
+.stakeholder-tabs-loading {
+    padding: 0 24px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+}
+
+.pulse-dot {
+    width: 8px;
+    height: 8px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% { transform: scale(0.8); opacity: 0.5; }
+    50% { transform: scale(1.2); opacity: 1; }
+    100% { transform: scale(0.8); opacity: 0.5; }
+}
+
+/* Browser Sidebar Integration */
+[data-theme='dark'] .stakeholder-tabs-container {
+    background: #121214;
+}
+
+[data-theme='dark'] .restaurant-tab.active {
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--bg-card); /* Merge with content */
+}

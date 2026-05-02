@@ -1,0 +1,158 @@
+.download {
+  background: var(--bg-surface);
+}
+
+.download__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 420px));
+  gap: 32px;
+  margin-bottom: 40px;
+  justify-content: center;
+}
+
+.download__card {
+  padding: 40px 32px;
+  position: relative;
+  cursor: default;
+  background: var(--bg-card);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.download__card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-hover);
+}
+
+.download__card--featured {
+  border-color: var(--accent-border);
+  background: rgba(197, 241, 53, 0.05);
+}
+
+.download__card-badge {
+  position: absolute;
+  top: -14px;
+  left: 32px;
+  background: var(--teal-dark);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  font-family: var(--font-display);
+  box-shadow: 0 4px 12px rgba(11,53,40,0.15);
+}
+
+.download__card-icon {
+  font-size: 2.8rem;
+  margin-bottom: 20px;
+  display: block;
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.08));
+}
+
+.download__card-title {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+  letter-spacing: -0.02em;
+}
+
+.download__card-desc {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  margin-bottom: 24px;
+}
+
+.download__card-specs {
+  list-style: none;
+  margin-bottom: auto;
+  padding-bottom: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.download__card-specs li {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 500;
+}
+
+.download__btn {
+  width: 100%;
+  justify-content: center;
+  padding: 14px;
+  font-size: 1rem;
+}
+
+.download__btn--android {
+  background: var(--teal-dark);
+  color: #fff;
+}
+
+.download__btn--android:hover {
+  background: var(--teal-mid);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(11,53,40,0.2);
+}
+
+.download__btn--ios {
+  background: #000;
+  color: #fff;
+}
+
+.download__btn--ios:hover {
+  background: #222;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+}
+
+.download__card-note {
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 14px;
+  font-weight: 500;
+}
+
+/* Platform strip */
+.download__platform-strip {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: center;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.download__platform-badge {
+  background: #fff;
+  border: 1px solid var(--border);
+  padding: 6px 16px;
+  border-radius: var(--radius-full);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-xs);
+  transition: var(--transition);
+}
+
+.download__platform-badge:hover {
+  border-color: var(--teal-dark);
+  color: var(--teal-dark);
+}

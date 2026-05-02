@@ -3,39 +3,49 @@ import { View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView, StatusBar
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Typography, Spacing, Radius, Shadows, Gradients } from '../../theme';
+import { useTranslation } from 'react-i18next';
+import { useAppTheme, Typography, Spacing, Radius, Shadows } from '../../theme';
+import LanguageSwitch from '../../components/LanguageSwitch';
 
 export default function AppSettingsScreen({ navigation }: any) {
+    const { theme, toggleTheme, isDark, colors, gradients } = useAppTheme();
+    const styles = React.useMemo(() => createStyles(colors, gradients), [colors, gradients]);
+    
+    const { t, i18n } = useTranslation();
     const [notifications, setNotifications] = useState(true);
-    const [darkMode, setDarkMode] = useState(true); // App is forced dark right now, but good for UI
     const [sound, setSound] = useState(true);
 
+    const toggleLanguage = () => {
+        const newLang = i18n.language === 'en' ? 'ta' : 'en';
+        i18n.changeLanguage(newLang);
+    };
+
     return (
-        <LinearGradient colors={Gradients.background} style={styles.container}>
-            <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+        <LinearGradient colors={gradients.background} style={styles.container}>
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor="transparent" translucent />
             <SafeAreaView style={styles.safe}>
                 <View style={styles.header}>
                     <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-                        <Ionicons name="chevron-back" size={24} color={Colors.white} />
+                        <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>App Settings</Text>
+                    <Text style={styles.headerTitle}>{t('app.settings', 'App Settings')}</Text>
                     <View style={{ width: 40 }} />
                 </View>
 
                 <ScrollView contentContainerStyle={styles.content}>
                     <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Preferences</Text>
+                        <Text style={styles.sectionTitle}>{t('app.preferences', 'Preferences')}</Text>
 
                         <View style={styles.settingRow}>
                             <View style={styles.settingInfo}>
-                                <Ionicons name="notifications-outline" size={22} color={Colors.textPrimary} style={styles.settingIcon} />
+                                <Ionicons name="notifications-outline" size={22} color={colors.textPrimary} style={styles.settingIcon} />
                                 <Text style={styles.settingText}>Push Notifications</Text>
                             </View>
                             <Switch
                                 value={notifications}
                                 onValueChange={setNotifications}
-                                trackColor={{ false: Colors.border, true: Colors.primary }}
-                                thumbColor={Colors.white}
+                                trackColor={{ false: colors.border, true: colors.primary }}
+                                thumbColor={colors.white}
                             />
                         </View>
 
@@ -43,14 +53,14 @@ export default function AppSettingsScreen({ navigation }: any) {
 
                         <View style={styles.settingRow}>
                             <View style={styles.settingInfo}>
-                                <Ionicons name="moon-outline" size={22} color={Colors.textPrimary} style={styles.settingIcon} />
+                                <Ionicons name="moon-outline" size={22} color={colors.textPrimary} style={styles.settingIcon} />
                                 <Text style={styles.settingText}>Dark Mode</Text>
                             </View>
                             <Switch
-                                value={darkMode}
-                                onValueChange={setDarkMode}
-                                trackColor={{ false: Colors.border, true: Colors.primary }}
-                                thumbColor={Colors.white}
+                                value={isDark}
+                                onValueChange={toggleTheme}
+                                trackColor={{ false: colors.border, true: colors.primary }}
+                                thumbColor={colors.white}
                             />
                         </View>
 
@@ -58,15 +68,25 @@ export default function AppSettingsScreen({ navigation }: any) {
 
                         <View style={styles.settingRow}>
                             <View style={styles.settingInfo}>
-                                <Ionicons name="volume-medium-outline" size={22} color={Colors.textPrimary} style={styles.settingIcon} />
+                                <Ionicons name="volume-medium-outline" size={22} color={colors.textPrimary} style={styles.settingIcon} />
                                 <Text style={styles.settingText}>App Sounds & Alerts</Text>
                             </View>
                             <Switch
                                 value={sound}
                                 onValueChange={setSound}
-                                trackColor={{ false: Colors.border, true: Colors.primary }}
-                                thumbColor={Colors.white}
+                                trackColor={{ false: colors.border, true: colors.primary }}
+                                thumbColor={colors.white}
                             />
+                        </View>
+
+                        <View style={styles.divider} />
+
+                        <View style={styles.settingRow}>
+                            <View style={styles.settingInfo}>
+                                <Ionicons name="language-outline" size={22} color={colors.textPrimary} style={styles.settingIcon} />
+                                <Text style={styles.settingText}>{t('app.language', 'Language')} ({i18n.language === 'en' ? 'EN' : 'தமிழ்'})</Text>
+                            </View>
+                            <LanguageSwitch isTamil={i18n.language === 'ta'} onToggle={toggleLanguage} />
                         </View>
                     </View>
 
@@ -75,13 +95,13 @@ export default function AppSettingsScreen({ navigation }: any) {
 
                         <TouchableOpacity style={styles.actionRow}>
                             <Text style={styles.actionText}>Change Password</Text>
-                            <Ionicons name="chevron-forward" size={20} color={Colors.textMuted} />
+                            <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
                         </TouchableOpacity>
 
                         <View style={styles.divider} />
 
                         <TouchableOpacity style={styles.actionRow}>
-                            <Text style={[styles.actionText, { color: Colors.error }]}>Delete Account</Text>
+                            <Text style={[styles.actionText, { color: colors.error }]}>Delete Account</Text>
                         </TouchableOpacity>
                     </View>
                 </ScrollView>
@@ -90,7 +110,7 @@ export default function AppSettingsScreen({ navigation }: any) {
     );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any, gradients: any) => StyleSheet.create({
     container: { flex: 1 },
     safe: { flex: 1 },
     header: {
@@ -98,18 +118,18 @@ const styles = StyleSheet.create({
         paddingHorizontal: Spacing.lg, paddingTop: Spacing.xl, paddingBottom: Spacing.md,
     },
     backBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-start', marginLeft: -8 },
-    headerTitle: { ...Typography.h3, color: Colors.textPrimary },
+    headerTitle: { ...Typography.h3, color: colors.textPrimary },
     content: { padding: Spacing.lg },
     section: {
-        backgroundColor: Colors.card, borderRadius: Radius.xl, padding: Spacing.lg,
-        borderWidth: 1, borderColor: Colors.glassBorder, marginBottom: Spacing.xl, ...Shadows.sm
+        backgroundColor: colors.card, borderRadius: Radius.xl, padding: Spacing.lg,
+        borderWidth: 1, borderColor: colors.border, marginBottom: Spacing.xl, ...Shadows.sm
     },
-    sectionTitle: { ...Typography.body1, color: Colors.textMuted, marginBottom: Spacing.lg },
+    sectionTitle: { ...Typography.body1, color: colors.textMuted, marginBottom: Spacing.lg },
     settingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: Spacing.sm },
     settingInfo: { flexDirection: 'row', alignItems: 'center' },
     settingIcon: { marginRight: Spacing.md },
-    settingText: { ...Typography.body1, color: Colors.textPrimary },
-    divider: { height: 1, backgroundColor: Colors.border, marginVertical: Spacing.md },
+    settingText: { ...Typography.body1, color: colors.textPrimary },
+    divider: { height: 1, backgroundColor: colors.border, marginVertical: Spacing.md },
     actionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: Spacing.sm },
-    actionText: { ...Typography.body1, color: Colors.textPrimary },
+    actionText: { ...Typography.body1, color: colors.textPrimary },
 });

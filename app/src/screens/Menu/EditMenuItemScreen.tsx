@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
 import {
     View, Text, StyleSheet, TextInput, ScrollView,
-    TouchableOpacity, Alert, KeyboardAvoidingView, Platform,
+    TouchableOpacity, Alert, KeyboardAvoidingView, Platform, StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useMenuStore } from '../../store/useMenuStore';
-import { Colors, Typography, Spacing, Radius, Shadows, Gradients } from '../../theme';
+import { useAppTheme, Typography, Spacing, Radius, Shadows } from '../../theme';
 
 const CATEGORIES = ['Starters', 'Mains', 'Breads', 'Beverages', 'Desserts', 'Others'];
 
 export default function EditMenuItemScreen({ navigation, route }: any) {
+    const { colors, gradients, isDark } = useAppTheme();
+    const themedStyles = React.useMemo(() => createStyles(colors, gradients, isDark), [colors, gradients, isDark]);
     const existingItem = route.params?.item;
     const { addItem, updateItem } = useMenuStore();
 
@@ -46,67 +48,68 @@ export default function EditMenuItemScreen({ navigation, route }: any) {
     };
 
     return (
-        <LinearGradient colors={Gradients.background} style={styles.container}>
-            <SafeAreaView style={{ flex: 1 }}>
+        <LinearGradient colors={gradients.background} style={themedStyles.container}>
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor="transparent" translucent />
+            <SafeAreaView style={{ flex: 1 }} edges={['top']}>
                 <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
                     {/* Header */}
-                    <View style={styles.header}>
-                        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-                            <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
+                    <View style={themedStyles.header}>
+                        <TouchableOpacity style={themedStyles.backBtn} onPress={() => navigation.goBack()}>
+                            <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
                         </TouchableOpacity>
-                        <Text style={styles.headerTitle}>{existingItem ? 'Edit Dish' : 'New Dish'}</Text>
-                        <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saving} activeOpacity={0.85}>
-                            <LinearGradient colors={saving ? ['#666', '#444'] : ['#FF8A5C', '#FF6B35']} style={styles.saveBtnGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-                                <Text style={styles.saveBtnText}>{saving ? 'Saving...' : 'Save'}</Text>
+                        <Text style={themedStyles.headerTitle}>{existingItem ? 'Edit Dish' : 'New Dish'}</Text>
+                        <TouchableOpacity style={themedStyles.saveBtn} onPress={handleSave} disabled={saving} activeOpacity={0.85}>
+                            <LinearGradient colors={saving ? [colors.border, colors.border] : gradients.primary} style={themedStyles.saveBtnGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                                <Text style={themedStyles.saveBtnText}>{saving ? 'Saving...' : 'Save'}</Text>
                             </LinearGradient>
                         </TouchableOpacity>
                     </View>
 
-                    <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                    <ScrollView contentContainerStyle={themedStyles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
                         {/* Dish Name */}
-                        <View style={styles.section}>
-                            <Text style={styles.sectionTitle}>Basic Info</Text>
-                            <Text style={styles.label}>Dish Name *</Text>
-                            <View style={[styles.inputWrapper, nameFocused && styles.inputFocused]}>
+                        <View style={themedStyles.section}>
+                            <Text style={themedStyles.sectionTitle}>Basic Info</Text>
+                            <Text style={themedStyles.label}>Dish Name *</Text>
+                            <View style={[themedStyles.inputWrapper, nameFocused && themedStyles.inputFocused]}>
                                 <TextInput
-                                    style={styles.input}
+                                    style={themedStyles.input}
                                     value={form.name}
                                     onChangeText={v => set('name', v)}
                                     placeholder="e.g. Chicken Biryani"
-                                    placeholderTextColor={Colors.textMuted}
+                                    placeholderTextColor={colors.textMuted}
                                     onFocus={() => setNameFocused(true)}
                                     onBlur={() => setNameFocused(false)}
                                 />
                             </View>
 
                             {/* Price & Tax Row */}
-                            <View style={styles.row}>
+                            <View style={themedStyles.row}>
                                 <View style={{ flex: 1 }}>
-                                    <Text style={styles.label}>Price (₹) *</Text>
-                                    <View style={styles.inputWrapper}>
-                                        <Text style={styles.currencySymbol}>₹</Text>
+                                    <Text style={themedStyles.label}>Price (₹) *</Text>
+                                    <View style={themedStyles.inputWrapper}>
+                                        <Text style={themedStyles.currencySymbol}>₹</Text>
                                         <TextInput
-                                            style={styles.input}
+                                            style={themedStyles.input}
                                             value={form.price}
                                             onChangeText={v => set('price', v)}
                                             keyboardType="numeric"
                                             placeholder="0.00"
-                                            placeholderTextColor={Colors.textMuted}
+                                            placeholderTextColor={colors.textMuted}
                                         />
                                     </View>
                                 </View>
                                 <View style={{ width: 12 }} />
                                 <View style={{ flex: 1 }}>
-                                    <Text style={styles.label}>Tax Rate (%)</Text>
-                                    <View style={styles.inputWrapper}>
+                                    <Text style={themedStyles.label}>Tax Rate (%)</Text>
+                                    <View style={themedStyles.inputWrapper}>
                                         <TextInput
-                                            style={styles.input}
+                                            style={themedStyles.input}
                                             value={form.taxRate}
                                             onChangeText={v => set('taxRate', v)}
                                             keyboardType="numeric"
                                             placeholder="5"
-                                            placeholderTextColor={Colors.textMuted}
+                                            placeholderTextColor={colors.textMuted}
                                         />
                                     </View>
                                 </View>
@@ -114,65 +117,65 @@ export default function EditMenuItemScreen({ navigation, route }: any) {
                         </View>
 
                         {/* Category Selector */}
-                        <View style={styles.section}>
-                            <Text style={styles.sectionTitle}>Category *</Text>
-                            <View style={styles.categoryGrid}>
+                        <View style={themedStyles.section}>
+                            <Text style={themedStyles.sectionTitle}>Category *</Text>
+                            <View style={themedStyles.categoryGrid}>
                                 {CATEGORIES.map(cat => (
                                     <TouchableOpacity
                                         key={cat}
-                                        style={[styles.catChip, form.category === cat && styles.catChipActive]}
+                                        style={[themedStyles.catChip, form.category === cat && themedStyles.catChipActive]}
                                         onPress={() => set('category', cat)}
                                         activeOpacity={0.8}
                                     >
                                         {form.category === cat && (
-                                            <LinearGradient colors={['#FF8A5C', '#FF6B35']} style={[StyleSheet.absoluteFill, { borderRadius: Radius.round }]} />
+                                            <LinearGradient colors={gradients.primary} style={[StyleSheet.absoluteFill, { borderRadius: Radius.round }]} />
                                         )}
-                                        <Text style={[styles.catChipText, form.category === cat && styles.catChipTextActive]}>{cat}</Text>
+                                        <Text style={[themedStyles.catChipText, form.category === cat && themedStyles.catChipTextActive]}>{cat}</Text>
                                     </TouchableOpacity>
                                 ))}
                             </View>
                         </View>
 
                         {/* Veg / Non-veg Toggle */}
-                        <View style={styles.section}>
-                            <Text style={styles.sectionTitle}>Food Type</Text>
-                            <View style={styles.vegRow}>
+                        <View style={themedStyles.section}>
+                            <Text style={themedStyles.sectionTitle}>Food Type</Text>
+                            <View style={themedStyles.vegRow}>
                                 <TouchableOpacity
-                                    style={[styles.vegOption, form.isVeg && styles.vegOptionActive]}
+                                    style={[themedStyles.vegOption, form.isVeg && themedStyles.vegOptionActive]}
                                     onPress={() => set('isVeg', true)}
                                     activeOpacity={0.85}
                                 >
-                                    <View style={[styles.vegDot, { borderColor: Colors.accentGreen }]}>
-                                        <View style={[styles.vegDotInner, { backgroundColor: Colors.accentGreen }]} />
+                                    <View style={[themedStyles.vegDot, { borderColor: colors.success || '#00D68F' }]}>
+                                        <View style={[themedStyles.vegDotInner, { backgroundColor: colors.success || '#00D68F' }]} />
                                     </View>
-                                    <Text style={[styles.vegText, form.isVeg && { color: Colors.accentGreen }]}>Vegetarian</Text>
-                                    {form.isVeg && <Ionicons name="checkmark-circle" size={18} color={Colors.accentGreen} />}
+                                    <Text style={[themedStyles.vegText, form.isVeg && { color: colors.success || '#00D68F' }]}>Vegetarian</Text>
+                                    {form.isVeg && <Ionicons name="checkmark-circle" size={18} color={colors.success || '#00D68F'} />}
                                 </TouchableOpacity>
 
                                 <TouchableOpacity
-                                    style={[styles.vegOption, !form.isVeg && styles.nonVegOptionActive]}
+                                    style={[themedStyles.vegOption, !form.isVeg && themedStyles.nonVegOptionActive]}
                                     onPress={() => set('isVeg', false)}
                                     activeOpacity={0.85}
                                 >
-                                    <View style={[styles.vegDot, { borderColor: Colors.error }]}>
-                                        <View style={[styles.vegDotInner, { backgroundColor: Colors.error }]} />
+                                    <View style={[themedStyles.vegDot, { borderColor: colors.error || '#FF5C7C' }]}>
+                                        <View style={[themedStyles.vegDotInner, { backgroundColor: colors.error || '#FF5C7C' }]} />
                                     </View>
-                                    <Text style={[styles.vegText, !form.isVeg && { color: Colors.error }]}>Non-Veg</Text>
-                                    {!form.isVeg && <Ionicons name="checkmark-circle" size={18} color={Colors.error} />}
+                                    <Text style={[themedStyles.vegText, !form.isVeg && { color: colors.error || '#FF5C7C' }]}>Non-Veg</Text>
+                                    {!form.isVeg && <Ionicons name="checkmark-circle" size={18} color={colors.error || '#FF5C7C'} />}
                                 </TouchableOpacity>
                             </View>
                         </View>
 
                         {/* Description */}
-                        <View style={styles.section}>
-                            <Text style={styles.sectionTitle}>Description</Text>
-                            <View style={[styles.inputWrapper, descFocused && styles.inputFocused, { minHeight: 110, alignItems: 'flex-start', paddingTop: 12 }]}>
+                        <View style={themedStyles.section}>
+                            <Text style={themedStyles.sectionTitle}>Description</Text>
+                            <View style={[themedStyles.inputWrapper, descFocused && themedStyles.inputFocused, { minHeight: 110, alignItems: 'flex-start', paddingTop: 12 }]}>
                                 <TextInput
-                                    style={[styles.input, { textAlignVertical: 'top', minHeight: 90 }]}
+                                    style={[themedStyles.input, { textAlignVertical: 'top', minHeight: 90 }]}
                                     value={form.description}
                                     onChangeText={v => set('description', v)}
                                     placeholder="Describe the dish... (optional)"
-                                    placeholderTextColor={Colors.textMuted}
+                                    placeholderTextColor={colors.textMuted}
                                     multiline
                                     numberOfLines={4}
                                     onFocus={() => setDescFocused(true)}
@@ -182,9 +185,9 @@ export default function EditMenuItemScreen({ navigation, route }: any) {
                         </View>
 
                         {existingItem && (
-                            <TouchableOpacity style={styles.deleteBtn} activeOpacity={0.8}>
-                                <Ionicons name="trash-outline" size={18} color={Colors.error} />
-                                <Text style={styles.deleteText}>Delete this dish</Text>
+                            <TouchableOpacity style={themedStyles.deleteBtn} activeOpacity={0.8}>
+                                <Ionicons name="trash-outline" size={18} color={colors.error} />
+                                <Text style={themedStyles.deleteText}>Delete this dish</Text>
                             </TouchableOpacity>
                         )}
 
@@ -196,60 +199,60 @@ export default function EditMenuItemScreen({ navigation, route }: any) {
     );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any, gradients: any, isDark: boolean) => StyleSheet.create({
     container: { flex: 1 },
     header: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        paddingHorizontal: Spacing.lg, paddingTop: Spacing.xl, paddingBottom: Spacing.md,
+        paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.sm,
     },
     backBtn: {
-        width: 40, height: 40, borderRadius: 12, backgroundColor: Colors.glass,
-        justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: Colors.border,
+        width: 40, height: 40, borderRadius: 12, backgroundColor: colors.glass,
+        justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: colors.border,
     },
-    headerTitle: { ...Typography.h4, color: Colors.textPrimary },
+    headerTitle: { ...Typography.h4, color: colors.textPrimary },
     saveBtn: { borderRadius: Radius.md, overflow: 'hidden', ...Shadows.primary },
     saveBtnGrad: { paddingHorizontal: Spacing.xl, paddingVertical: 10 },
-    saveBtnText: { ...Typography.buttonSm, color: Colors.white },
+    saveBtnText: { ...Typography.buttonSm, color: colors.white },
     scroll: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.sm },
     section: {
-        backgroundColor: Colors.card, borderRadius: Radius.lg, padding: Spacing.lg,
-        marginBottom: Spacing.md, borderWidth: 1, borderColor: Colors.border,
+        backgroundColor: colors.card, borderRadius: Radius.lg, padding: Spacing.lg,
+        marginBottom: Spacing.md, borderWidth: 1, borderColor: colors.border,
     },
-    sectionTitle: { ...Typography.h5, color: Colors.textPrimary, marginBottom: Spacing.md },
-    label: { ...Typography.overline, color: Colors.textMuted, marginBottom: Spacing.sm },
+    sectionTitle: { ...Typography.h5, color: colors.textPrimary, marginBottom: Spacing.md },
+    label: { ...Typography.overline, color: colors.textMuted, marginBottom: Spacing.sm },
     inputWrapper: {
         flexDirection: 'row', alignItems: 'center',
-        backgroundColor: Colors.glass, borderRadius: Radius.md,
-        borderWidth: 1, borderColor: Colors.border, marginBottom: Spacing.md,
+        backgroundColor: colors.glass, borderRadius: Radius.md,
+        borderWidth: 1, borderColor: colors.border, marginBottom: Spacing.md,
         paddingHorizontal: Spacing.md,
     },
-    inputFocused: { borderColor: Colors.primary, backgroundColor: 'rgba(255,107,53,0.06)' },
-    currencySymbol: { ...Typography.h4, color: Colors.primary, marginRight: 4 },
-    input: { flex: 1, ...Typography.body1, color: Colors.textPrimary, paddingVertical: 14 },
+    inputFocused: { borderColor: colors.primary, backgroundColor: colors.primary + '0F' },
+    currencySymbol: { ...Typography.h4, color: colors.primary, marginRight: 4 },
+    input: { flex: 1, ...Typography.body1, color: colors.textPrimary, paddingVertical: 14 },
     row: { flexDirection: 'row' },
     categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
     catChip: {
         paddingHorizontal: 16, paddingVertical: 9, borderRadius: Radius.round, overflow: 'hidden',
-        backgroundColor: Colors.glass, borderWidth: 1, borderColor: Colors.border,
+        backgroundColor: colors.glass, borderWidth: 1, borderColor: colors.border,
     },
-    catChipActive: { borderColor: 'rgba(255,107,53,0.4)', ...Shadows.primary },
-    catChipText: { ...Typography.buttonSm, color: Colors.textMuted },
-    catChipTextActive: { color: Colors.white },
+    catChipActive: { borderColor: colors.primary + '66', ...Shadows.primary },
+    catChipText: { ...Typography.buttonSm, color: colors.textMuted },
+    catChipTextActive: { color: colors.white },
     vegRow: { flexDirection: 'row', gap: 12 },
     vegOption: {
         flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8,
         padding: Spacing.md, borderRadius: Radius.md,
-        backgroundColor: Colors.glass, borderWidth: 1, borderColor: Colors.border,
+        backgroundColor: colors.glass, borderWidth: 1, borderColor: colors.border,
     },
-    vegOptionActive: { borderColor: 'rgba(0,214,143,0.4)', backgroundColor: 'rgba(0,214,143,0.08)' },
-    nonVegOptionActive: { borderColor: 'rgba(255,92,124,0.4)', backgroundColor: 'rgba(255,92,124,0.08)' },
-    vegDot: { width: 14, height: 14, borderRadius: 3, borderWidth: 1.5, justifyContent: 'center', alignItems: 'center' },
+    vegOptionActive: { borderColor: (colors.success || '#00D68F') + '66', backgroundColor: (colors.success || '#00D68F') + '14' },
+    nonVegOptionActive: { borderColor: (colors.error || '#FF5C7C') + '66', backgroundColor: (colors.error || '#FF5C7C') + '14' },
+    vegDot: { width: 14, height: 14, borderRadius: 3, borderWidth: 1.5, justifyContent: 'center', alignItems: 'center', backgroundColor: 'transparent' },
     vegDotInner: { width: 6, height: 6, borderRadius: 2 },
-    vegText: { ...Typography.buttonSm, color: Colors.textSecondary, flex: 1 },
+    vegText: { ...Typography.buttonSm, color: colors.textSecondary, flex: 1 },
     deleteBtn: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-        paddingVertical: 16, borderWidth: 1, borderColor: 'rgba(255,92,124,0.25)',
-        borderRadius: Radius.md, backgroundColor: 'rgba(255,92,124,0.06)',
+        paddingVertical: 16, borderWidth: 1, borderColor: colors.error + '40',
+        borderRadius: Radius.md, backgroundColor: colors.error + '0F',
     },
-    deleteText: { ...Typography.buttonSm, color: Colors.error },
+    deleteText: { ...Typography.buttonSm, color: colors.error },
 });

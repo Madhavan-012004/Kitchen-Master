@@ -1,18 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import {
     View, Text, StyleSheet, FlatList, TouchableOpacity,
-    ActivityIndicator, TextInput,
+    ActivityIndicator, TextInput, StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import { useMenuStore } from '../../store/useMenuStore';
-import { Colors, Typography, Spacing, Radius, Shadows, Gradients } from '../../theme';
+import { useAppTheme, Typography, Spacing, Radius, Shadows } from '../../theme';
 
 const CATEGORY_COLORS: Record<string, readonly [string, string]> = {
     Beverages: ['#4C8EFF', '#2563EB'],
-    Starters: ['#FF8A5C', '#FF6B35'],
+    Starters: ['#d8f76a', '#C6F53D'],
     Mains: ['#9B59B6', '#6C3483'],
     Desserts: ['#FFD700', '#F59E0B'],
     Breads: ['#CD7F32', '#A16207'],
@@ -23,12 +23,14 @@ function getCategoryColor(cat: string): readonly [string, string] {
 }
 
 export default function MenuListScreen({ navigation }: any) {
+    const { colors, gradients, isDark } = useAppTheme();
+    const themedStyles = React.useMemo(() => createStyles(colors, gradients, isDark), [colors, gradients, isDark]);
     const { items, isLoading, fetchMenu, toggleItem, deleteItem } = useMenuStore();
     const [searchQuery, setSearchQuery] = useState('');
 
     useEffect(() => { fetchMenu(); }, []);
 
-    const filteredItems = items.filter(item =>
+    const filteredItems = (items || []).filter(item =>
         item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.category.toLowerCase().includes(searchQuery.toLowerCase())
     );
@@ -55,50 +57,51 @@ export default function MenuListScreen({ navigation }: any) {
         };
 
         return (
-            <View style={styles.card}>
-                <LinearGradient colors={['rgba(255,255,255,0.03)', 'transparent']} style={[StyleSheet.absoluteFill, { borderRadius: Radius.lg }]} />
-
-                <View style={styles.cardMain}>
+            <View style={themedStyles.card}>
+                <View style={themedStyles.cardMain}>
                     {/* Category color square */}
-                    <LinearGradient colors={catColors} style={styles.thumb}>
+                    <LinearGradient colors={catColors} style={themedStyles.thumb}>
                         <Ionicons name="restaurant" size={20} color="rgba(255,255,255,0.9)" />
                     </LinearGradient>
 
-                    <View style={styles.cardInfo}>
-                        <View style={styles.nameRow}>
-                            <View style={[styles.vegDot, { borderColor: item.isVeg ? Colors.accentGreen : Colors.error }]}>
-                                <View style={[styles.vegDotInner, { backgroundColor: item.isVeg ? Colors.accentGreen : Colors.error }]} />
+                    <View style={themedStyles.cardInfo}>
+                        <View style={themedStyles.nameRow}>
+                            <View style={[themedStyles.vegDot, { borderColor: item.isVeg ? (colors.success || '#00D68F') : (colors.error || '#FF5C7C') }]}>
+                                <View style={[themedStyles.vegDotInner, { backgroundColor: item.isVeg ? (colors.success || '#00D68F') : (colors.error || '#FF5C7C') }]} />
                             </View>
-                            <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
+                            <Text style={themedStyles.itemName} numberOfLines={1}>{item.name}</Text>
                         </View>
 
-                        <View style={styles.metaRow}>
-                            <View style={[styles.categoryChip, { borderColor: catColors[0] + '60' }]}>
-                                <Text style={[styles.categoryText, { color: catColors[0] }]}>{item.category}</Text>
+                        <View style={themedStyles.metaRow}>
+                            <View style={[themedStyles.categoryChip, { borderColor: catColors[0] + '60' }]}>
+                                <Text style={[themedStyles.categoryText, { color: catColors[0] }]}>{item.category}</Text>
                             </View>
                         </View>
                     </View>
 
-                    <Text style={styles.price}>₹{item.price}</Text>
+                    <Text style={themedStyles.price}>₹{item.price}</Text>
                 </View>
 
-                <View style={styles.cardActions}>
+                <View style={themedStyles.cardActions}>
                     <TouchableOpacity
-                        style={[styles.availBtn, { backgroundColor: isAvailable ? 'rgba(0,214,143,0.1)' : 'rgba(255,92,124,0.1)', borderColor: isAvailable ? 'rgba(0,214,143,0.3)' : 'rgba(255,92,124,0.3)' }]}
+                        style={[themedStyles.availBtn, { 
+                            backgroundColor: isAvailable ? (colors.success || '#00D68F') + '1A' : (colors.error || '#FF5C7C') + '1A', 
+                            borderColor: isAvailable ? (colors.success || '#00D68F') + '4D' : (colors.error || '#FF5C7C') + '4D' 
+                        }]}
                         onPress={handleToggle}
                     >
-                        <Ionicons name={isAvailable ? 'eye-outline' : 'eye-off-outline'} size={14} color={isAvailable ? Colors.accentGreen : Colors.error} />
-                        <Text style={[styles.availText, { color: isAvailable ? Colors.accentGreen : Colors.error }]}>
+                        <Ionicons name={isAvailable ? 'eye-outline' : 'eye-off-outline'} size={14} color={isAvailable ? (colors.success || '#00D68F') : (colors.error || '#FF5C7C')} />
+                        <Text style={[themedStyles.availText, { color: isAvailable ? (colors.success || '#00D68F') : (colors.error || '#FF5C7C') }]}>
                             {isAvailable ? 'Available' : 'Sold Out'}
                         </Text>
                     </TouchableOpacity>
 
-                    <View style={styles.iconActions}>
-                        <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('EditMenuItem', { item })}>
-                            <Ionicons name="create-outline" size={18} color={Colors.textSecondary} />
+                    <View style={themedStyles.iconActions}>
+                        <TouchableOpacity style={themedStyles.iconBtn} onPress={() => navigation.navigate('EditMenuItem', { item })}>
+                            <Ionicons name="create-outline" size={18} color={colors.textSecondary} />
                         </TouchableOpacity>
-                        <TouchableOpacity style={[styles.iconBtn, { backgroundColor: 'rgba(255,92,124,0.08)', borderColor: 'rgba(255,92,124,0.2)' }]} onPress={() => deleteItem(item._id)}>
-                            <Ionicons name="trash-outline" size={18} color={Colors.error} />
+                        <TouchableOpacity style={[themedStyles.iconBtn, { backgroundColor: (colors.error || '#FF5C7C') + '14', borderColor: (colors.error || '#FF5C7C') + '33' }]} onPress={() => deleteItem(item._id)}>
+                            <Ionicons name="trash-outline" size={18} color={colors.error || '#FF5C7C'} />
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -107,59 +110,60 @@ export default function MenuListScreen({ navigation }: any) {
     };
 
     return (
-        <LinearGradient colors={Gradients.background} style={styles.container}>
-            <SafeAreaView style={{ flex: 1 }}>
-                <View style={styles.header}>
+        <LinearGradient colors={gradients.background} style={themedStyles.container}>
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor="transparent" translucent />
+            <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+                <View style={themedStyles.header}>
                     <View style={{ flex: 1 }}>
-                        <Text style={styles.headerTitle}>Menu</Text>
-                        <Text style={styles.headerSub}>
+                        <Text style={themedStyles.headerTitle}>Menu</Text>
+                        <Text style={themedStyles.headerSub}>
                             {searchQuery ? `${filteredItems.length} found` : `${items.length} items`}
                         </Text>
                     </View>
-                    <TouchableOpacity style={styles.addBtn} onPress={() => navigation.navigate('EditMenuItem')} activeOpacity={0.85}>
-                        <LinearGradient colors={['#FF8A5C', '#FF6B35']} style={styles.addBtnGrad}>
-                            <Ionicons name="add" size={22} color={Colors.white} />
+                    <TouchableOpacity style={themedStyles.addBtn} onPress={() => navigation.navigate('EditMenuItem')} activeOpacity={0.85}>
+                        <LinearGradient colors={gradients.primary} style={themedStyles.addBtnGrad}>
+                            <Ionicons name="add" size={22} color={colors.white} />
                         </LinearGradient>
                     </TouchableOpacity>
                 </View>
 
                 {/* Search Bar */}
-                <View style={styles.searchContainer}>
-                    <Ionicons name="search" size={18} color={Colors.textMuted} style={styles.searchIcon} />
+                <View style={themedStyles.searchContainer}>
+                    <Ionicons name="search" size={18} color={colors.textMuted} style={themedStyles.searchIcon} />
                     <TextInput
-                        style={styles.searchInput}
-                        placeholder="Search dishes or categories..."
-                        placeholderTextColor={Colors.textMuted}
+                        style={themedStyles.searchInput}
+                        placeholder="Search dishes..."
+                        placeholderTextColor={colors.textMuted}
                         value={searchQuery}
                         onChangeText={setSearchQuery}
                     />
                     {searchQuery !== '' && (
                         <TouchableOpacity onPress={() => setSearchQuery('')}>
-                            <Ionicons name="close-circle" size={18} color={Colors.textMuted} />
+                            <Ionicons name="close-circle" size={18} color={colors.textMuted} />
                         </TouchableOpacity>
                     )}
                 </View>
 
                 {isLoading && items.length === 0 ? (
-                    <View style={styles.center}>
-                        <ActivityIndicator size="large" color={Colors.primary} />
+                    <View style={themedStyles.center}>
+                        <ActivityIndicator size="large" color={colors.primary} />
                     </View>
                 ) : (
                     <FlatList
                         data={filteredItems}
-                        keyExtractor={(item) => item._id}
+                        keyExtractor={(item, index) => String(item._id || item.id || index)}
                         renderItem={renderItem}
-                        contentContainerStyle={styles.list}
+                        contentContainerStyle={themedStyles.list}
                         showsVerticalScrollIndicator={false}
                         ListEmptyComponent={
-                            <View style={styles.empty}>
-                                <View style={styles.emptyIcon}>
-                                    <Ionicons name="journal-outline" size={42} color={Colors.textMuted} />
+                            <View style={themedStyles.empty}>
+                                <View style={themedStyles.emptyIcon}>
+                                    <Ionicons name="journal-outline" size={42} color={colors.textMuted} />
                                 </View>
-                                <Text style={styles.emptyTitle}>
+                                <Text style={themedStyles.emptyTitle}>
                                     {searchQuery ? 'No matches found' : 'No menu items yet'}
                                 </Text>
-                                <Text style={styles.emptyText}>
+                                <Text style={themedStyles.emptyText}>
                                     {searchQuery ? `Try searching for something else` : 'Add your first item to get started'}
                                 </Text>
                             </View>
@@ -171,47 +175,47 @@ export default function MenuListScreen({ navigation }: any) {
     );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any, gradients: any, isDark: boolean) => StyleSheet.create({
     container: { flex: 1 },
     header: {
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-        paddingHorizontal: Spacing.lg, paddingTop: Spacing.xl, paddingBottom: Spacing.md,
+        paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.sm,
     },
-    headerTitle: { ...Typography.h3, color: Colors.textPrimary },
-    headerSub: { ...Typography.caption, color: Colors.textSecondary, marginTop: 2 },
+    headerTitle: { ...Typography.h3, color: colors.textPrimary },
+    headerSub: { ...Typography.caption, color: colors.textSecondary, marginTop: 2 },
     searchContainer: {
         flexDirection: 'row', alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: Radius.md,
+        backgroundColor: colors.glass, borderRadius: Radius.md,
         paddingHorizontal: 12, marginHorizontal: Spacing.lg, marginBottom: Spacing.md,
-        borderWidth: 1, borderColor: Colors.border, height: 46,
+        borderWidth: 1, borderColor: colors.border, height: 46,
     },
     searchIcon: { marginRight: 8 },
-    searchInput: { flex: 1, color: Colors.white, ...Typography.body2 },
+    searchInput: { flex: 1, color: colors.textPrimary, ...Typography.body2 },
     addBtn: { borderRadius: Radius.md, overflow: 'hidden', ...Shadows.primary },
     addBtnGrad: { width: 44, height: 44, borderRadius: Radius.md, justifyContent: 'center', alignItems: 'center' },
     list: { paddingHorizontal: Spacing.lg, paddingBottom: 130 },
     card: {
         borderRadius: Radius.lg, marginBottom: Spacing.md, overflow: 'hidden',
-        backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border, ...Shadows.sm,
+        backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, ...Shadows.sm,
     },
     cardMain: { flexDirection: 'row', alignItems: 'center', padding: Spacing.md, gap: 12 },
     thumb: { width: 48, height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
     cardInfo: { flex: 1 },
     nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 5 },
-    vegDot: { width: 14, height: 14, borderRadius: 3, borderWidth: 1.5, justifyContent: 'center', alignItems: 'center' },
+    vegDot: { width: 14, height: 14, borderRadius: 3, borderWidth: 1.5, justifyContent: 'center', alignItems: 'center', backgroundColor: 'transparent' },
     vegDotInner: { width: 6, height: 6, borderRadius: 2 },
-    itemName: { ...Typography.h5, color: Colors.textPrimary, flex: 1 },
+    itemName: { ...Typography.h5, color: colors.textPrimary, flex: 1 },
     metaRow: { flexDirection: 'row' },
     categoryChip: {
         paddingHorizontal: 8, paddingVertical: 3, borderRadius: Radius.round,
-        borderWidth: 1, backgroundColor: 'rgba(255,255,255,0.04)',
+        borderWidth: 1, backgroundColor: colors.glass,
     },
     categoryText: { ...Typography.overline, fontSize: 9 },
-    price: { ...Typography.h4, color: Colors.primary },
+    price: { ...Typography.h4, color: colors.primary },
     cardActions: {
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
         paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
-        borderTopWidth: 1, borderTopColor: Colors.border,
+        borderTopWidth: 1, borderTopColor: colors.border,
     },
     availBtn: {
         flexDirection: 'row', alignItems: 'center', gap: 5,
@@ -220,15 +224,15 @@ const styles = StyleSheet.create({
     availText: { fontSize: 12, fontWeight: '700' },
     iconActions: { flexDirection: 'row', gap: 8 },
     iconBtn: {
-        width: 36, height: 36, borderRadius: 10, backgroundColor: Colors.glass,
-        justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: Colors.border,
+        width: 36, height: 36, borderRadius: 10, backgroundColor: colors.glass,
+        justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: colors.border,
     },
     center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     empty: { alignItems: 'center', marginTop: 80, gap: 10 },
     emptyIcon: {
-        width: 80, height: 80, borderRadius: 40, backgroundColor: Colors.glass,
-        justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: Colors.border,
+        width: 80, height: 80, borderRadius: 40, backgroundColor: colors.glass,
+        justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: colors.border,
     },
-    emptyTitle: { ...Typography.h4, color: Colors.textSecondary },
-    emptyText: { ...Typography.body2, color: Colors.textMuted },
+    emptyTitle: { ...Typography.h4, color: colors.textSecondary },
+    emptyText: { ...Typography.body2, color: colors.textMuted },
 });

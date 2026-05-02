@@ -14,11 +14,20 @@ import { getPaperTheme } from './src/theme';
 import { useAuthStore } from './src/store/useAuthStore';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import AttendanceHeartbeat from './src/components/AttendanceHeartbeat';
+import './src/i18n';
 
 function AppContent() {
-    const { theme, isDark } = useTheme();
+    const { theme, isDark, colors, updateAccentColor, accentColor } = useTheme();
+    const user = useAuthStore(state => state.user);
+
+    useEffect(() => {
+        if (user && user.accentColor && user.accentColor !== accentColor) {
+            updateAccentColor(user.accentColor);
+        }
+    }, [user?.accentColor]);
+
     return (
-        <PaperProvider theme={getPaperTheme(isDark)}>
+        <PaperProvider theme={getPaperTheme(isDark, colors)}>
             <Navigation />
             <AttendanceHeartbeat />
             <StatusBar style={isDark ? "light" : "dark"} />

@@ -3,21 +3,24 @@ import { io, Socket } from 'socket.io-client';
 import { getServerBaseUrl } from '../config/api';
 import { useAuthStore } from '../store/useAuthStore';
 import Toast from 'react-native-toast-message';
+import { useNavigation } from '@react-navigation/native';
 
 export const useSocket = () => {
     const socketRef = useRef<Socket | null>(null);
     const { user, isAuthenticated } = useAuthStore();
+    const navigation = useNavigation<any>();
 
     useEffect(() => {
         if (isAuthenticated && user) {
             let isMounted = true;
 
             (async () => {
-                const socketUrl = await getServerBaseUrl();
-
+                const base = await getServerBaseUrl();
+                const socketUrl = base.replace(':8080', ':9092');
+                
                 if (!isMounted) return;
 
-                // Initialize socket with dynamically resolved URL
+                // Initialize socket with dedicated port 9092 (Netty-SocketIO)
                 socketRef.current = io(socketUrl, {
                     transports: ['websocket'],
                     reconnection: true,
@@ -52,6 +55,29 @@ export const useSocket = () => {
                         text1: '🥘 Status Update',
                         text2: `Order #${data.orderNumber} is now ${data.status.toUpperCase()}`,
                     });
+                });
+
+                // Listen for new Items Ready
+                socketRef.current.on('kot:itemsReady', (data) => {
+                    // Only alert the specific waiter or an admin
+                    const isWaiter = Number(data.waiterId) === Number(user?._id);
+                    const isAdmin = user?.role === 'owner' || user?.role === 'manager';
+                    
+                    if (isWaiter || isAdmin) {
+                        Toast.show({
+                            type: 'success',
+                            text1: `🔔 Food Ready: ${data.tableNumber === 'Takeaway' ? 'Takeaway' : 'Table ' + data.tableNumber}`,
+                            text2: `${data.itemsText} ready for #${data.orderNumber}`,
+                            position: 'top',
+                            visibilityTime: 4000,
+                            onPress: () => {
+                                Toast.hide();
+                                if (data.orderId && data.orderId !== -1) {
+                                    navigation.navigate('Checkout', { orderId: data.orderId });
+                                }
+                            }
+                        });
+                    }
                 });
             })();
 

@@ -1,188 +1,1503 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useTheme } from '../context/ThemeContext.jsx';
+import { usePOSMode } from '../context/POSModeContext.jsx';
+import { useLanguage } from '../context/LanguageContext.jsx';
 import api from '../api/client.js';
-import './Simple.css';
+import './Profile.css';
 
 export default function ProfilePage() {
     const { user, updateUser } = useAuth();
+    const { theme, toggleTheme, accentColor, updateAccentColor } = useTheme();
+    const { 
+        language, setLanguage, 
+        printLanguage, setPrintLanguage, 
+        itemNameLanguage, setItemNameLanguage 
+    } = useLanguage();
+    const { setSupermarketMode } = usePOSMode();
     const [loading, setLoading] = useState(false);
-    const [message, setMessage] = useState({ type: '', text: '' });
-    const [radius, setRadius] = useState(user?.geofenceRadius || 500);
+    const [toast, setToast] = useState({ show: false, type: '', text: '' });
+    
+    const canEdit = ['owner', 'manager', 'stakeholder'].includes(user?.role?.toLowerCase());
+    
+    // Form States
+    const [formData, setFormData] = useState({
+        name: user?.name || '',
+        restaurantName: user?.restaurantName || '',
+        phone: user?.phone || '',
+        address: user?.address || '',
+        currency: user?.currency || 'INR',
+        gstNumber: user?.gstNumber || '',
+        taxRate: user?.taxRate || 5,
+        geofenceRadius: user?.geofenceRadius || 500,
+        totalTables: user?.totalTables || 10,
+        acTables: user?.acTables || '',
+        acChargePercentage: user?.acChargePercentage ?? 20,
+        tableMetadata: user?.tableMetadata || {},
+        tableCategories: user?.tableCategories || [],
+        
+        // Printer Settings
+        billPrinterEnabled: user?.billPrinterEnabled ?? true,
+        counterPrinterIp: user?.counterPrinterIp || '',
+        kotPrinterEnabled: user?.kotPrinterEnabled ?? true,
+        kitchenPrinterIp: user?.kitchenPrinterIp || '',
+        categoryPrinterEnabled: user?.categoryPrinterEnabled ?? false,
+        autoPrintEnabled: user?.autoPrintEnabled ?? false,
+        minPrintPrice: user?.minPrintPrice ?? 0,
+        consolidatedReceipt: user?.consolidatedReceipt ?? false,
+        reprintKOT: user?.reprintKOT ?? false,
+        reprintBill: user?.reprintBill ?? false,
+        largeFontKOT: user?.largeFontKOT ?? false,
+        itemWiseKOT: user?.itemWiseKOT ?? false,
+        printCount: user?.printCount ?? 1,
+        
+        // Other Settings
+        quickMode: user?.quickMode ?? false,
+        manualQuantity: user?.manualQuantity ?? false,
+        preferredPosMode: user?.preferredPosMode || 'restaurant',
+        menuLayout: user?.menuLayout || 'Side Menu',
+        menuColorStyle: user?.menuColorStyle || 'MultiColor',
+        menuItemColumnCount: user?.menuItemColumnCount ?? 5,
+        lowStockAlert: user?.lowStockAlert ?? true,
+        allowNoStockSale: user?.allowNoStockSale ?? true,
+        trackCustomerDetail: user?.trackCustomerDetail ?? true,
 
-    React.useEffect(() => {
-        if (user?.role === 'owner' && navigator.geolocation) {
-            // "Warm up" GPS permission on load for owners
-            navigator.geolocation.getCurrentPosition(() => { }, () => { }, { enableHighAccuracy: true });
+        // Online Order Settings
+        onlineAutoAccept: user?.onlineAutoAccept ?? false,
+        onlineAutoPrint: user?.onlineAutoPrint ?? false,
+        onlinePrintCounter: user?.onlinePrintCounter ?? true,
+        onlinePrintKitchen: user?.onlinePrintKitchen ?? true,
+        onlineNotification: user?.onlineNotification ?? true,
+        onlineStockActivateTime: user?.onlineStockActivateTime ?? false,
+
+        // WhatsApp Settings
+        whatsappCountryCode: user?.whatsappCountryCode || '+91',
+        whatsappDetailedBill: user?.whatsappDetailedBill ?? false
+    });
+    
+    const [initialTableMeta, setInitialTableMeta] = useState({});
+    const [activeAccordion, setActiveAccordion] = useState('profile');
+    
+    const [csvFile, setCsvFile] = useState(null);
+
+    // Stakeholder States
+    const [stakeholders, setStakeholders] = useState([]);
+    const [stakeholderForm, setStakeholderForm] = useState({ name: '', phone: '', sharePercentage: 50, password: '' });
+    const [loadingStakeholders, setLoadingStakeholders] = useState(false);
+
+    const loadStakeholders = async () => {
+        if (user?.role !== 'owner') return;
+        setLoadingStakeholders(true);
+        try {
+            const res = await api.get('/stakeholder/list');
+            if (res.data.success) {
+                setStakeholders(res.data.data.stakeholders || []);
+            }
+        } catch (err) {
+            console.error('Failed to load stakeholders', err);
+        } finally {
+            setLoadingStakeholders(false);
+        }
+    };
+
+    useEffect(() => {
+        if (user?.role === 'owner') {
+            loadStakeholders();
         }
     }, [user?.role]);
 
-    if (!user) return null;
-
-    const handleSaveSettings = async () => {
+    const handleInviteStakeholder = async (e) => {
+        e.preventDefault();
+        // Validate that total share does not exceed 100%
+        const usedShare = (stakeholders || []).reduce((sum, s) => sum + (s.sharePercentage || 0), 0);
+        const remainingShare = 100 - usedShare;
+        if (stakeholderForm.sharePercentage > remainingShare) {
+            showToast('error', `Share exceeds available allocation. Only ${remainingShare.toFixed(1)}% remaining.`);
+            return;
+        }
+        if (stakeholderForm.sharePercentage <= 0) {
+            showToast('error', 'Share percentage must be greater than 0.');
+            return;
+        }
         setLoading(true);
-        setMessage({ type: '', text: '' });
         try {
-            const res = await api.put('/auth/profile', { geofenceRadius: radius });
+            const res = await api.post('/stakeholder/invite', stakeholderForm);
             if (res.data.success) {
-                updateUser(res.data.data.user);
-                setMessage({ type: 'success', text: 'Restaurant settings updated!' });
+                showToast('success', 'Stakeholder invited successfully!');
+                setStakeholderForm({ name: '', phone: '', sharePercentage: 50, password: '' });
+                loadStakeholders();
             }
-        } catch (error) {
-            setMessage({ type: 'error', text: error.response?.data?.message || 'Update failed' });
+        } catch (err) {
+            showToast('error', err.response?.data?.message || 'Failed to invite stakeholder');
         } finally {
             setLoading(false);
         }
     };
 
+    const handleRemoveStakeholder = async (stakeholderId) => {
+        if (!window.confirm('Are you sure you want to remove this stakeholder?')) return;
+        setLoading(true);
+        try {
+            const res = await api.delete(`/stakeholder/${stakeholderId}`);
+            if (res.data.success) {
+                showToast('success', 'Stakeholder removed.');
+                loadStakeholders();
+            }
+        } catch (err) {
+            showToast('error', err.response?.data?.message || 'Failed to remove stakeholder');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (user) {
+            const tableMetaParsed = (typeof user.tableMetadata === 'string') ? JSON.parse(user.tableMetadata) : (user.tableMetadata || {});
+            setInitialTableMeta(tableMetaParsed);
+            
+            setFormData({
+                name: user.name || '',
+                restaurantName: user.restaurantName || '',
+                phone: user.phone || '',
+                address: user.address || '',
+                currency: user.currency || 'INR',
+                gstNumber: user.gstNumber || '',
+                taxRate: user.taxRate || 5,
+                geofenceRadius: user.geofenceRadius || 500,
+                totalTables: user.totalTables || 10,
+                acTables: user.acTables || '',
+                acChargePercentage: user.acChargePercentage ?? 20,
+                tableMetadata: tableMetaParsed,
+                tableCategories: (typeof user.tableCategories === 'string') ? JSON.parse(user.tableCategories) : (user.tableCategories || []),
+                
+                billPrinterEnabled: user.billPrinterEnabled ?? true,
+                counterPrinterIp: user.counterPrinterIp || '',
+                kotPrinterEnabled: user.kotPrinterEnabled ?? true,
+                kitchenPrinterIp: user.kitchenPrinterIp || '',
+                categoryPrinterEnabled: user.categoryPrinterEnabled ?? false,
+                autoPrintEnabled: user.autoPrintEnabled ?? false,
+                minPrintPrice: user.minPrintPrice ?? 0,
+                consolidatedReceipt: user.consolidatedReceipt ?? false,
+                reprintKOT: user.reprintKOT ?? false,
+                reprintBill: user.reprintBill ?? false,
+                largeFontKOT: user.largeFontKOT ?? false,
+                itemWiseKOT: user.itemWiseKOT ?? false,
+                printCount: user.printCount ?? 1,
+                
+                quickMode: user.quickMode ?? false,
+                manualQuantity: user.manualQuantity ?? false,
+                preferredPosMode: user.preferredPosMode || 'restaurant',
+                menuLayout: user.menuLayout || 'Side Menu',
+                menuColorStyle: user.menuColorStyle || 'MultiColor',
+                menuItemColumnCount: user.menuItemColumnCount ?? 5,
+                lowStockAlert: user.lowStockAlert ?? true,
+                allowNoStockSale: user.allowNoStockSale ?? true,
+                trackCustomerDetail: user.trackCustomerDetail ?? true,
+
+                onlineAutoAccept: user.onlineAutoAccept ?? false,
+                onlineAutoPrint: user.onlineAutoPrint ?? false,
+                onlinePrintCounter: user.onlinePrintCounter ?? true,
+                onlinePrintKitchen: user.onlinePrintKitchen ?? true,
+                onlineNotification: user.onlineNotification ?? true,
+                onlineStockActivateTime: user.onlineStockActivateTime ?? false,
+
+                whatsappCountryCode: user.whatsappCountryCode || '+91',
+                whatsappDetailedBill: user.whatsappDetailedBill ?? false
+            });
+        }
+    }, [user]);
+
+    if (!user) return null;
+
+    const showToast = (type, text) => {
+        setToast({ show: true, type, text });
+        // Long messages (e.g. GPS warning) need more time to read
+        const duration = text.length > 80 ? 7000 : 4000;
+        setTimeout(() => setToast({ show: false, type: '', text: '' }), duration);
+    };
+
+    const handleInputChange = (e) => {
+        const { name, value, type, checked } = e.target;
+        setFormData(prev => ({ 
+            ...prev, 
+            [name]: type === 'checkbox' ? checked : value 
+        }));
+    };
+
+    const toggleAccordion = (section) => {
+        setActiveAccordion(activeAccordion === section ? null : section);
+    };
+
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState([]);
+    const [isSearching, setIsSearching] = useState(false);
+
+    const handleSearch = async (e) => {
+        const query = e.target.value;
+        setSearchQuery(query);
+        if (query.length < 3) {
+            setSearchResults([]);
+            return;
+        }
+
+        setIsSearching(true);
+        try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`);
+            const data = await res.json();
+            setSearchResults(data);
+        } catch (err) {
+            console.error('Search failed', err);
+        } finally {
+            setIsSearching(false);
+        }
+    };
+
+    const selectSearchResult = (result) => {
+        const lat = parseFloat(result.lat);
+        const lon = parseFloat(result.lon);
+        
+        setFormData(prev => ({ ...prev, latitude: lat, longitude: lon, address: result.display_name }));
+        
+        if (mapRef.current && markerRef.current) {
+            mapRef.current.setView([lat, lon], 17);
+            markerRef.current.setLatLng([lat, lon]);
+        }
+        
+        setSearchResults([]);
+        setSearchQuery('');
+    };
+
+    const handleSaveProfile = async () => {
+        setLoading(true);
+        try {
+            // Convert metadata to string if backend expects string (Java)
+            const payload = { ...formData, accentColor };
+            if (typeof payload.tableMetadata !== 'string') {
+                payload.tableMetadata = JSON.stringify(payload.tableMetadata);
+            }
+            if (typeof payload.tableCategories !== 'string') {
+                payload.tableCategories = JSON.stringify(payload.tableCategories);
+            }
+
+            const res = await api.put('/auth/profile', payload);
+            if (res.data.success) {
+                const updatedUser = res.data.data.user;
+                updateUser(updatedUser);
+                setSupermarketMode(updatedUser.preferredPosMode === 'supermarket');
+                showToast('success', 'Profile and settings updated successfully!');
+            }
+        } catch (error) {
+            showToast('error', error.response?.data?.message || 'Update failed');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleTableMetaChange = (tableNum, field, value) => {
+        setFormData(prev => ({
+            ...prev,
+            tableMetadata: {
+                ...prev.tableMetadata,
+                [tableNum]: {
+                    ...(prev.tableMetadata[tableNum] || {}),
+                    [field]: value
+                }
+            }
+        }));
+    };
+
+    const mapRef = useRef(null);
+    const markerRef = useRef(null);
+    const fileInputRef = useRef(null);
+
+    const handleLogoClick = () => {
+        if (fileInputRef.current) fileInputRef.current.click();
+    };
+
+    const handleLogoUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        // Basic validation
+        if (!file.type.match('image.*')) {
+            showToast('error', 'Please upload an image file (jpg, png, etc.)');
+            return;
+        }
+
+        setLoading(true);
+        const formDataUpload = new FormData();
+        formDataUpload.append('file', file);
+
+        try {
+            const res = await api.post('/auth/profile/logo', formDataUpload, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            if (res.data.success) {
+                updateUser(res.data.data.user);
+                showToast('success', 'Logo updated successfully!');
+            }
+        } catch (error) {
+            showToast('error', error.response?.data?.message || 'Logo upload failed');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (!window.L || !user) return;
+        
+        const mapContainer = document.getElementById('profile-map');
+        if (!mapContainer) return;
+        
+        if (!mapRef.current) {
+            const mapInstance = window.L.map('profile-map', { zoomControl: false }).setView([user.latitude || 12.9716, user.longitude || 77.5946], 15);
+            window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapInstance);
+            
+            const markerInstance = window.L.marker([user.latitude || 12.9716, user.longitude || 77.5946], { draggable: true }).addTo(mapInstance);
+            
+            markerInstance.on('dragend', async (e) => {
+                const { lat, lng } = e.target.getLatLng();
+                setFormData(prev => ({ ...prev, latitude: lat, longitude: lng }));
+                
+                // Optional: Auto-geocode on drag
+                try {
+                    const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+                    const geoData = await geoRes.json();
+                    if (geoData && geoData.display_name) {
+                        setFormData(prev => ({ ...prev, address: geoData.display_name }));
+                    }
+                } catch (err) { console.log('Geocode on drag failed', err); }
+            });
+
+            mapRef.current = mapInstance;
+            markerRef.current = markerInstance;
+        }
+    }, [user]);
+
     const handleUpdateLocation = () => {
         setLoading(true);
-        setMessage({ type: '', text: '' });
 
         if (!navigator.geolocation) {
-            setMessage({ type: 'error', text: 'Geolocation is not supported by your browser' });
+            showToast('error', 'Geolocation is not supported by your browser');
             setLoading(false);
             return;
         }
 
-        navigator.geolocation.getCurrentPosition(
-            async (position) => {
-                try {
-                    const { latitude, longitude } = position.coords;
-                    const res = await api.put('/auth/profile', { latitude, longitude });
+        let watchId = null;
+        let settled = false;
+        let bestPosition = null; // Track best position seen so far
 
-                    if (res.data.success) {
-                        updateUser(res.data.data.user);
-                        setMessage({ type: 'success', text: 'Restaurant location updated successfully!' });
-                    }
-                } catch (error) {
-                    setMessage({ type: 'error', text: error.response?.data?.message || 'Failed to update location' });
-                } finally {
+        const applyPosition = async (latitude, longitude, accuracy, isAccurate) => {
+            // Always move the map to show the user something they can correct
+            if (mapRef.current && markerRef.current) {
+                mapRef.current.setView([latitude, longitude], isAccurate ? 17 : 13);
+                markerRef.current.setLatLng([latitude, longitude]);
+            }
+
+            let address = formData.address;
+            try {
+                const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+                const geoData = await geoRes.json();
+                if (geoData && geoData.display_name) address = geoData.display_name;
+            } catch (err) { /* silent */ }
+
+            setFormData(prev => ({ ...prev, latitude, longitude, address }));
+
+            if (isAccurate) {
+                showToast('success', `✅ GPS location synced! (±${Math.round(accuracy)}m). Drag pin to fine-tune.`);
+            } else {
+                // Inaccurate (IP-based) — don't show a scary error, just a friendly prompt to drag the pin
+                showToast('success',
+                    `📍 Map moved to your general area. Please drag the red pin to your exact restaurant location.`
+                );
+            }
+            setLoading(false);
+        };
+
+        const onSuccess = async (position) => {
+            if (settled) return;
+            const { latitude, longitude, accuracy } = position.coords;
+
+            // Keep track of best reading
+            if (!bestPosition || accuracy < bestPosition.coords.accuracy) {
+                bestPosition = position;
+            }
+
+            // Accept immediately if accuracy is reasonable (phones indoors might be ~1000m at first)
+            if (accuracy <= 2000) {
+                settled = true;
+                if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+                await applyPosition(latitude, longitude, accuracy, true);
+            }
+            // Otherwise keep watching for a better fix
+        };
+
+        const onError = () => {
+            if (settled) return;
+            settled = true;
+            if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+            showToast('error', 'Location access denied. Please allow location in browser settings, or use the search bar to find your address.');
+            setLoading(false);
+        };
+
+        watchId = navigator.geolocation.watchPosition(onSuccess, onError, {
+            enableHighAccuracy: true,
+            maximumAge: 0,
+            timeout: 20000
+        });
+
+        // After 15s with no accurate fix — use best available (even if IP-based)
+        // so the user at least sees the map and can drag the pin to correct it.
+        setTimeout(async () => {
+            if (!settled) {
+                settled = true;
+                if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+                if (bestPosition) {
+                    const { latitude, longitude, accuracy } = bestPosition.coords;
+                    await applyPosition(latitude, longitude, accuracy, false);
+                } else {
+                    showToast('error', 'Could not get your location. Use the search bar above the map to find your restaurant.');
                     setLoading(false);
                 }
-            },
-            (error) => {
-                setMessage({ type: 'error', text: 'Please enable location access to set restaurant coordinates.' });
-                setLoading(false);
-            },
-            { enableHighAccuracy: true }
-        );
+            }
+        }, 15000);
+    };
+
+    const handleCsvUpload = async () => {
+        if (!csvFile) return showToast('error', 'Please select a file first');
+        setLoading(true);
+
+        const uploadData = new FormData();
+        uploadData.append('file', csvFile);
+
+        try {
+            const res = await api.post('/menu/import', uploadData);
+            if (res.data.success) {
+                showToast('success', `Import Complete: ${res.data.data.count} items added.`);
+                setCsvFile(null);
+            }
+        } catch (error) {
+            showToast('error', error.response?.data?.message || 'Import failed');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const downloadQRs = async () => {
+        setLoading(true);
+        try {
+            const response = await api.get('/qr/download', {
+                responseType: 'blob'
+            });
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `table_qrs_${user.restaurantName.replace(/\s+/g, '_')}.pdf`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            showToast('success', 'Full QR Code PDF generated!');
+        } catch (err) {
+            console.error("QR Generation failed", err);
+            showToast('error', 'Failed to generate QR Codes');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDownloadSingleQR = async (tableNum) => {
+        setLoading(true);
+        try {
+            const response = await api.get(`/qr/download/table/${tableNum}`, {
+                responseType: 'blob'
+            });
+            
+            // Success case
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `Table_${tableNum}_QR_${user.restaurantName.replace(/\s+/g, '_')}.pdf`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            showToast('success', `QR Code for Table ${tableNum} ready!`);
+        } catch (err) {
+            console.error("Single QR Generation failed", err);
+            
+            // Try to extract error message from blob if possible
+            if (err.response?.data instanceof Blob) {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    try {
+                        const errorJson = JSON.parse(reader.result);
+                        showToast('error', errorJson.message || `Failed to generate Table ${tableNum} QR`);
+                    } catch (e) {
+                        showToast('error', `Failed to generate Table ${tableNum} QR`);
+                    }
+                };
+                reader.readAsText(err.response.data);
+            } else {
+                showToast('error', err.response?.data?.message || `Failed to generate Table ${tableNum} QR`);
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+    
+    const isTableMetadataDirty = JSON.stringify(formData.tableMetadata) !== JSON.stringify(initialTableMeta);
+    
+    const handleCancelTableMeta = () => {
+        setFormData(prev => ({ ...prev, tableMetadata: initialTableMeta }));
+    };
+
+    const handleCancelSingleTable = (num) => {
+        setFormData(prev => ({
+            ...prev,
+            tableMetadata: {
+                ...prev.tableMetadata,
+                [num]: initialTableMeta[num] || {}
+            }
+        }));
+    };
+
+    const handleDownloadWaitlistQR = () => {
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            alert("⚠️ WARNING: You are currently accessing Kitchen Master via 'localhost'. The generated QR code will point to localhost and will NOT work on other devices like phones. \n\nPlease access Kitchen Master using your computer's local Wi-Fi IP address (e.g. 192.168.x.x:5173) to generate a working QR code.");
+            return;
+        }
+        
+        const joinUrl = `${window.location.origin}/join-waitlist/${user._id}`;
+        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(joinUrl)}`;
+        
+        const a = document.createElement('a');
+        a.href = qrUrl;
+        a.download = `Waitlist_QR_${user.restaurantName.replace(/\s+/g, '_')}.png`;
+        document.body.appendChild(a);
+        
+        // Sometimes direct download of external images fails due to CORS, so we can just open it
+        window.open(qrUrl, '_blank');
+        
+        a.remove();
+        showToast('success', 'Waitlist QR opened. Right-click to save or print.');
     };
 
     return (
-        <div className="simple-page">
-            <div className="simple-header">
-                <h1 className="page-title">Profile Settings</h1>
+        <div className="profile-container">
+            <div className="profile-header">
+                <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    style={{ display: 'none' }} 
+                    accept="image/*" 
+                    onChange={handleLogoUpload} 
+                />
+                <div className="profile-avatar-large editable" onClick={handleLogoClick}>
+                    {user.logo ? (
+                        <img src={user.logo} alt="Restaurant Logo" />
+                    ) : (
+                        user.name?.charAt(0).toUpperCase()
+                    )}
+                    {['owner', 'manager'].includes(user.role) && (
+                        <div className="avatar-edit-badge">
+                            📸
+                        </div>
+                    )}
+                    {['owner', 'manager'].includes(user.role) && (
+                        <div className="avatar-overlay">
+                            <span>CHANGE LOGO</span>
+                        </div>
+                    )}
+                </div>
+                <div className="profile-header-info">
+                    <h1>{user.name}</h1>
+                    <p>{user.email}</p>
+                    <div className="profile-badges">
+                        <span className="profile-badge">{user.role}</span>
+                        {user.role === 'owner' && <span className="profile-badge premium">PRO ACCOUNT</span>}
+                    </div>
+                </div>
+
+                <div className="profile-header-actions">
+                    {canEdit && (
+                        <button className="profile-save-btn top-save" onClick={handleSaveProfile} disabled={loading}>
+                            {loading ? 'Saving...' : '💾 Save All Changes'}
+                        </button>
+                    )}
+                    <button className="btn-refresh" onClick={() => window.location.reload()} title="Discard changes and reload">
+                        🔄 Refresh
+                    </button>
+                </div>
             </div>
 
-            <div className="order-row" style={{ flexDirection: 'column', alignItems: 'flex-start', padding: '24px', gap: '20px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', width: '100%' }}>
-                    <div className="emp-avatar" style={{ width: '64px', height: '64px', fontSize: '24px' }}>
-                        {user.name?.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                        <h2 style={{ fontSize: '20px', fontWeight: '700', color: 'var(--text-primary)' }}>{user.name}</h2>
-                        <p style={{ color: 'var(--text-secondary)' }}>{user.email}</p>
-                        <span className="role-badge" style={{ marginTop: '8px', display: 'inline-block' }}>{user.role.toUpperCase()}</span>
+            {!canEdit && (
+                <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '16px 24px', borderRadius: '12px', marginBottom: '24px', border: '1px solid rgba(239, 68, 68, 0.3)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={{ fontSize: '24px' }}>🔒</span>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <strong style={{ fontSize: '15px' }}>Read-Only Mode</strong>
+                        <span style={{ fontSize: '13px', opacity: 0.8 }}>Only Managers and Owners can edit restaurant settings.</span>
                     </div>
                 </div>
+            )}
 
-                <div style={{ width: '100%', height: '1px', background: 'var(--border)' }}></div>
-
-                <div style={{ width: '100%' }}>
-                    <h3 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '16px' }}>
-                        Restaurant Details
-                    </h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                        <div>
-                            <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Name</p>
-                            <p style={{ fontWeight: '500', color: 'var(--text-primary)' }}>{user.restaurantName}</p>
+            <fieldset disabled={!canEdit} style={{ border: 'none', padding: 0, margin: 0 }}>
+                <div className="profile-grid">
+                <div className="profile-main-col">
+                    {/* SECTION: GENERAL SETTINGS */}
+                    <div className={`profile-card accordion-item ${activeAccordion === 'profile' ? 'active' : ''}`}>
+                        <div className="accordion-header" onClick={() => toggleAccordion('profile')}>
+                            <h3 className="card-title">⚙️ General Details</h3>
+                            <span className="accordion-icon">{activeAccordion === 'profile' ? '🔼' : '🔽'}</span>
                         </div>
-                        <div>
-                            <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Phone</p>
-                            <p style={{ fontWeight: '500', color: 'var(--text-primary)' }}>{user.phone || 'Not set'}</p>
-                        </div>
-                        <div style={{ gridColumn: 'span 2' }}>
-                            <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Address</p>
-                            <p style={{ fontWeight: '500', color: 'var(--text-primary)' }}>{user.address || 'Not set'}</p>
-                        </div>
-                    </div>
-                </div>
+                        
+                        {activeAccordion === 'profile' && (
+                            <div className="accordion-content">
+                                <section className="profile-section">
+                                    <div className="setting-section-header">🎨 Theme & Appearance</div>
+                                    <div className="setting-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '15px' }}>
+                                        <div className="setting-info">
+                                            <h4>Theme Accent Color</h4>
+                                            <p>Choose the primary color for buttons, icons, and highlights across the app.</p>
+                                        </div>
+                                        <div className="color-palette-container">
+                                            {[
+                                                '#C6F53D', // Lime Green (Default)
+                                                '#3b82f6', // Blue
+                                                '#10b981', // Green
+                                                '#8b5cf6', // Violet
+                                                '#f43f5e', // Rose
+                                                '#f59e0b', // Amber
+                                                '#06b6d4', // Cyan
+                                                '#1f2937', // Slate/Dark
+                                            ].map(color => (
+                                                <div 
+                                                    key={color} 
+                                                    className={`color-swatch ${accentColor === color ? 'active' : ''}`}
+                                                    style={{ background: color }}
+                                                    onClick={() => updateAccentColor(color)}
+                                                />
+                                            ))}
+                                            <div className="color-swatch custom-swatch" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+                                                <input 
+                                                    type="color" 
+                                                    className="custom-color-picker" 
+                                                    value={accentColor} 
+                                                    onChange={(e) => updateAccentColor(e.target.value)}
+                                                    title="Pick custom color"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
 
-                {user.role === 'owner' && (
-                    <div style={{ width: '100%', marginTop: '10px' }}>
-                        <h3 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '16px' }}>
-                            Geo-Fencing Location
-                        </h3>
-                        <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px', lineHeight: '1.5' }}>
-                            Setting your current location as the restaurant's physical coordinate ensures employees can only clock in when they are on-site (within 200m).
-                        </p>
+                                    <div className="setting-section-header" style={{ marginTop: '25px' }}>🌐 Language Settings</div>
+                                    <div className="language-grid">
+                                        <div className="form-field">
+                                            <label>App Display Language</label>
+                                            <select className="form-input" value={language} onChange={(e) => setLanguage(e.target.value)}>
+                                                <option value="en">English (default)</option>
+                                                <option value="ta">தமிழ் (Tamil)</option>
+                                            </select>
+                                        </div>
+                                        <div className="form-field">
+                                            <label>Default Print Language</label>
+                                            <select className="form-input" value={printLanguage} onChange={(e) => setPrintLanguage(e.target.value)}>
+                                                <option value="en">English</option>
+                                                <option value="ta">தமிழ் (Tamil)</option>
+                                            </select>
+                                        </div>
+                                        <div className="form-field">
+                                            <label>Auto-Show Item Names as</label>
+                                            <select className="form-input" value={itemNameLanguage} onChange={(e) => setItemNameLanguage(e.target.value)}>
+                                                <option value="en">Original (English)</option>
+                                                <option value="ta">Translated (Tamil)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </section>
 
-                        {user.location?.latitude ? (
-                            <div style={{ background: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '8px', padding: '12px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <span style={{ color: '#22c55e' }}>📍</span>
-                                <span style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
-                                    Location Set: {user.location.latitude.toFixed(6)}, {user.location.longitude.toFixed(6)}
-                                </span>
-                            </div>
-                        ) : (
-                            <div style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '8px', padding: '12px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <span style={{ color: '#ef4444' }}>⚠️</span>
-                                <span style={{ fontSize: '13px', color: 'var(--text-primary)' }}>Location not set. Attendance tracking will not work.</span>
-                            </div>
-                        )}
+                                <div className="setting-section-header" style={{ marginTop: '30px' }}>📄 Business Details</div>
+                                <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
+                                    <button className="btn-qr-premium" onClick={downloadQRs} disabled={loading}>
+                                        {loading ? 'Generating...' : '📥 Table QR Cards'}
+                                    </button>
+                                    <button className="btn-qr-premium" style={{ background: '#2563eb' }} onClick={handleDownloadWaitlistQR}>
+                                        👥 Waitlist QR
+                                    </button>
+                                    <button 
+                                        className="btn-qr-premium" 
+                                        style={{ background: '#0f172a' }} 
+                                        onClick={() => window.open(`/waitlist-monitor/${user._id}`, '_blank')}
+                                    >
+                                        📺 Open TV Monitor
+                                    </button>
+                                </div>
 
-                        <div style={{ background: 'var(--bg-hover)', borderRadius: '12px', padding: '16px', marginBottom: '16px' }}>
-                            <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
-                                Geofence Radius (Meters)
-                            </label>
-                            <div style={{ display: 'flex', gap: '12px' }}>
-                                <input
-                                    type="number"
-                                    value={radius}
-                                    onChange={(e) => setRadius(parseInt(e.target.value))}
-                                    style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)' }}
-                                    placeholder="e.g. 500"
-                                />
-                                <button
-                                    className="add-btn"
-                                    style={{ padding: '0 20px' }}
-                                    onClick={handleSaveSettings}
-                                    disabled={loading}
-                                >
-                                    Save
+                                <div className="form-group-grid">
+                                    <div className="form-field">
+                                        <label>Your Name</label>
+                                        <input name="name" className="form-input" value={formData.name} onChange={handleInputChange} />
+                                    </div>
+                                    <div className="form-field">
+                                        <label>Restaurant Legal Name</label>
+                                        <input name="restaurantName" className="form-input" value={formData.restaurantName} onChange={handleInputChange} />
+                                    </div>
+                                    <div className="form-field">
+                                        <label>Primary Phone</label>
+                                        <input name="phone" className="form-input" value={formData.phone} onChange={handleInputChange} placeholder="+91 ..." />
+                                    </div>
+                                    <div className="form-field">
+                                        <label>GST Number</label>
+                                        <input name="gstNumber" className="form-input" value={formData.gstNumber} onChange={handleInputChange} placeholder="e.g. 22AAAAA0000A1Z5" />
+                                    </div>
+                                    <div className="form-field">
+                                        <label>Currency</label>
+                                        <input name="currency" className="form-input" value={formData.currency} onChange={handleInputChange} placeholder="e.g. INR" />
+                                    </div>
+                                    <div className="form-field">
+                                        <label>Global Tax Rate (%)</label>
+                                        <input name="taxRate" type="number" className="form-input" value={formData.taxRate} onChange={handleInputChange} />
+                                    </div>
+
+                                    <div className="form-field full-width">
+                                        <label>Physical Address</label>
+                                        <textarea 
+                                            name="address" 
+                                            className="form-input" 
+                                            style={{ minHeight: '80px', resize: 'vertical' }} 
+                                            value={formData.address} 
+                                            onChange={handleInputChange} 
+                                        />
+                                    </div>
+                                </div>
+                                <button className="profile-save-btn" onClick={handleSaveProfile} disabled={loading}>
+                                    {loading ? 'Saving Changes...' : '💾 Save General Details'}
                                 </button>
                             </div>
-                            <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px' }}>
-                                Employees must be within this distance to clock in. Default is 500m.
+                        )}
+                    </div>
+
+                    {/* SECTION: TABLE CONFIGURATION */}
+                    <div className={`profile-card accordion-item ${activeAccordion === 'tables' ? 'active' : ''}`} style={{ marginTop: '15px' }}>
+                        <div className="accordion-header" onClick={() => toggleAccordion('tables')}>
+                            <h3 className="card-title">🪑 Table Configurations</h3>
+                            <span className="accordion-icon">{activeAccordion === 'tables' ? '🔼' : '🔽'}</span>
+                        </div>
+                        
+                        {activeAccordion === 'tables' && (
+                            <div className="accordion-content">
+                                <div className="form-group-grid">
+                                    <div className="form-field">
+                                        <label>Total Number of Tables</label>
+                                        <input name="totalTables" type="number" className="form-input" value={formData.totalTables} onChange={handleInputChange} min="1" max="100" />
+                                    </div>
+                                    <div className="form-field">
+                                        <label>AC Tables (e.g. 1, 3, 5)</label>
+                                        <input name="acTables" type="text" className="form-input" value={formData.acTables} onChange={handleInputChange} placeholder="Comma separated tables" />
+                                    </div>
+                                    <div className="form-field">
+                                        <label>AC Markup Percentage (%)</label>
+                                        <input name="acChargePercentage" type="number" className="form-input" value={formData.acChargePercentage} onChange={handleInputChange} min="0" max="100" />
+                                    </div>
+
+                                    <div className="form-field full-width">
+                                        <label>Table Categories (e.g. Ground Floor, First Floor, Side Garden)</label>
+                                        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                                            <input 
+                                                type="text" 
+                                                className="form-input" 
+                                                placeholder="Add new category..." 
+                                                id="new-category-input"
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        const val = e.target.value.trim();
+                                                        if (val && !formData.tableCategories.includes(val)) {
+                                                            setFormData(prev => ({ ...prev, tableCategories: [...prev.tableCategories, val] }));
+                                                            e.target.value = '';
+                                                        }
+                                                    }
+                                                }}
+                                            />
+                                            <button 
+                                                className="btn-save-inline" 
+                                                style={{ height: 'fit-content' }}
+                                                onClick={() => {
+                                                    const input = document.getElementById('new-category-input');
+                                                    const val = input.value.trim();
+                                                    if (val && !formData.tableCategories.includes(val)) {
+                                                        setFormData(prev => ({ ...prev, tableCategories: [...prev.tableCategories, val] }));
+                                                        input.value = '';
+                                                    }
+                                                }}
+                                            >+ Add</button>
+                                        </div>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                            {formData.tableCategories?.map(cat => (
+                                                <div key={cat} className="category-pill" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    {cat}
+                                                    <span 
+                                                        style={{ cursor: 'pointer', color: 'var(--danger)', fontWeight: 'bold' }} 
+                                                        onClick={() => setFormData(prev => ({ ...prev, tableCategories: prev.tableCategories.filter(c => c !== cat) }))}
+                                                    >×</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Table Configuration Section */}
+                                    <div className="form-field full-width" style={{ marginTop: '20px' }}>
+                                        <h4 style={{ marginBottom: '10px', color: 'var(--text-primary)', borderBottom: '1px solid var(--border)', paddingBottom: '5px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span>🪑 Table Details (Seats & Location)</span>
+                                            {isTableMetadataDirty && (
+                                                <div style={{ display: 'flex', gap: '8px' }}>
+                                                    <button className="btn-save-inline" onClick={handleSaveProfile} disabled={loading}>
+                                                        {loading ? 'Saving...' : '💾 Save All Tables'}
+                                                    </button>
+                                                    <button className="btn-save-inline" style={{ background: 'var(--bg-hover)', color: 'var(--text-primary)', border: '1px solid var(--border)' }} onClick={handleCancelTableMeta} disabled={loading}>
+                                                        ✖ Cancel
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </h4>
+                                        <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '15px' }}>
+                                            Configure specific details for each table to help staff with seating.
+                                        </p>
+                                        <div className="table-meta-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '15px' }}>
+                                            {Array.from({ length: formData.totalTables || 0 }, (_, i) => i + 1).map(num => {
+                                                const isSingleTableDirty = JSON.stringify(formData.tableMetadata[num] || {}) !== JSON.stringify(initialTableMeta[num] || {});
+                                                
+                                                return (
+                                                    <div key={num} className={`table-meta-card ${isSingleTableDirty ? 'dirty' : ''}`} style={{ padding: '12px', border: isSingleTableDirty ? '1px solid var(--accent)' : '1px solid var(--border)', borderRadius: '8px', background: isSingleTableDirty ? 'var(--bg-card)' : 'var(--bg-hover)', transition: 'all 0.3s' }}>
+                                                        <div style={{ fontWeight: 'bold', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                <span>Table {num}</span>
+                                                                {isSingleTableDirty && <span style={{ fontSize: '10px', color: 'var(--accent)', fontWeight: 'bold' }}>UNSAVED</span>}
+                                                            </div>
+                                                            <button 
+                                                                className="btn-save-inline" 
+                                                                style={{ padding: '2px 6px', fontSize: '10px', background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
+                                                                onClick={() => handleDownloadSingleQR(num)}
+                                                                disabled={loading}
+                                                                title="Download QR for this table"
+                                                            >
+                                                                📥 QR
+                                                            </button>
+                                                        </div>
+                                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '10px' }}>
+                                                            <div>
+                                                                <label style={{ fontSize: '11px', display: 'block' }}>Seats</label>
+                                                                <input 
+                                                                    type="number" 
+                                                                    className="form-input small" 
+                                                                    value={formData.tableMetadata[num]?.seats || ''} 
+                                                                    onChange={(e) => handleTableMetaChange(num, 'seats', e.target.value)}
+                                                                    placeholder="e.g. 4"
+                                                                    style={{ padding: '4px 8px' }}
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label style={{ fontSize: '11px', display: 'block' }}>Location / Category</label>
+                                                                <select 
+                                                                    className="form-input small" 
+                                                                    value={formData.tableMetadata[num]?.location || ''} 
+                                                                    onChange={(e) => handleTableMetaChange(num, 'location', e.target.value)}
+                                                                    style={{ padding: '4px 8px' }}
+                                                                >
+                                                                    <option value="">Uncategorized</option>
+                                                                    {formData.tableCategories.map(cat => (
+                                                                        <option key={cat} value={cat}>{cat}</option>
+                                                                    ))}
+                                                                </select>
+                                                            </div>
+                                                        </div>
+
+                                                        {isSingleTableDirty && (
+                                                            <div style={{ display: 'flex', gap: '8px', marginTop: '12px', paddingTop: '8px', borderTop: '1px solid var(--border)' }}>
+                                                                <button className="btn-save-inline" style={{ flex: 1, padding: '4px 8px', fontSize: '11px' }} onClick={handleSaveProfile} disabled={loading}>
+                                                                    Save Changes
+                                                                </button>
+                                                                <button className="btn-cancel-inline" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => handleCancelSingleTable(num)} disabled={loading} title="Undo changes for this table">
+                                                                    ✖
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                </div>
+                                <button className="profile-save-btn" onClick={handleSaveProfile} disabled={loading} style={{ marginTop: '20px' }}>
+                                    {loading ? 'Saving Changes...' : '💾 Save Table Configurations'}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* SECTION: PRINTER CONFIGURATION */}
+                    <div className={`profile-card accordion-item ${activeAccordion === 'printer' ? 'active' : ''}`} style={{ marginTop: '15px' }}>
+                        <div className="accordion-header" onClick={() => toggleAccordion('printer')}>
+                            <h3 className="card-title">🖨️ Printer Settings</h3>
+                            <span className="accordion-icon">{activeAccordion === 'printer' ? '🔼' : '🔽'}</span>
+                        </div>
+                        
+                        {activeAccordion === 'printer' && (
+                            <div className="accordion-content">
+                                <div className="settings-list">
+                                    <div className="setting-row" style={{ alignItems: 'flex-start' }}>
+                                        <div className="setting-info" style={{ flex: 1 }}>
+                                            <h4>Cash Counter Printer</h4>
+                                            <p>Enable primary bill printing at the counter</p>
+                                            {formData.billPrinterEnabled && (
+                                                <div style={{ marginTop: '12px' }}>
+                                                    <label style={{ fontSize: '13px', fontWeight: 'bold' }}>Counter Printer IP (Optional)</label>
+                                                    <input name="counterPrinterIp" type="text" className="form-input" placeholder="e.g. 192.168.1.50" value={formData.counterPrinterIp} onChange={handleInputChange} style={{ marginTop: '5px', padding: '8px' }} />
+                                                    <small style={{display:'block', color:'var(--text-secondary)', marginTop:'4px', fontSize: '11px'}}>Enter LAN IP for silent network printing. Leave blank for browser print dialog.</small>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <label className="switch" style={{ marginTop: '5px' }}>
+                                            <input type="checkbox" name="billPrinterEnabled" checked={formData.billPrinterEnabled} onChange={handleInputChange} />
+                                            <span className="slider round"></span>
+                                        </label>
+                                    </div>
+
+                                    <div className="setting-row" style={{ alignItems: 'flex-start' }}>
+                                        <div className="setting-info" style={{ flex: 1 }}>
+                                            <h4>Kitchen Printer</h4>
+                                            <p>Send KOTs directly to the kitchen printer</p>
+                                            {formData.kotPrinterEnabled && (
+                                                <div style={{ marginTop: '12px' }}>
+                                                    <label style={{ fontSize: '13px', fontWeight: 'bold' }}>Kitchen Printer IP (Optional)</label>
+                                                    <input name="kitchenPrinterIp" type="text" className="form-input" placeholder="e.g. 192.168.1.51" value={formData.kitchenPrinterIp} onChange={handleInputChange} style={{ marginTop: '5px', padding: '8px' }} />
+                                                    <small style={{display:'block', color:'var(--text-secondary)', marginTop:'4px', fontSize: '11px'}}>Enter LAN IP for automatic silent KOT printing.</small>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <label className="switch" style={{ marginTop: '5px' }}>
+                                            <input type="checkbox" name="kotPrinterEnabled" checked={formData.kotPrinterEnabled} onChange={handleInputChange} />
+                                            <span className="slider round"></span>
+                                        </label>
+                                    </div>
+
+                                    <div className="setting-row">
+                                        <div className="setting-info">
+                                            <h4>Auto Print</h4>
+                                            <p>Automatically print bill when order is settled</p>
+                                        </div>
+                                        <label className="switch">
+                                            <input type="checkbox" name="autoPrintEnabled" checked={formData.autoPrintEnabled} onChange={handleInputChange} />
+                                            <span className="slider round"></span>
+                                        </label>
+                                    </div>
+
+                                    <div className="setting-row">
+                                        <div className="setting-info">
+                                            <h4>Item wise KOT</h4>
+                                            <p>Print separate ticket for each item in the order</p>
+                                        </div>
+                                        <label className="switch">
+                                            <input type="checkbox" name="itemWiseKOT" checked={formData.itemWiseKOT} onChange={handleInputChange} />
+                                            <span className="slider round"></span>
+                                        </label>
+                                    </div>
+
+                                    <div className="form-group-grid" style={{ marginTop: '15px' }}>
+                                        <div className="form-field">
+                                            <label>Minimum Price to Print</label>
+                                            <input name="minPrintPrice" type="number" className="form-input" value={formData.minPrintPrice} onChange={handleInputChange} />
+                                        </div>
+                                        <div className="form-field">
+                                            <label>Print Copies Count</label>
+                                            <input name="printCount" type="number" className="form-input" value={formData.printCount} onChange={handleInputChange} min="1" />
+                                        </div>
+                                    </div>
+
+                                    <div className="setting-row sub-options">
+                                        <div className="setting-info">
+                                            <label className="checkbox-container">
+                                                <input type="checkbox" name="largeFontKOT" checked={formData.largeFontKOT} onChange={handleInputChange} />
+                                                <span className="checkmark"></span>
+                                                Large Font KOT
+                                            </label>
+                                        </div>
+                                        <div className="setting-info">
+                                            <label className="checkbox-container">
+                                                <input type="checkbox" name="consolidatedReceipt" checked={formData.consolidatedReceipt} onChange={handleInputChange} />
+                                                <span className="checkmark"></span>
+                                                Consolidated Receipt
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button className="profile-save-btn" onClick={handleSaveProfile} disabled={loading}>
+                                    {loading ? 'Saving Changes...' : '💾 Save Printer Settings'}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* SECTION: APP BEHAVIOR SETTINGS */}
+                    <div className={`profile-card accordion-item ${activeAccordion === 'other' ? 'active' : ''}`} style={{ marginTop: '15px' }}>
+                        <div className="accordion-header" onClick={() => toggleAccordion('other')}>
+                            <h3 className="card-title">⚙️ App & Layout Settings</h3>
+                            <span className="accordion-icon">{activeAccordion === 'other' ? '🔼' : '🔽'}</span>
+                        </div>
+                        
+                        {activeAccordion === 'other' && (
+                            <div className="accordion-content">
+                                <div className="settings-list">
+                                    <div className="setting-row">
+                                        <div className="setting-info">
+                                            <h4>Dark Mode</h4>
+                                            <p>Toggle between light and dark theme</p>
+                                        </div>
+                                        <label className="switch">
+                                            <input type="checkbox" checked={theme === 'dark'} onChange={toggleTheme} />
+                                            <span className="slider round"></span>
+                                        </label>
+                                    </div>
+
+                                    <div className="setting-row">
+                                        <div className="setting-info">
+                                            <h4>Quick Mode</h4>
+                                            <p>Bypass intermediate payment confirms for faster checkout</p>
+                                        </div>
+                                        <label className="switch">
+                                            <input type="checkbox" name="quickMode" checked={formData.quickMode} onChange={handleInputChange} />
+                                            <span className="slider round"></span>
+                                        </label>
+                                    </div>
+
+                                    <div className="setting-row">
+                                        <div className="setting-info">
+                                            <h4>Manual Quantity</h4>
+                                            <p>Allow typing quantity directly instead of +/- buttons</p>
+                                        </div>
+                                        <label className="switch">
+                                            <input type="checkbox" name="manualQuantity" checked={formData.manualQuantity} onChange={handleInputChange} />
+                                            <span className="slider round"></span>
+                                        </label>
+                                    </div>
+
+                                    <div className="form-group-grid" style={{ marginTop: '15px' }}>
+                                        <div className="form-field">
+                                            <label>Preferred POS interface</label>
+                                            <select name="preferredPosMode" className="form-input" value={formData.preferredPosMode} onChange={handleInputChange}>
+                                                <option value="restaurant">Restaurant POS</option>
+                                                <option value="supermarket">Supermarket POS</option>
+                                            </select>
+                                        </div>
+                                        <div className="form-field">
+                                            <label>Choose Menu Layout</label>
+                                            <select name="menuLayout" className="form-input" value={formData.menuLayout} onChange={handleInputChange}>
+                                                <option value="Side Menu">Side Menu (Default)</option>
+                                                <option value="Top Menu">Top Navigation</option>
+                                                <option value="Grid">Full Grid View</option>
+                                            </select>
+                                        </div>
+                                        <div className="form-field">
+                                            <label>Menu Item Columns</label>
+                                            <input name="menuItemColumnCount" type="number" className="form-input" value={formData.menuItemColumnCount} onChange={handleInputChange} min="1" max="8" />
+                                        </div>
+                                    </div>
+
+                                    <div className="setting-row">
+                                        <div className="setting-info">
+                                            <h4>Low Stock Alert</h4>
+                                            <p>Show notifications when inventory items are low</p>
+                                        </div>
+                                        <label className="switch">
+                                            <input type="checkbox" name="lowStockAlert" checked={formData.lowStockAlert} onChange={handleInputChange} />
+                                            <span className="slider round"></span>
+                                        </label>
+                                    </div>
+
+                                    <div className="setting-row">
+                                        <div className="setting-info">
+                                            <h4>Allow No-Stock Sale</h4>
+                                            <p>Permit billing even if item stock is zero or negative</p>
+                                        </div>
+                                        <label className="switch">
+                                            <input type="checkbox" name="allowNoStockSale" checked={formData.allowNoStockSale} onChange={handleInputChange} />
+                                            <span className="slider round"></span>
+                                        </label>
+                                    </div>
+
+                                    <div className="setting-row">
+                                        <div className="setting-info">
+                                            <h4>Track Customer Details</h4>
+                                            <p>Prompt for customer name/phone during checkout</p>
+                                        </div>
+                                        <label className="switch">
+                                            <input type="checkbox" name="trackCustomerDetail" checked={formData.trackCustomerDetail} onChange={handleInputChange} />
+                                            <span className="slider round"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <button className="profile-save-btn" onClick={handleSaveProfile} disabled={loading}>
+                                    {loading ? 'Saving Changes...' : '💾 Save App Settings'}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* SECTION: STAKEHOLDER MANAGEMENT (OWNER ONLY) */}
+                    {user.role === 'owner' && (
+                        <div className={`profile-card accordion-item ${activeAccordion === 'stakeholder' ? 'active' : ''}`} style={{ marginTop: '15px' }}>
+                            <div className="accordion-header" onClick={() => toggleAccordion('stakeholder')}>
+                                <h3 className="card-title">🤝 Stakeholder / Partner Management</h3>
+                                <span className="accordion-icon">{activeAccordion === 'stakeholder' ? '🔼' : '🔽'}</span>
+                            </div>
+
+                            {activeAccordion === 'stakeholder' && (
+                                <div className="accordion-content">
+                                    <div style={{ marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid var(--border)' }}>
+                                        <h4 style={{ marginBottom: '10px' }}>Invite New Investor/Partner</h4>
+                                        <form className="form-group-grid" onSubmit={handleInviteStakeholder}>
+                                            {/* Share allocation bar */}
+                                            {(() => {
+                                                const usedShare = (stakeholders || []).reduce((sum, s) => sum + (s.sharePercentage || 0), 0);
+                                                const remainingShare = 100 - usedShare;
+                                                const pendingShare = stakeholderForm.sharePercentage;
+                                                const projectedUsed = usedShare + pendingShare;
+                                                const isOver = projectedUsed > 100;
+                                                return (
+                                                    <div className="form-field full-width" style={{ marginBottom: '4px' }}>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px' }}>
+                                                            <span style={{ color: 'var(--text-secondary)' }}>Share Allocation</span>
+                                                            <span style={{ color: isOver ? '#ef4444' : remainingShare === 0 ? '#f59e0b' : '#10b981', fontWeight: 'bold' }}>
+                                                                {isOver ? `⚠️ Over by ${(projectedUsed - 100).toFixed(1)}%` : `${remainingShare.toFixed(1)}% remaining`}
+                                                            </span>
+                                                        </div>
+                                                        <div style={{ height: '8px', borderRadius: '4px', background: 'var(--bg-hover)', overflow: 'hidden', border: '1px solid var(--border)' }}>
+                                                            <div style={{ height: '100%', width: `${Math.min(usedShare, 100)}%`, background: '#3b82f6', borderRadius: '4px 0 0 4px', transition: 'width 0.3s' }} />
+                                                            <div style={{ height: '100%', marginTop: '-8px', marginLeft: `${Math.min(usedShare, 100)}%`, width: `${Math.min(pendingShare, remainingShare)}%`, background: isOver ? '#ef4444' : '#10b981', opacity: 0.7, transition: 'width 0.3s' }} />
+                                                        </div>
+                                                        <div style={{ display: 'flex', gap: '12px', marginTop: '6px', fontSize: '11px', color: 'var(--text-secondary)' }}>
+                                                            <span>🔵 Assigned: {usedShare.toFixed(1)}%</span>
+                                                            <span style={{ color: isOver ? '#ef4444' : '#10b981' }}>🟢 This invite: {pendingShare}%</span>
+                                                            <span>⬜ Owner retains: {Math.max(0, 100 - Math.min(projectedUsed, 100)).toFixed(1)}%</span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })()}
+                                            <div className="form-field">
+                                                <label>Partner Name</label>
+                                                <input required className="form-input" value={stakeholderForm.name} onChange={e => setStakeholderForm({...stakeholderForm, name: e.target.value})} />
+                                            </div>
+                                            <div className="form-field">
+                                                <label>Phone Number</label>
+                                                <input required type="tel" className="form-input" value={stakeholderForm.phone} onChange={e => setStakeholderForm({...stakeholderForm, phone: e.target.value})} placeholder="+91..." />
+                                            </div>
+                                            <div className="form-field">
+                                                <label>Partner Password</label>
+                                                <input required type="text" className="form-input" value={stakeholderForm.password} onChange={e => setStakeholderForm({...stakeholderForm, password: e.target.value})} placeholder="temp password" />
+                                            </div>
+                                            <div className="form-field">
+                                                {(() => {
+                                                    const usedShare = (stakeholders || []).reduce((sum, s) => sum + (s.sharePercentage || 0), 0);
+                                                    const remainingShare = Math.max(0, 100 - usedShare);
+                                                    const isOver = stakeholderForm.sharePercentage > remainingShare;
+                                                    return (
+                                                        <>
+                                                            <label>Share % <span style={{ fontSize: '11px', color: isOver ? '#ef4444' : 'var(--text-secondary)', fontWeight: 'normal' }}>(max {remainingShare.toFixed(1)}% available)</span></label>
+                                                            <input
+                                                                type="number"
+                                                                min="1"
+                                                                max={remainingShare}
+                                                                className="form-input"
+                                                                value={stakeholderForm.sharePercentage}
+                                                                onChange={e => setStakeholderForm({...stakeholderForm, sharePercentage: Number(e.target.value)})}
+                                                                style={{ borderColor: isOver ? '#ef4444' : undefined }}
+                                                            />
+                                                            {isOver && <small style={{ color: '#ef4444', fontSize: '11px' }}>⚠️ Exceeds available share</small>}
+                                                        </>
+                                                    );
+                                                })()}
+                                            </div>
+                                            <div className="form-field full-width">
+                                                {(() => {
+                                                    const usedShare = (stakeholders || []).reduce((sum, s) => sum + (s.sharePercentage || 0), 0);
+                                                    const remainingShare = Math.max(0, 100 - usedShare);
+                                                    const isOver = stakeholderForm.sharePercentage > remainingShare || stakeholderForm.sharePercentage <= 0;
+                                                    return (
+                                                        <button type="submit" className="btn-save-inline" disabled={loading || isOver} style={{ width: '100%', opacity: isOver ? 0.5 : 1 }}>
+                                                            {loading ? 'Inviting...' : '➕ Send Invite & Assign Share'}
+                                                        </button>
+                                                    );
+                                                })()}
+                                            </div>
+                                        </form>
+                                    </div>
+
+                                    <div>
+                                        <h4 style={{ marginBottom: '10px' }}>Current Stakeholders</h4>
+                                        {loadingStakeholders ? (
+                                            <p>Loading...</p>
+                                        ) : (stakeholders || []).length === 0 ? (
+                                            <p style={{ color: 'var(--text-secondary)' }}>No stakeholders assigned yet.</p>
+                                        ) : (
+                                            <div style={{ display: 'grid', gap: '10px' }}>
+                                                {(stakeholders || []).map(s => (
+                                                    <div key={s.stakeholderId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--bg-hover)' }}>
+                                                        <div>
+                                                            <div style={{ fontWeight: 'bold' }}>{s.name || 'Unknown'}</div>
+                                                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{s.phone || '—'} • {s.sharePercentage || 0}% Share</div>
+                                                        </div>
+                                                        <button
+                                                            className="btn-cancel-inline"
+                                                            onClick={() => s.stakeholderId && handleRemoveStakeholder(s.stakeholderId)}
+                                                        >
+                                                            Remove
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* SECTION: ONLINE ORDER SETTINGS */}
+                    <div className={`profile-card accordion-item ${activeAccordion === 'online' ? 'active' : ''}`} style={{ marginTop: '15px' }}>
+                        <div className="accordion-header" onClick={() => toggleAccordion('online')}>
+                            <h3 className="card-title">🌐 Online Order Settings</h3>
+                            <span className="accordion-icon">{activeAccordion === 'online' ? '🔼' : '🔽'}</span>
+                        </div>
+                        
+                        {activeAccordion === 'online' && (
+                            <div className="accordion-content">
+                                <div className="settings-list">
+                                    <div className="setting-row">
+                                        <div className="setting-info">
+                                            <h4>Auto Accept</h4>
+                                            <p>Automatically accept incoming online orders</p>
+                                        </div>
+                                        <label className="switch">
+                                            <input type="checkbox" name="onlineAutoAccept" checked={formData.onlineAutoAccept} onChange={handleInputChange} />
+                                            <span className="slider round"></span>
+                                        </label>
+                                    </div>
+
+                                    <div className="setting-row">
+                                        <div className="setting-info">
+                                            <h4>Auto Print</h4>
+                                            <p>Print KOT/Bill immediately upon auto-acceptance</p>
+                                        </div>
+                                        <label className="switch">
+                                            <input type="checkbox" name="onlineAutoPrint" checked={formData.onlineAutoPrint} onChange={handleInputChange} />
+                                            <span className="slider round"></span>
+                                        </label>
+                                    </div>
+
+                                    <div className="setting-row">
+                                        <div className="setting-info">
+                                            <h4>Print Cash Counter</h4>
+                                            <p>Print a copy at the main billing counter</p>
+                                        </div>
+                                        <label className="switch">
+                                            <input type="checkbox" name="onlinePrintCounter" checked={formData.onlinePrintCounter} onChange={handleInputChange} />
+                                            <span className="slider round"></span>
+                                        </label>
+                                    </div>
+
+                                    <div className="setting-row">
+                                        <div className="setting-info">
+                                            <h4>Print Kitchen</h4>
+                                            <p>Send order directly to the kitchen (KOT)</p>
+                                        </div>
+                                        <label className="switch">
+                                            <input type="checkbox" name="onlinePrintKitchen" checked={formData.onlinePrintKitchen} onChange={handleInputChange} />
+                                            <span className="slider round"></span>
+                                        </label>
+                                    </div>
+
+                                    <div className="setting-row">
+                                        <div className="setting-info">
+                                            <h4>Online Orders Notification</h4>
+                                            <p>Play sound alert for new online orders</p>
+                                        </div>
+                                        <label className="switch">
+                                            <input type="checkbox" name="onlineNotification" checked={formData.onlineNotification} onChange={handleInputChange} />
+                                            <span className="slider round"></span>
+                                        </label>
+                                    </div>
+
+                                    <div className="setting-row">
+                                        <div className="setting-info">
+                                            <h4>Out of Stock Selection</h4>
+                                            <p>Allow time-based activation for out-of-stock items</p>
+                                        </div>
+                                        <label className="switch">
+                                            <input type="checkbox" name="onlineStockActivateTime" checked={formData.onlineStockActivateTime} onChange={handleInputChange} />
+                                            <span className="slider round"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <button className="profile-save-btn" onClick={handleSaveProfile} disabled={loading}>
+                                    {loading ? 'Saving Changes...' : '💾 Save Online Settings'}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* SECTION: WHATSAPP SETTINGS */}
+                    <div className={`profile-card accordion-item ${activeAccordion === 'whatsapp' ? 'active' : ''}`} style={{ marginTop: '15px' }}>
+                        <div className="accordion-header" onClick={() => toggleAccordion('whatsapp')}>
+                            <h3 className="card-title">💬 WhatsApp Settings</h3>
+                            <span className="accordion-icon">{activeAccordion === 'whatsapp' ? '🔼' : '🔽'}</span>
+                        </div>
+                        
+                        {activeAccordion === 'whatsapp' && (
+                            <div className="accordion-content">
+                                <div className="settings-list">
+                                    <div className="form-group-grid">
+                                        <div className="form-field">
+                                            <label>Country Code</label>
+                                            <input name="whatsappCountryCode" className="form-input" value={formData.whatsappCountryCode} onChange={handleInputChange} placeholder="+91" />
+                                        </div>
+                                    </div>
+
+                                    <div className="setting-row" style={{ marginTop: '15px' }}>
+                                        <div className="setting-info">
+                                            <h4>Detailed Bill</h4>
+                                            <p>Send itemized breakdown in WhatsApp messages</p>
+                                        </div>
+                                        <label className="switch">
+                                            <input type="checkbox" name="whatsappDetailedBill" checked={formData.whatsappDetailedBill} onChange={handleInputChange} />
+                                            <span className="slider round"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <button className="profile-save-btn" onClick={handleSaveProfile} disabled={loading}>
+                                    {loading ? 'Saving Changes...' : '💾 Save WhatsApp Settings'}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    {['owner', 'manager'].includes(user.role) && (
+                        <div className="profile-card" style={{ marginTop: '25px' }}>
+                            <h3 className="card-title">📁 Menu Bulk Management</h3>
+                            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
+                                Upload a CSV or Excel file to quickly populate your menu items.
+                            </p>
+                            
+                            <label className="import-box">
+                                <input 
+                                    type="file" 
+                                    className="file-input-hidden" 
+                                    accept=".csv, .xlsx, .xls"
+                                    onChange={(e) => setCsvFile(e.target.files[0])}
+                                />
+                                <div className="import-icon">📦</div>
+                                <h4>{csvFile ? csvFile.name : 'Click to Upload Menu File'}</h4>
+                                <p>Supports CSV, XLSX, and XLS formats</p>
+                            </label>
+
+                            {csvFile && (
+                                <button className="profile-save-btn" onClick={handleCsvUpload} disabled={loading} style={{ marginTop: '20px' }}>
+                                    {loading ? 'Processing File...' : '🚀 Start Bulk Import'}
+                                </button>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                <div className="profile-side-col">
+                    {user.role === 'owner' && (
+                        <div className="profile-card">
+                            <h3 className="card-title">📍 Attendance Guard</h3>
+                            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px', lineHeight: '1.5' }}>
+                                Configure geofencing to ensure staff clock in only when they are on-site.
+                            </p>
+
+                            <div className="location-status-card">
+                                <div className="status-indicator">
+                                    <div className={`dot ${user.latitude ? 'active' : 'inactive'}`}></div>
+                                    <span>Restaurant PIN: {user.latitude ? 'SET' : 'MISSING'}</span>
+                                </div>
+                                {user.latitude && (
+                                    <div className="location-coord-row">
+                                        <span>{user.latitude?.toFixed(4)}° N</span>
+                                        <span>{user.longitude?.toFixed(4)}° E</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="form-field" style={{ marginBottom: '15px' }}>
+                                <label>Geofence Radius (meters)</label>
+                                <input 
+                                    name="geofenceRadius" 
+                                    type="number" 
+                                    className="form-input" 
+                                    value={formData.geofenceRadius} 
+                                    onChange={handleInputChange} 
+                                />
+                            </div>
+                            <div className="location-coord-row">
+                                <span>Latitude</span>
+                                <span>{formData.latitude?.toFixed(6) || 'N/A'}</span>
+                            </div>
+                            <div className="location-coord-row">
+                                <span>Longitude</span>
+                                <span>{formData.longitude?.toFixed(6) || 'N/A'}</span>
+                            </div>
+
+                            <span className="map-tip">📍 Drag the pin to your exact restaurant entrance</span>
+                            
+                            <div className="map-search-container">
+                                <input 
+                                    type="text" 
+                                    className="map-search-input" 
+                                    placeholder="🔍 Search for your restaurant or street..." 
+                                    value={searchQuery}
+                                    onChange={handleSearch}
+                                />
+                                {searchResults.length > 0 && (
+                                    <div className="map-search-results">
+                                        {searchResults.map((res, i) => (
+                                            <div key={i} className="search-result-item" onClick={() => selectSearchResult(res)}>
+                                                {res.display_name}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div id="profile-map"></div>
+
+                            <button 
+                                type="button"
+                                className="profile-save-btn" 
+                                style={{ background: 'transparent', border: '1px solid var(--accent)', color: 'var(--accent)', fontSize: '14px', marginBottom: '10px' }}
+                                onClick={handleUpdateLocation}
+                                disabled={loading}
+                            >
+                                🎯 Sync to My Current GPS
+                            </button>
+                            <p style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', marginTop: '0', marginBottom: '0' }}>
+                                💡 <strong>Tip:</strong> For a precise location, connect your phone to this Wi-Fi and sync from your phone's browser, or turn ON Wi-Fi on this PC.
                             </p>
                         </div>
+                    )}
 
-                        <button
-                            className="add-btn"
-                            style={{ width: '100%', justifyContent: 'center', padding: '12px', background: 'transparent', border: '1.5px solid var(--accent)', color: 'var(--accent)' }}
-                            onClick={handleUpdateLocation}
-                            disabled={loading}
-                        >
-                            {loading ? '📍 Capturing Location...' : '📍 Update to My Current Location'}
-                        </button>
+                    <div className="profile-card" style={{ marginTop: '25px', background: 'rgba(52, 152, 219, 0.05)', borderColor: 'rgba(52, 152, 219, 0.2)' }}>
+                        <h3 className="card-title" style={{ color: '#3498db' }}>💡 Support Tip</h3>
+                        <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                            Need help setting up your restaurant? Visit our documentation or contact our 24/7 success team for assistance.
+                        </p>
                     </div>
-                )}
+                </div>
+                </div>
+            </fieldset>
 
-                {message.text && (
-                    <div style={{
-                        width: '100%',
-                        padding: '12px',
-                        borderRadius: '8px',
-                        fontSize: '14px',
-                        textAlign: 'center',
-                        background: message.type === 'success' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
-                        color: message.type === 'success' ? '#22c55e' : '#ef4444',
-                        border: `1px solid ${message.type === 'success' ? '#22c55e' : '#ef4444'}`
-                    }}>
-                        {message.text}
-                    </div>
-                )}
-            </div>
+            {toast.show && (
+                <div className={`feedback-toast ${toast.type}`}>
+                    {toast.type === 'success' ? '✅' : '❌'} {toast.text}
+                </div>
+            )}
         </div>
     );
 }

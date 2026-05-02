@@ -8,19 +8,24 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { inventoryAPI } from '../../api/inventory';
-import { Colors, Typography, Spacing, Radius, Shadows, Gradients } from '../../theme';
+import { useAppTheme, Typography, Spacing, Radius, Shadows } from '../../theme';
 
 const CATEGORIES = ['Vegetables', 'Meat', 'Dairy', 'Spices', 'Beverages', 'Packaging'];
 const UNITS = ['kg', 'g', 'L', 'ml', 'pcs', 'box'];
 
 export default function AddInventoryScreen({ navigation }: any) {
+    const { colors, gradients, isDark } = useAppTheme();
+    const themedStyles = React.useMemo(() => createStyles(colors, gradients, isDark), [colors, gradients, isDark]);
     const [form, setForm] = useState({
         name: '',
         category: 'Vegetables',
         currentStock: '',
         unit: 'kg',
         lowStockThreshold: '',
-        costPerUnit: ''
+        costPerUnit: '',
+        price: '',
+        supplierName: '',
+        supplierPhone: ''
     });
     const [isSaving, setIsSaving] = useState(false);
 
@@ -43,7 +48,9 @@ export default function AddInventoryScreen({ navigation }: any) {
                 unit: form.unit,
                 lowStockThreshold: numLow,
                 costPerUnit: numCost,
-                supplier: 'General Vendor'
+                price: form.price ? parseFloat(form.price) : 0,
+                supplierName: form.supplierName,
+                supplierPhone: form.supplierPhone
             });
 
             Alert.alert('Success', `${form.name} added to inventory!`, [
@@ -57,76 +64,74 @@ export default function AddInventoryScreen({ navigation }: any) {
     };
 
     return (
-        <LinearGradient colors={Gradients.background} style={styles.container}>
-            <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
-            <SafeAreaView style={styles.safe}>
+        <LinearGradient colors={gradients.background} style={themedStyles.container}>
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor="transparent" translucent />
+            <SafeAreaView style={themedStyles.safe} edges={['top']}>
                 {/* Header */}
-                <View style={styles.header}>
-                    <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-                        <Ionicons name="chevron-back" size={24} color={Colors.white} />
+                <View style={themedStyles.header}>
+                    <TouchableOpacity style={themedStyles.backBtn} onPress={() => navigation.goBack()}>
+                        <Ionicons name="chevron-back" size={24} color={colors.white} />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Add Item</Text>
-                    <View style={styles.placeholder} />
+                    <Text style={themedStyles.headerTitle}>Add Item</Text>
+                    <View style={themedStyles.placeholder} />
                 </View>
 
                 <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-                    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+                    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={themedStyles.scroll}>
 
-                        <View style={styles.formCard}>
-                            <LinearGradient colors={['rgba(255,255,255,0.03)', 'transparent']} style={StyleSheet.absoluteFill} />
-
+                        <View style={themedStyles.formCard}>
                             {/* Name */}
-                            <Text style={styles.label}>Item Name</Text>
-                            <View style={styles.inputWrap}>
-                                <Ionicons name="cube-outline" size={20} color={Colors.textMuted} style={styles.inputIcon} />
+                            <Text style={themedStyles.label}>Item Name</Text>
+                            <View style={themedStyles.inputWrap}>
+                                <Ionicons name="cube-outline" size={20} color={colors.textMuted} style={themedStyles.inputIcon} />
                                 <TextInput
-                                    style={styles.input}
+                                    style={themedStyles.input}
                                     placeholder="e.g. Tomato, Chicken Breast"
-                                    placeholderTextColor={Colors.textMuted}
+                                    placeholderTextColor={colors.textMuted}
                                     value={form.name}
                                     onChangeText={(t) => setForm({ ...form, name: t })}
                                 />
                             </View>
 
                             {/* Category Selector */}
-                            <Text style={styles.label}>Category</Text>
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+                            <Text style={themedStyles.label}>Category</Text>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={themedStyles.chipRow}>
                                 {CATEGORIES.map(cat => (
                                     <TouchableOpacity
                                         key={cat}
-                                        style={[styles.chip, form.category === cat && styles.chipActive]}
+                                        style={[themedStyles.chip, form.category === cat && themedStyles.chipActive]}
                                         onPress={() => setForm({ ...form, category: cat })}
                                     >
-                                        <Text style={[styles.chipText, form.category === cat && styles.chipTextActive]}>{cat}</Text>
+                                        <Text style={[themedStyles.chipText, form.category === cat && themedStyles.chipTextActive]}>{cat}</Text>
                                     </TouchableOpacity>
                                 ))}
                             </ScrollView>
 
                             {/* Stock & Unit Row */}
-                            <View style={styles.row}>
-                                <View style={styles.col}>
-                                    <Text style={styles.label}>Initial Stock</Text>
-                                    <View style={styles.inputWrap}>
+                            <View style={themedStyles.row}>
+                                <View style={themedStyles.col}>
+                                    <Text style={themedStyles.label}>Initial Stock</Text>
+                                    <View style={themedStyles.inputWrap}>
                                         <TextInput
-                                            style={styles.input}
+                                            style={themedStyles.input}
                                             placeholder="0.0"
-                                            placeholderTextColor={Colors.textMuted}
+                                            placeholderTextColor={colors.textMuted}
                                             keyboardType="numeric"
                                             value={form.currentStock}
                                             onChangeText={(t) => setForm({ ...form, currentStock: t })}
                                         />
                                     </View>
                                 </View>
-                                <View style={styles.col}>
-                                    <Text style={styles.label}>Unit</Text>
-                                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRowSmall}>
+                                <View style={themedStyles.col}>
+                                    <Text style={themedStyles.label}>Unit</Text>
+                                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={themedStyles.chipRowSmall}>
                                         {UNITS.map(u => (
                                             <TouchableOpacity
                                                 key={u}
-                                                style={[styles.chipSmall, form.unit === u && styles.chipActive]}
+                                                style={[themedStyles.chipSmall, form.unit === u && themedStyles.chipActive]}
                                                 onPress={() => setForm({ ...form, unit: u })}
                                             >
-                                                <Text style={[styles.chipTextSmall, form.unit === u && styles.chipTextActive]}>{u}</Text>
+                                                <Text style={[themedStyles.chipTextSmall, form.unit === u && themedStyles.chipTextActive]}>{u}</Text>
                                             </TouchableOpacity>
                                         ))}
                                     </ScrollView>
@@ -134,29 +139,29 @@ export default function AddInventoryScreen({ navigation }: any) {
                             </View>
 
                             {/* Additional Settings */}
-                            <View style={styles.row}>
-                                <View style={styles.col}>
-                                    <Text style={styles.label}>Low Alert At</Text>
-                                    <View style={styles.inputWrap}>
-                                        <Ionicons name="warning-outline" size={16} color={Colors.textMuted} style={styles.inputIcon} />
+                            <View style={themedStyles.row}>
+                                <View style={themedStyles.col}>
+                                    <Text style={themedStyles.label}>Low Alert At</Text>
+                                    <View style={themedStyles.inputWrap}>
+                                        <Ionicons name="warning-outline" size={16} color={colors.textMuted} style={themedStyles.inputIcon} />
                                         <TextInput
-                                            style={styles.input}
+                                            style={themedStyles.input}
                                             placeholder="Optional"
-                                            placeholderTextColor={Colors.textMuted}
+                                            placeholderTextColor={colors.textMuted}
                                             keyboardType="numeric"
                                             value={form.lowStockThreshold}
                                             onChangeText={(t) => setForm({ ...form, lowStockThreshold: t })}
                                         />
                                     </View>
                                 </View>
-                                <View style={styles.col}>
-                                    <Text style={styles.label}>Cost / Unit</Text>
-                                    <View style={styles.inputWrap}>
-                                        <Text style={styles.rupeeIcon}>₹</Text>
+                                <View style={themedStyles.col}>
+                                    <Text style={themedStyles.label}>Cost / Unit</Text>
+                                    <View style={themedStyles.inputWrap}>
+                                        <Text style={themedStyles.rupeeIcon}>₹</Text>
                                         <TextInput
-                                            style={styles.input}
+                                            style={themedStyles.input}
                                             placeholder="0.00"
-                                            placeholderTextColor={Colors.textMuted}
+                                            placeholderTextColor={colors.textMuted}
                                             keyboardType="numeric"
                                             value={form.costPerUnit}
                                             onChangeText={(t) => setForm({ ...form, costPerUnit: t })}
@@ -164,20 +169,62 @@ export default function AddInventoryScreen({ navigation }: any) {
                                     </View>
                                 </View>
                             </View>
+
+                            <View style={themedStyles.row}>
+                                <View style={themedStyles.col}>
+                                    <Text style={themedStyles.label}>Selling Price (Retail)</Text>
+                                    <View style={themedStyles.inputWrap}>
+                                        <Text style={themedStyles.rupeeIcon}>₹</Text>
+                                        <TextInput
+                                            style={themedStyles.input}
+                                            placeholder="0.00"
+                                            placeholderTextColor={colors.textMuted}
+                                            keyboardType="numeric"
+                                            value={form.price}
+                                            onChangeText={(t) => setForm({ ...form, price: t })}
+                                        />
+                                    </View>
+                                </View>
+                                <View style={themedStyles.col} />
+                            </View>
+
+                            {/* Supplier Details */}
+                            <Text style={themedStyles.label}>Supplier Details</Text>
+                            <View style={themedStyles.inputWrap}>
+                                <Ionicons name="business-outline" size={18} color={colors.textMuted} style={themedStyles.inputIcon} />
+                                <TextInput
+                                    style={themedStyles.input}
+                                    placeholder="Supplier Name"
+                                    placeholderTextColor={colors.textMuted}
+                                    value={form.supplierName}
+                                    onChangeText={(t) => setForm({ ...form, supplierName: t })}
+                                />
+                            </View>
+                            <View style={[themedStyles.inputWrap, { marginTop: 10 }]}>
+                                <Ionicons name="call-outline" size={18} color={colors.textMuted} style={themedStyles.inputIcon} />
+                                <TextInput
+                                    style={themedStyles.input}
+                                    placeholder="Supplier Phone"
+                                    placeholderTextColor={colors.textMuted}
+                                    keyboardType="phone-pad"
+                                    value={form.supplierPhone}
+                                    onChangeText={(t) => setForm({ ...form, supplierPhone: t })}
+                                />
+                            </View>
                         </View>
 
                     </ScrollView>
 
                     {/* Footer Save Button */}
-                    <View style={styles.footer}>
-                        <TouchableOpacity style={styles.saveBtn} activeOpacity={0.9} onPress={handleSubmit} disabled={isSaving}>
-                            <LinearGradient colors={['#FF8A5C', '#FF6B35', '#E55A24']} style={styles.saveGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                    <View style={themedStyles.footer}>
+                        <TouchableOpacity style={themedStyles.saveBtn} activeOpacity={0.9} onPress={handleSubmit} disabled={isSaving}>
+                            <LinearGradient colors={gradients.primary} style={themedStyles.saveGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
                                 {isSaving ? (
-                                    <ActivityIndicator color={Colors.white} />
+                                    <ActivityIndicator color={colors.white} />
                                 ) : (
                                     <>
-                                        <Ionicons name="checkmark-circle" size={20} color={Colors.white} />
-                                        <Text style={styles.saveText}>Save Item to Inventory</Text>
+                                        <Ionicons name="checkmark-circle" size={20} color={colors.white} />
+                                        <Text style={themedStyles.saveText}>Save Item to Inventory</Text>
                                     </>
                                 )}
                             </LinearGradient>
@@ -189,50 +236,50 @@ export default function AddInventoryScreen({ navigation }: any) {
     );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any, gradients: any, isDark: boolean) => StyleSheet.create({
     container: { flex: 1 },
-    safe: { flex: 1, paddingBottom: 20 },
+    safe: { flex: 1 },
     header: {
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-        paddingHorizontal: Spacing.lg, paddingTop: Spacing.xl, paddingBottom: Spacing.md,
+        paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.sm,
     },
     backBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-start', marginLeft: -8 },
-    headerTitle: { ...Typography.h3, color: Colors.textPrimary },
+    headerTitle: { ...Typography.h3, color: colors.textPrimary },
     placeholder: { width: 40 },
     scroll: { padding: Spacing.lg },
     formCard: {
-        backgroundColor: Colors.card, borderRadius: Radius.xl, padding: Spacing.lg,
-        borderWidth: 1, borderColor: Colors.glassBorder, overflow: 'hidden', ...Shadows.sm
+        backgroundColor: colors.card, borderRadius: Radius.xl, padding: Spacing.lg,
+        borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...Shadows.sm
     },
-    label: { ...Typography.body2, color: Colors.textSecondary, marginBottom: 8, marginTop: 16 },
+    label: { ...Typography.body2, color: colors.textSecondary, marginBottom: 8, marginTop: 16 },
     inputWrap: {
         flexDirection: 'row', alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: Radius.md,
-        borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 14, height: 50
+        backgroundColor: colors.glass, borderRadius: Radius.md,
+        borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14, height: 50
     },
     inputIcon: { marginRight: 10 },
-    rupeeIcon: { color: Colors.textMuted, fontSize: 16, marginRight: 8, fontWeight: '600' },
-    input: { flex: 1, color: Colors.textPrimary, ...Typography.body1 },
+    rupeeIcon: { color: colors.textMuted, fontSize: 16, marginRight: 8, fontWeight: '600' },
+    input: { flex: 1, color: colors.textPrimary, ...Typography.body1 },
     chipRow: { flexDirection: 'row', marginBottom: 6 },
     chip: {
         paddingHorizontal: 16, paddingVertical: 10, borderRadius: Radius.round,
-        backgroundColor: Colors.glass, borderWidth: 1, borderColor: Colors.border,
+        backgroundColor: colors.glass, borderWidth: 1, borderColor: colors.border,
         marginRight: 8, height: 40, justifyContent: 'center'
     },
-    chipActive: { backgroundColor: 'rgba(255,107,53,0.15)', borderColor: Colors.primary },
-    chipText: { ...Typography.buttonSm, color: Colors.textMuted },
-    chipTextActive: { color: Colors.primary },
+    chipActive: { backgroundColor: colors.primary + '26', borderColor: colors.primary },
+    chipText: { ...Typography.buttonSm, color: colors.textMuted },
+    chipTextActive: { color: colors.primary },
     row: { flexDirection: 'row', gap: 16 },
     col: { flex: 1 },
     chipRowSmall: { flexDirection: 'row', marginTop: 4 },
     chipSmall: {
         paddingHorizontal: 12, borderRadius: Radius.round,
-        backgroundColor: Colors.glass, borderWidth: 1, borderColor: Colors.border,
+        backgroundColor: colors.glass, borderWidth: 1, borderColor: colors.border,
         marginRight: 6, height: 44, justifyContent: 'center'
     },
-    chipTextSmall: { fontSize: 13, fontWeight: '600', color: Colors.textMuted },
-    footer: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.md },
+    chipTextSmall: { fontSize: 13, fontWeight: '600', color: colors.textMuted },
+    footer: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, paddingBottom: 20 },
     saveBtn: { borderRadius: Radius.xl, overflow: 'hidden', ...Shadows.glow },
     saveGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 18 },
-    saveText: { ...Typography.h4, color: Colors.white },
+    saveText: { ...Typography.h4, color: colors.white },
 });

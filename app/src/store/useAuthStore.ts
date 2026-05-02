@@ -11,12 +11,69 @@ interface User {
     phone?: string;
     role: string;
     assignedTables?: string[];
+    totalTables?: number;
     parentOwnerId?: string;
     subscription: { plan: string; expiresAt: string; isActive: boolean };
     onboardingCompleted: boolean;
     onboardingStep: number;
-    currency: string;
-    taxRate: number;
+    currency?: string;
+    taxRate?: number;
+    address?: string;
+    latitude?: number;
+    longitude?: number;
+    gstNumber?: string;
+    tableMetadata?: string | object;
+    logo?: string;
+    accentColor?: string;
+
+    // Table & Location settings
+    geofenceRadius?: number;
+    acTables?: string;
+    acChargePercentage?: number;
+    tableCategories?: string | any[];
+
+    // Printer settings
+    billPrinterEnabled?: boolean;
+    counterPrinterIp?: string;
+    kotPrinterEnabled?: boolean;
+    kitchenPrinterIp?: string;
+    categoryPrinterEnabled?: boolean;
+    autoPrintEnabled?: boolean;
+    minPrintPrice?: number;
+    consolidatedReceipt?: boolean;
+    reprintKOT?: boolean;
+    reprintBill?: boolean;
+    largeFontKOT?: boolean;
+    itemWiseKOT?: boolean;
+    printCount?: number;
+    customPrinters?: string | any[];
+
+    // POS Behavior
+    quickMode?: boolean;
+    manualQuantity?: boolean;
+    preferredPosMode?: string;
+    menuLayout?: string;
+    menuColorStyle?: string;
+    menuItemColumnCount?: number;
+    lowStockAlert?: boolean;
+    allowNoStockSale?: boolean;
+    trackCustomerDetail?: boolean;
+
+    // Online Order settings
+    onlineAutoAccept?: boolean;
+    onlineAutoPrint?: boolean;
+    onlinePrintCounter?: boolean;
+    onlinePrintKitchen?: boolean;
+    onlineNotification?: boolean;
+    onlineStockActivateTime?: boolean;
+
+    // WhatsApp settings
+    whatsappCountryCode?: string;
+    whatsappDetailedBill?: boolean;
+
+    // Language settings
+    preferredLanguage?: string;
+    printLanguage?: string;
 }
 
 interface AuthState {
@@ -26,6 +83,7 @@ interface AuthState {
     isAuthenticated: boolean;
     error: string | null;
     login: (email: string, password: string, latitude?: number, longitude?: number) => Promise<void>;
+    stakeholderLogin: (phone: string, password: string, latitude?: number, longitude?: number) => Promise<void>;
     register: (data: any) => Promise<void>;
     logout: () => Promise<void>;
     loadStoredAuth: () => Promise<void>;
@@ -53,6 +111,40 @@ export const useAuthStore = create<AuthState>((set) => ({
             set({ token, user, isAuthenticated: true, isLoading: false });
         } catch (error: any) {
             let errorMsg = error.response?.data?.message || error.message || 'Login failed';
+            if (errorMsg === 'Network Error') {
+                errorMsg = 'Network Error: Cannot reach backend. Go back to Login and click the Gear icon to set your PC IP Address.';
+            }
+            set({
+                error: errorMsg,
+                isLoading: false,
+            });
+            throw error;
+        }
+    },
+
+    stakeholderLogin: async (phone, password, latitude, longitude) => {
+        set({ isLoading: true, error: null });
+        try {
+            const res = await authAPI.stakeholderLogin(phone, password, latitude, longitude);
+            const { token, user } = res.data.data;
+            await AsyncStorage.multiSet([
+                ['km_token', token],
+                ['km_user', JSON.stringify(user)],
+            ]);
+            set({ token, user, isAuthenticated: true, isLoading: false });
+
+            // Fetch accessible restaurants and populate store
+            try {
+                const { useStakeholderStore } = require('./useStakeholderStore');
+                const restaurantsRes = await authAPI.getAccessibleRestaurants();
+                if (restaurantsRes.data.success) {
+                    useStakeholderStore.getState().setAccessibleRestaurants(restaurantsRes.data.data.restaurants || []);
+                }
+            } catch (err) {
+                console.warn('Failed to fetch stakeholder restaurants', err);
+            }
+        } catch (error: any) {
+            let errorMsg = error.response?.data?.message || error.message || 'Stakeholder Login failed';
             if (errorMsg === 'Network Error') {
                 errorMsg = 'Network Error: Cannot reach backend. Go back to Login and click the Gear icon to set your PC IP Address.';
             }
@@ -119,9 +211,15 @@ export const useAuthStore = create<AuthState>((set) => ({
         set({ isLoading: true, error: null });
         try {
             const res = await authAPI.updateProfile(data);
-            const user = res.data.data.user;
-            await AsyncStorage.setItem('km_user', JSON.stringify(user));
-            set({ user, isLoading: false });
+            // Handle both nested { user: ... } and direct user object responses
+            const user = res.data.data.user || res.data.data;
+            
+            if (user) {
+                await AsyncStorage.setItem('km_user', JSON.stringify(user));
+                set({ user, isLoading: false });
+            } else {
+                throw new Error('Invalid user data received');
+            }
         } catch (error: any) {
             set({
                 error: error.response?.data?.message || error.message || 'Update failed',

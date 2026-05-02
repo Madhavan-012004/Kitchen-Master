@@ -1,0 +1,13 @@
+Name,Price,Category,Type,Description,TamilName
+"Idli",40,South Indian,Veg,"Steamed rice cakes served with chutney and sambar","இட்லி"
+"Masala Dosa",120,South Indian,Veg,"Crispy dosa filled with spiced potato masala","மசாலா தோசை"
+"Ghee Roast",140,South Indian,Veg,"Crispy dosa roasted with ghee","நெய் ரோஸ்ட்"
+"Rava Kesari",80,Desserts,Veg,"Sweet semolina dessert with ghee and nuts","ரவா கேசரி"
+"Filter Coffee",50,Beverages,Veg,"Traditional South Indian filter coffee","பில்டர் காபி"
+"Mini Tiffin",180,Meals,Veg,"Combo of idli, dosa, vada with chutney and sambar","மினி டிபன்"
+"Curd Rice",90,Rice,Veg,"Rice mixed with curd and tempered spices","தயிர் சாதம்"
+"Sambar Rice",100,Rice,Veg,"Rice cooked with lentils and vegetables","சாம்பார் சாதம்"
+"Vegetable Biryani",160,Main Course,Veg,"Aromatic rice cooked with mixed vegetables","வெஜிடபிள் பிரியாணி"
+"Paneer Butter Masala",220,Main Course,Veg,"Paneer cubes in rich buttery tomato gravy","பன்னீர் பட்டர் மசாலா"
+"Chapathi",40,Breads,Veg,"Soft whole wheat flatbread","சப்பாத்தி"
+"Vada",50,South Indian,Veg,"Deep-fried lentil fritters","வடை"

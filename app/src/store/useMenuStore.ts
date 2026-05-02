@@ -3,6 +3,7 @@ import { menuAPI } from '../api/menu';
 
 export interface MenuItem {
     _id: string;
+    id?: number;
     name: string;
     category: string;
     price: number;
@@ -39,8 +40,18 @@ export const useMenuStore = create<MenuState>((set, get) => ({
         set({ isLoading: true, error: null });
         try {
             const res = await menuAPI.getAll();
-            const { items, grouped, categories } = res.data.data;
-            set({ items, grouped, categories, isLoading: false });
+            const data = res.data.data;
+            const menuItems = data.items || data.menuItems || [];
+            
+            // Calculate grouped and categories if not provided by backend
+            const categories = data.categories || Array.from(new Set(menuItems.map((i: any) => i.category)));
+            const grouped = data.grouped || menuItems.reduce((acc: any, item: any) => {
+                if (!acc[item.category]) acc[item.category] = [];
+                acc[item.category].push(item);
+                return acc;
+            }, {});
+
+            set({ items: menuItems, grouped, categories, isLoading: false });
         } catch (e: any) {
             set({ error: e.response?.data?.message || 'Failed to load menu', isLoading: false });
         }

@@ -1,230 +1,356 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
     View, Text, StyleSheet, FlatList, TouchableOpacity,
-    ActivityIndicator, Animated,
+    ActivityIndicator, Animated, StatusBar, RefreshControl
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { inventoryAPI } from '../../api/inventory';
-import { Colors, Typography, Spacing, Radius, Shadows, Gradients } from '../../theme';
+import { useAppTheme, Typography, Spacing, Radius, Shadows } from '../../theme';
+import AdjustStockModal from './AdjustStockModal';
 
 export default function InventoryScreen({ navigation }: any) {
+    const { colors, gradients, isDark } = useAppTheme();
+    const themedStyles = React.useMemo(() => createStyles(colors, gradients, isDark), [colors, gradients, isDark]);
+    
+    // Tabs & Items
+    const [activeTab, setActiveTab] = useState<'stock' | 'activity'>('stock');
     const [items, setItems] = useState<any[]>([]);
+    const [movements, setMovements] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    
+    // Filters & Modals
     const [filter, setFilter] = useState<'all' | 'low'>('all');
+    const [showAdjustModal, setShowAdjustModal] = useState(false);
+    const [selectedItem, setSelectedItem] = useState<any>(null);
+    
     const listAnim = useRef(new Animated.Value(0)).current;
 
-    const fetchInventory = async () => {
+    const fetchData = useCallback(async (isRefresh = false) => {
+        if (!isRefresh) setLoading(true);
+        else setRefreshing(true);
+        
         try {
-            const res = await inventoryAPI.getAll();
-            setItems(res.data.data.items);
-        } catch (e) { console.error(e); }
-        finally {
+            const [itemRes, moveRes] = await Promise.all([
+                inventoryAPI.getAll(),
+                inventoryAPI.getMovements()
+            ]);
+            setItems(itemRes.data.data?.items || []);
+            setMovements(moveRes.data.data || []);
+        } catch (e) {
+            console.error(e);
+        } finally {
             setLoading(false);
+            setRefreshing(false);
             Animated.timing(listAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
+        }
+    }, [listAnim]);
+
+    useEffect(() => { fetchData(); }, [fetchData]);
+
+    const handleAdjustStock = async (data: any) => {
+        if (!selectedItem) return;
+        try {
+            await inventoryAPI.adjustStock(selectedItem._id || selectedItem.id, data);
+            fetchData(true); // Silent refresh
+        } catch (error) {
+            console.error(error);
         }
     };
 
-    useEffect(() => { fetchInventory(); }, []);
-
-    const lowItems = items.filter(i => i.currentStock <= i.lowStockThreshold);
-    const displayItems = filter === 'low' ? lowItems : items;
+    const safeItems = Array.isArray(items) ? items : [];
+    const lowItems = safeItems.filter(i => i.currentStock <= i.lowStockThreshold);
+    const displayItems = filter === 'low' ? lowItems : safeItems;
 
     const getStockPercent = (item: any) => {
-        const max = item.maxStock || item.lowStockThreshold * 4;
+        const max = item.lowStockThreshold * 4 || 10;
         return Math.min(100, Math.round((item.currentStock / max) * 100));
     };
 
     const getStockColor = (item: any) => {
-        const p = getStockPercent(item);
-        if (p > 60) return Colors.accentGreen;
-        if (p > 25) return Colors.accentYellow;
-        return Colors.error;
+        const isLow = item.currentStock <= item.lowStockThreshold;
+        const isCritical = item.currentStock === 0;
+        if (isCritical) return colors.error;
+        if (isLow) return colors.warning;
+        return colors.accentGreen || colors.success;
     };
 
-    const renderItem = ({ item, index }: any) => {
+    const renderStockItem = ({ item }: any) => {
         const isLow = item.currentStock <= item.lowStockThreshold;
         const pct = getStockPercent(item);
         const barColor = getStockColor(item);
 
         return (
-            <Animated.View style={[styles.card, { opacity: listAnim, transform: [{ translateY: listAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }]}>
+            <View style={themedStyles.card}>
                 <LinearGradient
-                    colors={['rgba(255,255,255,0.04)', 'transparent']}
-                    style={styles.cardGradient}
+                    colors={isDark ? ['rgba(255,255,255,0.04)', 'transparent'] : ['rgba(0,0,0,0.02)', 'transparent']}
+                    style={themedStyles.cardGradient}
                 >
-                    <View style={styles.cardTop}>
-                        <View style={styles.cardMeta}>
-                            <Text style={styles.itemName}>{item.name}</Text>
-                            <Text style={styles.itemCategory}>{item.category || 'Raw Materials'}</Text>
+                    <View style={themedStyles.cardTop}>
+                        <View style={themedStyles.cardMeta}>
+                            <Text style={themedStyles.itemName}>{item.name}</Text>
+                            <Text style={themedStyles.itemCategory}>{item.category || 'General'}</Text>
                         </View>
-                        <View style={styles.stockInfo}>
-                            <Text style={[styles.stockValue, { color: barColor }]}>{item.currentStock}</Text>
-                            <Text style={styles.unit}>{item.unit}</Text>
+                        <View style={themedStyles.stockInfo}>
+                            <Text style={[themedStyles.stockValue, { color: barColor }]}>
+                                {item.currentStock}
+                            </Text>
+                            <Text style={themedStyles.unit}>{item.unit}</Text>
                         </View>
                     </View>
 
-                    {/* Stock progress bar */}
-                    <View style={styles.progressBg}>
-                        <View style={[styles.progressFill, { width: `${pct}%`, backgroundColor: barColor }]} />
+                    <View style={themedStyles.progressBg}>
+                        <View style={[themedStyles.progressFill, { width: `${pct}%`, backgroundColor: barColor }]} />
                     </View>
 
-                    <View style={styles.cardBottom}>
-                        {isLow ? (
-                            <View style={styles.alertChip}>
-                                <View style={styles.alertDot} />
-                                <Text style={styles.alertText}>Low Stock</Text>
-                            </View>
-                        ) : (
-                            <Text style={styles.pctText}>{pct}% remaining</Text>
-                        )}
-                        <TouchableOpacity style={styles.restockBtn} activeOpacity={0.85}>
-                            <LinearGradient colors={['#FF8A5C', '#FF6B35']} style={styles.restockGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-                                <Ionicons name="add" size={14} color={Colors.white} />
-                                <Text style={styles.restockText}>Restock</Text>
-                            </LinearGradient>
+                    <View style={themedStyles.cardBottom}>
+                        <View style={[themedStyles.statusBadge, { backgroundColor: barColor + '26' }]}>
+                            <Text style={[themedStyles.statusText, { color: barColor }]}>
+                                {item.currentStock === 0 ? 'Out of Stock' : isLow ? 'Low Stock' : 'Optimal'}
+                            </Text>
+                        </View>
+                        <TouchableOpacity 
+                            style={themedStyles.adjustBtn} 
+                            onPress={() => { setSelectedItem(item); setShowAdjustModal(true); }}
+                        >
+                            <Ionicons name="flash" size={14} color={colors.primary} />
+                            <Text style={themedStyles.adjustText}>Adjust</Text>
                         </TouchableOpacity>
                     </View>
                 </LinearGradient>
-            </Animated.View>
+            </View>
+        );
+    };
+
+    const renderMovementItem = ({ item }: any) => {
+        const isDeduct = item.type === 'DEDUCT';
+        const color = item.type === 'ADD' ? colors.success : item.type === 'DEDUCT' ? colors.error : colors.textMuted;
+        const date = new Date(item.timestamp);
+
+        return (
+            <View style={themedStyles.movementCard}>
+                <View style={themedStyles.moveTop}>
+                    <View style={themedStyles.moveInfo}>
+                        <Text style={themedStyles.moveItemName}>{item.itemName}</Text>
+                        <Text style={themedStyles.moveTime}>
+                            {date.toLocaleDateString()} • {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </Text>
+                    </View>
+                    <View style={themedStyles.moveQtyWrap}>
+                        <Text style={[themedStyles.moveQty, { color }]}>
+                            {isDeduct ? '-' : '+'}{item.quantity}
+                        </Text>
+                        <Text style={themedStyles.moveUnit}>{item.inventoryItem?.unit}</Text>
+                    </View>
+                </View>
+                
+                <View style={[themedStyles.moveDivider, { backgroundColor: colors.border }]} />
+                
+                <View style={themedStyles.moveBottom}>
+                    <View style={themedStyles.staffPill}>
+                        <View style={[themedStyles.avatar, { backgroundColor: colors.primary }]}>
+                            <Text style={themedStyles.avatarText}>{item.performedByName?.[0]}</Text>
+                        </View>
+                        <Text style={themedStyles.staffName}>{item.performedByName}</Text>
+                    </View>
+                    <Text style={themedStyles.reasonText} numberOfLines={1}>
+                        {item.reason || 'Manual Adjustment'}
+                    </Text>
+                </View>
+            </View>
         );
     };
 
     return (
-        <LinearGradient colors={Gradients.background} style={styles.container}>
-            <SafeAreaView style={styles.safe}>
-                {/* Header */}
-                <View style={styles.header}>
+        <LinearGradient colors={gradients.background} style={themedStyles.container}>
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor="transparent" translucent />
+            <SafeAreaView style={themedStyles.safe} edges={['top']}>
+                {/* Header with Tabs */}
+                <View style={themedStyles.header}>
                     <View>
-                        <Text style={styles.title}>Inventory</Text>
-                        <Text style={styles.subtitle}>{items.length} items tracked</Text>
+                        <Text style={themedStyles.title}>Management</Text>
+                        <View style={themedStyles.tabSwitcher}>
+                            <TouchableOpacity 
+                                style={[themedStyles.tab, activeTab === 'stock' && themedStyles.activeTab]}
+                                onPress={() => setActiveTab('stock')}
+                            >
+                                <Text style={[themedStyles.tabText, activeTab === 'stock' && themedStyles.activeTabText]}>Stock Levels</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                                style={[themedStyles.tab, activeTab === 'activity' && themedStyles.activeTab]}
+                                onPress={() => setActiveTab('activity')}
+                            >
+                                <Text style={[themedStyles.tabText, activeTab === 'activity' && themedStyles.activeTabText]}>Activity Log</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
-                    <TouchableOpacity style={styles.addBtn} onPress={() => navigation.navigate('AddInventory')}>
-                        <LinearGradient colors={['#FF8A5C', '#FF6B35']} style={styles.addBtnGradient}>
-                            <Ionicons name="add" size={22} color={Colors.white} />
-                        </LinearGradient>
-                    </TouchableOpacity>
-                </View>
-
-                {/* Stats Row */}
-                <View style={styles.statsRow}>
-                    <LinearGradient colors={['#1A2040', '#141830']} style={styles.statCard}>
-                        <View style={[styles.statIcon, { backgroundColor: 'rgba(76,142,255,0.15)' }]}>
-                            <Ionicons name="cube-outline" size={18} color={Colors.accentBlue} />
-                        </View>
-                        <Text style={styles.statVal}>{items.length}</Text>
-                        <Text style={styles.statLabel}>Total Items</Text>
-                    </LinearGradient>
-                    <LinearGradient colors={['#1A2040', '#141830']} style={styles.statCard}>
-                        <View style={[styles.statIcon, { backgroundColor: 'rgba(255,202,40,0.15)' }]}>
-                            <Ionicons name="warning-outline" size={18} color={Colors.accentYellow} />
-                        </View>
-                        <Text style={[styles.statVal, { color: Colors.accentYellow }]}>{lowItems.length}</Text>
-                        <Text style={styles.statLabel}>Low Stock</Text>
-                    </LinearGradient>
-                    <LinearGradient colors={['#1A2040', '#141830']} style={styles.statCard}>
-                        <View style={[styles.statIcon, { backgroundColor: 'rgba(0,214,143,0.15)' }]}>
-                            <Ionicons name="checkmark-circle-outline" size={18} color={Colors.accentGreen} />
-                        </View>
-                        <Text style={[styles.statVal, { color: Colors.accentGreen }]}>{items.length - lowItems.length}</Text>
-                        <Text style={styles.statLabel}>In Stock</Text>
-                    </LinearGradient>
-                </View>
-
-                {/* Filter tabs */}
-                <View style={styles.filterRow}>
-                    <TouchableOpacity
-                        style={[styles.filterTab, filter === 'all' && styles.filterActive]}
-                        onPress={() => setFilter('all')}
-                    >
-                        <Text style={[styles.filterText, filter === 'all' && styles.filterTextActive]}>All Items</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.filterTab, filter === 'low' && styles.filterActiveWarn]}
-                        onPress={() => setFilter('low')}
-                    >
-                        <Text style={[styles.filterText, filter === 'low' && { color: Colors.accentYellow }]}>Low Stock {lowItems.length > 0 && `(${lowItems.length})`}</Text>
-                    </TouchableOpacity>
-                </View>
-
-                {loading ? (
-                    <View style={styles.center}>
-                        <ActivityIndicator color={Colors.primary} size="large" />
+                    <View style={{ flexDirection: 'row', gap: 10 }}>
+                        <TouchableOpacity style={themedStyles.addBtn} onPress={() => navigation.navigate('Expenditure')}>
+                            <LinearGradient colors={['#64748b', '#475569']} style={themedStyles.addBtnGradient}>
+                                <Ionicons name="receipt" size={20} color={colors.white} />
+                            </LinearGradient>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={themedStyles.addBtn} onPress={() => navigation.navigate('AddInventory')}>
+                            <LinearGradient colors={gradients.primary} style={themedStyles.addBtnGradient}>
+                                <Ionicons name="add" size={24} color={colors.white} />
+                            </LinearGradient>
+                        </TouchableOpacity>
                     </View>
-                ) : (
-                    <FlatList
-                        data={displayItems}
-                        renderItem={renderItem}
-                        keyExtractor={i => i._id}
-                        contentContainerStyle={styles.list}
-                        showsVerticalScrollIndicator={false}
-                        ListEmptyComponent={
-                            <View style={styles.center}>
-                                <Ionicons name="cube-outline" size={52} color={Colors.textMuted} />
-                                <Text style={styles.emptyTitle}>No items found</Text>
-                                <Text style={styles.emptyText}>Your inventory is empty</Text>
+                </View>
+
+                {activeTab === 'stock' ? (
+                    <Animated.View style={{ flex: 1, opacity: listAnim }}>
+                        <View style={themedStyles.statsRow}>
+                            <View style={themedStyles.statCard}>
+                                <Text style={themedStyles.statVal}>{items.length}</Text>
+                                <Text style={themedStyles.statLabel}>Items</Text>
                             </View>
-                        }
-                    />
+                            <View style={themedStyles.statCard}>
+                                <Text style={[themedStyles.statVal, { color: colors.warning }]}>{lowItems.length}</Text>
+                                <Text style={themedStyles.statLabel}>Low</Text>
+                            </View>
+                            <View style={themedStyles.statCard}>
+                                <Text style={[themedStyles.statVal, { color: colors.error }]}>
+                                    {items.filter(i => i.currentStock === 0).length}
+                                </Text>
+                                <Text style={themedStyles.statLabel}>Out</Text>
+                            </View>
+                        </View>
+
+                        <View style={themedStyles.filterRow}>
+                            <TouchableOpacity
+                                style={[themedStyles.filterTab, filter === 'all' && themedStyles.filterActive]}
+                                onPress={() => setFilter('all')}
+                            >
+                                <Text style={[themedStyles.filterText, filter === 'all' && themedStyles.filterTextActive]}>All Items</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[themedStyles.filterTab, filter === 'low' && themedStyles.filterActiveWarn]}
+                                onPress={() => setFilter('low')}
+                            >
+                                <Text style={[themedStyles.filterText, filter === 'low' && { color: colors.warning }]}>Low Stock Alerts</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        <FlatList
+                            data={displayItems}
+                            renderItem={renderStockItem}
+                            keyExtractor={i => i._id || i.id}
+                            contentContainerStyle={themedStyles.list}
+                            showsVerticalScrollIndicator={false}
+                            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchData(true)} tintColor={colors.primary} />}
+                            ListEmptyComponent={
+                                <View style={themedStyles.center}>
+                                    <Ionicons name="cube-outline" size={48} color={colors.textMuted} />
+                                    <Text style={themedStyles.emptyTitle}>No items found</Text>
+                                </View>
+                            }
+                        />
+                    </Animated.View>
+                ) : (
+                    <Animated.View style={{ flex: 1, opacity: listAnim }}>
+                        <FlatList
+                            data={movements}
+                            renderItem={renderMovementItem}
+                            keyExtractor={(i, idx) => i.id || idx.toString()}
+                            contentContainerStyle={themedStyles.list}
+                            showsVerticalScrollIndicator={false}
+                            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchData(true)} tintColor={colors.primary} />}
+                            ListEmptyComponent={
+                                <View style={themedStyles.center}>
+                                    <Ionicons name="time-outline" size={48} color={colors.textMuted} />
+                                    <Text style={themedStyles.emptyTitle}>No history recorded</Text>
+                                </View>
+                            }
+                        />
+                    </Animated.View>
                 )}
             </SafeAreaView>
+
+            <AdjustStockModal 
+                visible={showAdjustModal}
+                onClose={() => setShowAdjustModal(false)}
+                item={selectedItem}
+                onSubmit={handleAdjustStock}
+            />
         </LinearGradient>
     );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any, gradients: any, isDark: boolean) => StyleSheet.create({
     container: { flex: 1 },
     safe: { flex: 1 },
     header: {
-        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-        paddingHorizontal: Spacing.lg, paddingTop: Spacing.xl, paddingBottom: Spacing.md,
+        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
+        paddingHorizontal: Spacing.lg, paddingTop: Spacing.xl, paddingBottom: Spacing.lg,
     },
-    title: { ...Typography.h3, color: Colors.textPrimary },
-    subtitle: { ...Typography.caption, color: Colors.textSecondary, marginTop: 2 },
-    addBtn: { borderRadius: Radius.md, overflow: 'hidden', ...Shadows.primary },
-    addBtnGradient: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center', borderRadius: Radius.md },
-    statsRow: { flexDirection: 'row', paddingHorizontal: Spacing.lg, gap: 10, marginBottom: Spacing.md },
+    title: { ...Typography.h2, color: colors.textPrimary, fontWeight: '900' },
+    tabSwitcher: { flexDirection: 'row', gap: 16, marginTop: 12 },
+    tab: { paddingVertical: 4 },
+    activeTab: { borderBottomWidth: 2, borderBottomColor: colors.primary },
+    tabText: { ...Typography.body1, color: colors.textMuted, fontWeight: '700' },
+    activeTabText: { color: colors.textPrimary },
+    addBtn: { borderRadius: Radius.md, overflow: 'hidden', ...Shadows.glow },
+    addBtnGradient: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
+    statsRow: { flexDirection: 'row', paddingHorizontal: Spacing.lg, gap: 12, marginBottom: Spacing.lg },
     statCard: {
-        flex: 1, borderRadius: Radius.lg, padding: Spacing.md, alignItems: 'center',
-        gap: 6, borderWidth: 1, borderColor: Colors.border, ...Shadows.sm,
+        flex: 1, borderRadius: Radius.lg, padding: Spacing.md,
+        borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, ...Shadows.sm,
     },
-    statIcon: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-    statVal: { ...Typography.h3, color: Colors.textPrimary },
-    statLabel: { ...Typography.caption, color: Colors.textSecondary, textAlign: 'center' },
+    statVal: { ...Typography.h3, color: colors.textPrimary, fontWeight: '900' },
+    statLabel: { ...Typography.caption, color: colors.textMuted, fontWeight: '700' },
     filterRow: { flexDirection: 'row', paddingHorizontal: Spacing.lg, gap: 10, marginBottom: Spacing.md },
     filterTab: {
-        paddingHorizontal: Spacing.md, paddingVertical: 8, borderRadius: Radius.round,
-        backgroundColor: Colors.glass, borderWidth: 1, borderColor: Colors.border,
+        paddingHorizontal: 16, paddingVertical: 8, borderRadius: Radius.round,
+        backgroundColor: colors.glass, borderWidth: 1, borderColor: colors.border,
     },
-    filterActive: { backgroundColor: 'rgba(255,107,53,0.12)', borderColor: 'rgba(255,107,53,0.4)' },
-    filterActiveWarn: { backgroundColor: 'rgba(255,202,40,0.1)', borderColor: 'rgba(255,202,40,0.4)' },
-    filterText: { ...Typography.buttonSm, color: Colors.textMuted },
-    filterTextActive: { color: Colors.primary },
-    list: { paddingHorizontal: Spacing.lg, paddingBottom: 130 },
+    filterActive: { backgroundColor: colors.primary + '1F', borderColor: colors.primary },
+    filterActiveWarn: { backgroundColor: colors.warning + '1A', borderColor: colors.warning },
+    filterText: { ...Typography.buttonSm, color: colors.textMuted },
+    filterTextActive: { color: colors.primary },
+    list: { paddingHorizontal: Spacing.lg, paddingBottom: 100 },
     card: {
-        borderRadius: Radius.lg, marginBottom: Spacing.md, overflow: 'hidden',
-        borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.card, ...Shadows.sm,
+        borderRadius: Radius.xl, marginBottom: Spacing.md, overflow: 'hidden',
+        borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, ...Shadows.sm,
     },
-    cardGradient: { padding: Spacing.md },
-    cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: Spacing.md },
+    cardGradient: { padding: Spacing.lg },
+    cardTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
     cardMeta: { flex: 1 },
-    itemName: { ...Typography.h5, color: Colors.textPrimary },
-    itemCategory: { ...Typography.caption, color: Colors.textMuted, marginTop: 2 },
+    itemName: { ...Typography.h5, color: colors.textPrimary, fontWeight: '800' },
+    itemCategory: { ...Typography.caption, color: colors.textMuted, marginTop: 2 },
     stockInfo: { alignItems: 'flex-end' },
-    stockValue: { ...Typography.h3 },
-    unit: { ...Typography.caption, color: Colors.textMuted },
-    progressBg: { height: 6, backgroundColor: Colors.glass, borderRadius: 3, marginBottom: Spacing.md, overflow: 'hidden' },
-    progressFill: { height: '100%', borderRadius: 3 },
+    stockValue: { ...Typography.h2, fontWeight: '900' },
+    unit: { ...Typography.caption, color: colors.textMuted, fontWeight: '700' },
+    progressBg: { height: 8, backgroundColor: colors.glass, borderRadius: 4, marginBottom: 20, overflow: 'hidden' },
+    progressFill: { height: '100%', borderRadius: 4 },
     cardBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    alertChip: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    alertDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.error },
-    alertText: { ...Typography.caption, color: Colors.error, fontWeight: '700' },
-    pctText: { ...Typography.caption, color: Colors.textMuted },
-    restockBtn: { borderRadius: Radius.md, overflow: 'hidden' },
-    restockGradient: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8 },
-    restockText: { ...Typography.buttonSm, color: Colors.white, fontSize: 12 },
-    center: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 80, gap: 8 },
-    emptyTitle: { ...Typography.h4, color: Colors.textSecondary },
-    emptyText: { ...Typography.body2, color: Colors.textMuted },
+    statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+    statusText: { ...Typography.caption, fontWeight: '800', textTransform: 'uppercase' },
+    adjustBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 12, borderLeftWidth: 1, borderLeftColor: colors.border },
+    adjustText: { ...Typography.buttonSm, color: colors.primary, fontWeight: '800' },
+    
+    // Movement Items
+    movementCard: {
+        backgroundColor: colors.card, borderRadius: Radius.lg, padding: Spacing.md,
+        marginBottom: Spacing.md, borderWidth: 1, borderColor: colors.border, ...Shadows.sm,
+    },
+    moveTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+    moveInfo: { flex: 1 },
+    moveItemName: { ...Typography.body1, color: colors.textPrimary, fontWeight: '800' },
+    moveTime: { ...Typography.caption, color: colors.textMuted, marginTop: 2 },
+    moveQtyWrap: { alignItems: 'flex-end' },
+    moveQty: { ...Typography.h4, fontWeight: '900' },
+    moveUnit: { ...Typography.caption, color: colors.textMuted },
+    moveDivider: { height: 1, marginVertical: 4 },
+    moveBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 },
+    staffPill: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.glass, padding: 4, paddingRight: 10, borderRadius: 20 },
+    avatar: { width: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+    avatarText: { color: '#fff', fontSize: 10, fontWeight: '900' },
+    staffName: { fontSize: 11, fontWeight: '700', color: colors.textSecondary },
+    reasonText: { fontSize: 11, color: colors.textMuted, maxWidth: '50%' },
+
+    center: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 100, gap: 12 },
+    emptyTitle: { ...Typography.h4, color: colors.textMuted },
 });

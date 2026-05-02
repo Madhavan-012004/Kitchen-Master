@@ -1,26 +1,30 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
     View, Text, StyleSheet, TouchableOpacity, TextInput,
-    KeyboardAvoidingView, Platform, ScrollView, Animated, Dimensions, Easing
+    KeyboardAvoidingView, Platform, ScrollView, Animated, Dimensions, Easing, Image, StatusBar, Linking
 } from 'react-native';
+
+const logoImg = require('../../../assets/LOGO.jpeg');
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import * as Location from 'expo-location';
 import { useAuthStore } from '../../store/useAuthStore';
-import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
+import { useAppTheme, Typography, Spacing, Radius, Shadows } from '../../theme';
 
 const { width } = Dimensions.get('window');
 
 export default function LoginScreen({ navigation }: any) {
-    const [email, setEmail] = useState('');
+    const { colors, gradients, isDark } = useAppTheme();
+    const themedStyles = React.useMemo(() => createStyles(colors, gradients, isDark), [colors, gradients, isDark]);
+    const [loginId, setLoginId] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
-    const [focusedInput, setFocusedInput] = useState<'email' | 'password' | null>(null);
+    const [focusedInput, setFocusedInput] = useState<'loginId' | 'password' | null>(null);
     const [gpsStatus, setGpsStatus] = useState<'fetching' | 'ready' | 'denied'>('fetching');
     const locationRef = useRef<{ latitude: number; longitude: number } | null>(null);
-    const { login, isLoading, error, clearError } = useAuthStore();
+    const { login, stakeholderLogin, isLoading, error, clearError } = useAuthStore();
 
     // ─── Animations ─────────────────────────────────────────────────────────
     const entranceAnim = useRef(new Animated.Value(0)).current;
@@ -68,7 +72,8 @@ export default function LoginScreen({ navigation }: any) {
     }, []);
 
     const handleLogin = async () => {
-        if (!email.trim() || !password.trim()) return;
+        if (!loginId.trim()) return;
+        if (!password.trim()) return;
 
         Animated.sequence([
             Animated.timing(btnScaleAnim, { toValue: 0.95, duration: 100, useNativeDriver: true }),
@@ -77,12 +82,23 @@ export default function LoginScreen({ navigation }: any) {
 
         const coords = locationRef.current;
         try {
-            await login(
-                email.trim().toLowerCase(),
-                password,
-                coords?.latitude ?? undefined,
-                coords?.longitude ?? undefined
-            );
+            const isEmail = loginId.includes('@');
+            
+            if (isEmail) {
+                await login(
+                    loginId.trim().toLowerCase(),
+                    password,
+                    coords?.latitude ?? undefined,
+                    coords?.longitude ?? undefined
+                );
+            } else {
+                await stakeholderLogin(
+                    loginId.trim(),
+                    password,
+                    coords?.latitude ?? undefined,
+                    coords?.longitude ?? undefined
+                );
+            }
         } catch (_) { }
     };
 
@@ -94,131 +110,140 @@ export default function LoginScreen({ navigation }: any) {
     const orb2X = orb2Anim.interpolate({ inputRange: [0, 1], outputRange: [0, 50] });
 
     return (
-        <View style={styles.container}>
+        <View style={themedStyles.container}>
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor="transparent" translucent />
             {/* Absolute Deep Background */}
-            <LinearGradient colors={['#05050A', '#0D0F1A', '#080912']} style={StyleSheet.absoluteFillObject} />
+            <LinearGradient colors={gradients.background} style={StyleSheet.absoluteFillObject} />
 
             {/* Floating Ambient Orbs */}
-            <Animated.View style={[styles.orb, styles.orbTopRight, { transform: [{ translateY: orb1Y }, { translateX: orb1X }] }]} />
-            <Animated.View style={[styles.orb, styles.orbBottomLeft, { transform: [{ translateY: orb2Y }, { translateX: orb2X }] }]} />
+            <Animated.View style={[themedStyles.orb, themedStyles.orbTopRight, { transform: [{ translateY: orb1Y }, { translateX: orb1X }] }]} />
+            <Animated.View style={[themedStyles.orb, themedStyles.orbBottomLeft, { transform: [{ translateY: orb2Y }, { translateX: orb2X }] }]} />
 
-            <SafeAreaView style={styles.settingsArea} pointerEvents="box-none">
-                <TouchableOpacity style={styles.settingsBtn} onPress={() => navigation.navigate('ServerConfig')} activeOpacity={0.7}>
-                    <Ionicons name="hardware-chip-outline" size={20} color={Colors.white} />
-                    <BlurView intensity={20} style={StyleSheet.absoluteFillObject} />
-                </TouchableOpacity>
-            </SafeAreaView>
+            {__DEV__ && (
+                <SafeAreaView style={themedStyles.settingsArea} pointerEvents="box-none">
+                    <TouchableOpacity style={themedStyles.settingsBtn} onPress={() => navigation.navigate('ServerConfig')} activeOpacity={0.7}>
+                        <Ionicons name="hardware-chip-outline" size={20} color={colors.textPrimary} />
+                        <BlurView intensity={20} style={StyleSheet.absoluteFillObject} tint={isDark ? "dark" : "light"} />
+                    </TouchableOpacity>
+                </SafeAreaView>
+            )}
 
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
-                <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={themedStyles.flex}>
+                <ScrollView contentContainerStyle={themedStyles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
-                    <Animated.View style={[styles.contentWrapper, { opacity: entranceAnim, transform: [{ translateY }] }]}>
+                    <Animated.View style={[themedStyles.contentWrapper, { opacity: entranceAnim, transform: [{ translateY }] }]}>
 
                         {/* Header Area */}
-                        <View style={styles.header}>
-                            <View style={styles.logoWrapper}>
-                                <LinearGradient colors={['#FF6B35', '#E55A24']} style={styles.logoCircle} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-                                    <Ionicons name="restaurant" size={28} color={Colors.white} />
-                                </LinearGradient>
-                                <View style={styles.logoOuterGlow} />
+                        <View style={themedStyles.header}>
+                            <View style={themedStyles.logoWrapper}>
+                                <View style={themedStyles.logoCircle}>
+                                    <Image
+                                        source={logoImg}
+                                        style={themedStyles.logoImage}
+                                        resizeMode="contain"
+                                    />
+                                </View>
+                                <View style={themedStyles.logoOuterGlow} />
                             </View>
-                            <Text style={styles.title}>Kitchen Master</Text>
-                            <Text style={styles.subtitle}>Welcomes You</Text>
-                            <Text style={styles.subtitle}>Enter your credentials to access the command center.</Text>
+                            <Text style={themedStyles.title}>
+                                <Text style={{color: colors.primary}}>P</Text>ro<Text style={{color: colors.primary}}>B</Text>loom
+                            </Text>
+                            <Text style={themedStyles.subtitle}>Welcomes You</Text>
+                            <Text style={themedStyles.subtitle}>Enter your credentials to access the command center.</Text>
                         </View>
 
                         {/* Premium Glassmorphic Card */}
-                        <View style={styles.glassContainer}>
-                            <BlurView intensity={30} tint="dark" style={styles.glassBlur}>
+                        <View style={themedStyles.glassContainer}>
+                            <BlurView intensity={30} tint={isDark ? "dark" : "light"} style={themedStyles.glassBlur}>
 
                                 {error && (
-                                    <Animated.View style={styles.errorBanner}>
-                                        <Ionicons name="warning" size={18} color="#FF4A4A" />
-                                        <Text style={styles.errorText}>{error}</Text>
+                                    <Animated.View style={themedStyles.errorBanner}>
+                                        <Ionicons name="warning" size={18} color={colors.error} />
+                                        <Text style={themedStyles.errorText}>{error}</Text>
                                         <TouchableOpacity onPress={clearError} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                                            <Ionicons name="close" size={16} color="#FF4A4A" />
+                                            <Ionicons name="close" size={16} color={colors.error} />
                                         </TouchableOpacity>
                                     </Animated.View>
                                 )}
 
-                                <View style={styles.formGroup}>
-                                    <Text style={styles.label}>Email Address</Text>
-                                    <View style={[styles.inputWrapper, focusedInput === 'email' && styles.inputWrapperFocused]}>
-                                        <Ionicons name="mail" size={18} color={focusedInput === 'email' ? Colors.primary : Colors.textMuted} style={styles.inputIcon} />
+                                <View style={themedStyles.formGroup}>
+                                    <Text style={themedStyles.label}>Email Address or Phone Number</Text>
+                                    <View style={[themedStyles.inputWrapper, focusedInput === 'loginId' && themedStyles.inputWrapperFocused]}>
+                                        <Ionicons name="person-circle-outline" size={18} color={focusedInput === 'loginId' ? colors.primary : colors.textMuted} style={themedStyles.inputIcon} />
                                         <TextInput
-                                            style={styles.input}
-                                            value={email}
-                                            onChangeText={setEmail}
-                                            placeholder="admin@kitchenmaster.com"
-                                            placeholderTextColor="rgba(255,255,255,0.3)"
+                                            style={themedStyles.input}
+                                            value={loginId}
+                                            onChangeText={setLoginId}
+                                            placeholder="admin@probloom.com or +1234..."
+                                            placeholderTextColor={colors.textMuted}
                                             keyboardType="email-address"
                                             autoCapitalize="none"
-                                            onFocus={() => setFocusedInput('email')}
+                                            onFocus={() => setFocusedInput('loginId')}
                                             onBlur={() => setFocusedInput(null)}
                                         />
                                     </View>
                                 </View>
 
-                                <View style={styles.formGroup}>
-                                    <Text style={styles.label}>Password</Text>
-                                    <View style={[styles.inputWrapper, focusedInput === 'password' && styles.inputWrapperFocused]}>
-                                        <Ionicons name="lock-closed" size={18} color={focusedInput === 'password' ? Colors.primary : Colors.textMuted} style={styles.inputIcon} />
+                                <View style={themedStyles.formGroup}>
+                                    <Text style={themedStyles.label}>Password</Text>
+                                    <View style={[themedStyles.inputWrapper, focusedInput === 'password' && themedStyles.inputWrapperFocused]}>
+                                        <Ionicons name="lock-closed" size={18} color={focusedInput === 'password' ? colors.primary : colors.textMuted} style={themedStyles.inputIcon} />
                                         <TextInput
-                                            style={styles.input}
+                                            style={themedStyles.input}
                                             value={password}
                                             onChangeText={setPassword}
                                             placeholder="••••••••"
-                                            placeholderTextColor="rgba(255,255,255,0.3)"
+                                            placeholderTextColor={colors.textMuted}
                                             secureTextEntry={!showPassword}
                                             onFocus={() => setFocusedInput('password')}
                                             onBlur={() => setFocusedInput(null)}
                                         />
-                                        <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
-                                            <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={20} color={Colors.textMuted} />
+                                        <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={themedStyles.eyeBtn}>
+                                            <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={20} color={colors.textMuted} />
                                         </TouchableOpacity>
                                     </View>
                                 </View>
 
-                                <TouchableOpacity style={styles.forgotBtn}>
-                                    <Text style={styles.forgotText}>Forgot password?</Text>
+                                <TouchableOpacity style={themedStyles.forgotBtn}>
+                                    <Text style={themedStyles.forgotText}>Forgot password?</Text>
                                 </TouchableOpacity>
 
                                 {/* GPS Status Indicator */}
-                                <View style={styles.gpsRow}>
+                                <View style={themedStyles.gpsRow}>
                                     <Ionicons
                                         name={gpsStatus === 'ready' ? 'location' : gpsStatus === 'fetching' ? 'navigate-outline' : 'location-outline'}
                                         size={14}
-                                        color={gpsStatus === 'ready' ? '#22c55e' : gpsStatus === 'fetching' ? '#f59e0b' : '#ef4444'}
+                                        color={gpsStatus === 'ready' ? colors.success : gpsStatus === 'fetching' ? colors.warning : colors.error}
                                     />
-                                    <Text style={[styles.gpsText, { color: gpsStatus === 'ready' ? '#22c55e' : gpsStatus === 'fetching' ? '#f59e0b' : '#ef4444' }]}>
+                                    <Text style={[themedStyles.gpsText, { color: gpsStatus === 'ready' ? colors.success : gpsStatus === 'fetching' ? colors.warning : colors.error }]}>
                                         {gpsStatus === 'ready' ? 'Location acquired' : gpsStatus === 'fetching' ? 'Getting your location…' : 'Location access denied — employees may be blocked'}
                                     </Text>
                                 </View>
 
                                 <Animated.View style={{ transform: [{ scale: btnScaleAnim }] }}>
                                     <TouchableOpacity
-                                        style={[styles.primaryBtn, (!email || !password || isLoading) && styles.primaryBtnDisabled]}
+                                        style={[themedStyles.primaryBtn, (!loginId || !password || isLoading) && themedStyles.primaryBtnDisabled]}
                                         onPress={handleLogin}
-                                        disabled={isLoading || !email || !password}
+                                        disabled={isLoading || !loginId || !password}
                                         activeOpacity={0.9}
                                     >
                                         <LinearGradient
-                                            colors={(!email || !password) ? ['rgba(255,107,53,0.5)', 'rgba(229,90,36,0.5)'] : ['#FF8A5C', '#FF6B35']}
+                                            colors={(!loginId || !password) ? [colors.primary + '80', colors.primary + '80'] : gradients.primary}
                                             style={StyleSheet.absoluteFillObject}
                                             start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                                         />
-                                        <Text style={styles.primaryBtnText}>{isLoading ? 'Authenticating...' : 'Sign In'}</Text>
-                                        {!isLoading && <Ionicons name="arrow-forward" size={18} color={Colors.white} style={{ marginLeft: 8 }} />}
+                                        <Text style={themedStyles.primaryBtnText}>{isLoading ? 'Authenticating...' : 'Sign In'}</Text>
+                                        {!isLoading && <Ionicons name="arrow-forward" size={18} color={colors.white} style={{ marginLeft: 8 }} />}
                                     </TouchableOpacity>
                                 </Animated.View>
 
                             </BlurView>
                         </View>
 
-                        <View style={styles.footer}>
-                            <Text style={styles.footerText}>New to Kitchen Master?</Text>
-                            <TouchableOpacity onPress={() => navigation.navigate('Register')} activeOpacity={0.7}>
-                                <Text style={styles.footerLink}> Create an account</Text>
+                        <View style={themedStyles.footer}>
+                            <Text style={themedStyles.footerText}>New to ProBloom?</Text>
+                            <TouchableOpacity onPress={() => Linking.openURL('https://probloom.com')} activeOpacity={0.7}>
+                                <Text style={themedStyles.footerLink}> Purchase Credentials</Text>
                             </TouchableOpacity>
                         </View>
 
@@ -229,41 +254,47 @@ export default function LoginScreen({ navigation }: any) {
     );
 }
 
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#05050A' },
+const createStyles = (colors: any, gradients: any, isDark: boolean) => StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background[0] },
     flex: { flex: 1 },
-    orb: { position: 'absolute', width: width * 1.2, height: width * 1.2, borderRadius: width * 0.6, filter: [{ blur: 80 }] as any, opacity: 0.15 },
-    orbTopRight: { backgroundColor: '#FF6B35', top: -width * 0.4, right: -width * 0.2 },
-    orbBottomLeft: { backgroundColor: '#4C8EFF', bottom: -width * 0.4, left: -width * 0.3 },
+    orb: { position: 'absolute', width: width * 1.2, height: width * 1.2, borderRadius: width * 0.6, opacity: 0.15 },
+    orbTopRight: { backgroundColor: colors.primary, top: -width * 0.4, right: -width * 0.2 },
+    orbBottomLeft: { backgroundColor: colors.accentBlue || '#4C8EFF', bottom: -width * 0.4, left: -width * 0.3 },
     settingsArea: { position: 'absolute', top: 0, right: 0, zIndex: 50 },
-    settingsBtn: { margin: Spacing.xl, width: 44, height: 44, borderRadius: 22, overflow: 'hidden', justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+    settingsBtn: { margin: Spacing.xl, width: 44, height: 44, borderRadius: 22, overflow: 'hidden', justifyContent: 'center', alignItems: 'center', backgroundColor: colors.glass, borderWidth: 1, borderColor: colors.border },
     scrollContent: { flexGrow: 1, justifyContent: 'center', padding: Spacing.xl },
     contentWrapper: { width: '100%', maxWidth: 440, alignSelf: 'center' },
     header: { alignItems: 'center', marginBottom: Spacing.xxxl },
     logoWrapper: { position: 'relative', width: 80, height: 80, justifyContent: 'center', alignItems: 'center', marginBottom: Spacing.xl },
-    logoCircle: { width: 64, height: 64, borderRadius: 24, justifyContent: 'center', alignItems: 'center', zIndex: 10, ...Shadows.primary },
-    logoOuterGlow: { position: 'absolute', width: 80, height: 80, borderRadius: 30, backgroundColor: 'rgba(255,107,53,0.15)', borderWidth: 1, borderColor: 'rgba(255,107,53,0.3)' },
-    title: { ...Typography.h1, color: Colors.white, marginBottom: Spacing.sm, letterSpacing: -0.5 },
-    subtitle: { ...Typography.body1, color: Colors.textSecondary, textAlign: 'center', paddingHorizontal: Spacing.xl },
-    glassContainer: { borderRadius: Radius.xl, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', backgroundColor: 'rgba(20,22,35,0.4)', ...Shadows.lg },
+    logoCircle: { width: 72, height: 72, borderRadius: 20, justifyContent: 'center', alignItems: 'center', zIndex: 10, backgroundColor: 'white', overflow: 'hidden', ...Shadows.primary },
+    logoImage: { width: '100%', height: '100%' },
+    logoOuterGlow: { position: 'absolute', width: 80, height: 80, borderRadius: 30, backgroundColor: colors.primary + '26', borderWidth: 1, borderColor: colors.primary + '4D' },
+    title: { ...Typography.h1, color: colors.textPrimary, marginBottom: Spacing.sm, letterSpacing: -0.5 },
+    subtitle: { ...Typography.body1, color: colors.textSecondary, textAlign: 'center', paddingHorizontal: Spacing.xl },
+    glassContainer: { borderRadius: Radius.xl, overflow: 'hidden', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, ...Shadows.lg },
     glassBlur: { padding: Spacing.xxl },
-    errorBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,74,74,0.15)', padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1, borderColor: 'rgba(255,74,74,0.3)', marginBottom: Spacing.xl, gap: 10 },
-    errorText: { flex: 1, ...Typography.body2, color: '#FF9E9E' },
+    errorBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.error + '26', padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1, borderColor: colors.error + '4D', marginBottom: Spacing.xl, gap: 10 },
+    errorText: { flex: 1, ...Typography.body2, color: colors.error },
     formGroup: { marginBottom: Spacing.xl },
-    label: { ...Typography.overline, color: Colors.textSecondary, marginBottom: Spacing.sm, letterSpacing: 1.5 },
-    inputWrapper: { flexDirection: 'row', alignItems: 'center', height: 56, backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: Radius.md, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)', paddingHorizontal: Spacing.lg },
-    inputWrapperFocused: { backgroundColor: 'rgba(255,107,53,0.05)', borderColor: 'rgba(255,107,53,0.4)' },
+    label: { ...Typography.overline, color: colors.textSecondary, marginBottom: Spacing.sm, letterSpacing: 1.5 },
+    inputWrapper: { flexDirection: 'row', alignItems: 'center', height: 56, backgroundColor: colors.glass, borderRadius: Radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: Spacing.lg },
+    inputWrapperFocused: { backgroundColor: colors.primary + '0D', borderColor: colors.primary + '66' },
     inputIcon: { marginRight: Spacing.md },
-    input: { flex: 1, ...Typography.body1, color: Colors.white, height: '100%' },
+    input: { flex: 1, ...Typography.body1, color: colors.textPrimary, height: '100%' },
     eyeBtn: { padding: Spacing.sm, marginRight: -Spacing.sm },
     forgotBtn: { alignSelf: 'flex-end', marginBottom: Spacing.xxl },
-    forgotText: { ...Typography.body2, color: Colors.textSecondary, fontWeight: '500' },
+    forgotText: { ...Typography.body2, color: colors.textSecondary, fontWeight: '500' },
     primaryBtn: { height: 56, borderRadius: Radius.md, overflow: 'hidden', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', ...Shadows.primary },
     primaryBtnDisabled: { opacity: 0.7 },
-    primaryBtnText: { ...Typography.button, color: Colors.white, letterSpacing: 0.5 },
+    primaryBtnText: { ...Typography.button, color: colors.white, letterSpacing: 0.5 },
     footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: Spacing.xxxl },
-    footerText: { ...Typography.body1, color: Colors.textSecondary },
-    footerLink: { ...Typography.body1, color: Colors.white, fontWeight: '600' },
+    footerText: { ...Typography.body1, color: colors.textSecondary },
+    footerLink: { ...Typography.body1, color: colors.textPrimary, fontWeight: '600' },
     gpsRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: Spacing.xl, paddingHorizontal: 4 },
     gpsText: { ...Typography.caption, fontSize: 12, flex: 1 },
+    tabsRow: { flexDirection: 'row', backgroundColor: colors.glass, borderRadius: Radius.md, padding: 4, marginBottom: Spacing.xl, borderWidth: 1, borderColor: colors.border },
+    tabBtn: { flex: 1, paddingVertical: 12, borderRadius: Radius.sm, alignItems: 'center', justifyContent: 'center' },
+    activeTabBtn: { backgroundColor: colors.primary + '26', borderWidth: 1, borderColor: colors.primary + '33' },
+    tabText: { ...Typography.body2, color: colors.textSecondary, fontWeight: '600' },
+    activeTabText: { color: colors.primary, fontWeight: '700' },
 });

@@ -4,16 +4,14 @@ description: How to start the Kitchen Master application (Backend and Frontend)
 
 To start the Kitchen Master application, follow these steps:
 
-### 1. Start the Backend Server
+### 1. Start the Java Backend (backend2)
 Open a new terminal and run:
 ```powershell
-cd 'C:\FILES\KITCHEN MASTER\backend'
-npm run dev
+cd 'C:\FILES\KITCHEN MASTER\backend2'
+$env:JAVA_HOME="C:\Program Files\Eclipse Adoptium\jdk-17.0.18.8-hotspot"; $env:Path="$env:JAVA_HOME\bin;$env:Path"; & "C:\Program Files\apache-maven-3.9.14\bin\mvn.cmd" spring-boot:run
 ```
-The backend will print a box showing your **LAN IP address** — for example:
-```
-║   http://192.168.1.5:5000   ║
-```
+The backend will start on port **8080**.
+Wait until you see `Started KitchenMasterApplication`.
 **Copy that IP** — you'll need it to configure the app on your phone.
 
 ---

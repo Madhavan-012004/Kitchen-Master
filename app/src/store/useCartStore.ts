@@ -21,6 +21,8 @@ interface CartState {
     orderNotes: string;
     discountType: 'none' | 'percentage' | 'flat';
     discountValue: number;
+    extraCharges: { name: string; amount: number }[];
+    orderCreatedAt: string | null;
     addItem: (item: CartItem) => void;
     removeItem: (menuItemId: string) => void;
     updateQuantity: (menuItemId: string, qty: number) => void;
@@ -28,13 +30,16 @@ interface CartState {
     setTableNumber: (t: string) => void;
     setOrderNotes: (n: string) => void;
     setDiscount: (type: 'none' | 'percentage' | 'flat', value: number) => void;
+    setExtraCharges: (charges: { name: string; amount: number }[]) => void;
     loadOrder: (order: any) => void;
     clearCart: () => void;
     getSubtotal: () => number;
     getTaxAmount: () => number;
     getDiscountAmount: () => number;
+    getExtraChargesTotal: () => number;
     getTotal: () => number;
     markItemServed: (menuItemId: string) => void;
+    markAllServed: () => void;
     addBulkItems: (items: CartItem[]) => void;
 }
 
@@ -45,6 +50,8 @@ export const useCartStore = create<CartState>((set, get) => ({
     orderNotes: '',
     discountType: 'none',
     discountValue: 0,
+    extraCharges: [],
+    orderCreatedAt: null,
 
     addItem: (item) =>
         set((state) => {
@@ -64,23 +71,24 @@ export const useCartStore = create<CartState>((set, get) => ({
         }),
 
     removeItem: (menuItemId) =>
-        set((state) => ({ items: state.items.filter((i) => i.menuItemId !== menuItemId) })),
+        set((state) => ({ items: state.items.filter((i) => (i._id || i.menuItemId) !== menuItemId) })),
 
     updateQuantity: (menuItemId, qty) =>
         set((state) => ({
             items: qty <= 0
-                ? state.items.filter((i) => i.menuItemId !== menuItemId)
-                : state.items.map((i) => (i.menuItemId === menuItemId ? { ...i, quantity: qty } : i)),
+                ? state.items.filter((i) => (i._id || i.menuItemId) !== menuItemId)
+                : state.items.map((i) => ((i._id || i.menuItemId) === menuItemId ? { ...i, quantity: qty } : i)),
         })),
 
     updateNotes: (menuItemId, notes) =>
         set((state) => ({
-            items: state.items.map((i) => (i.menuItemId === menuItemId ? { ...i, notes } : i)),
+            items: state.items.map((i) => ((i._id || i.menuItemId) === menuItemId ? { ...i, notes } : i)),
         })),
 
     setTableNumber: (tableNumber) => set({ tableNumber }),
     setOrderNotes: (orderNotes) => set({ orderNotes }),
     setDiscount: (discountType, discountValue) => set({ discountType, discountValue }),
+    setExtraCharges: (extraCharges) => set({ extraCharges }),
 
     loadOrder: (order) => set({
         items: order.items || [],
@@ -89,10 +97,21 @@ export const useCartStore = create<CartState>((set, get) => ({
         orderNotes: order.notes || '',
         discountType: order.discountType || 'none',
         discountValue: order.discountValue || 0,
+        extraCharges: order.extraCharges || [],
+        orderCreatedAt: order.createdAt || null,
     }),
 
     clearCart: () =>
-        set({ items: [], tableNumber: 'Takeaway', orderId: null, orderNotes: '', discountType: 'none', discountValue: 0 }),
+        set({
+            items: [],
+            tableNumber: 'Takeaway',
+            orderId: null,
+            orderNotes: '',
+            discountType: 'none',
+            discountValue: 0,
+            extraCharges: [],
+            orderCreatedAt: null
+        }),
 
     getSubtotal: () => {
         const { items } = get();
@@ -112,16 +131,33 @@ export const useCartStore = create<CartState>((set, get) => ({
         return 0;
     },
 
+    getExtraChargesTotal: () => {
+        const { extraCharges } = get();
+        return extraCharges.reduce((sum, c) => sum + (c.amount || 0), 0);
+    },
+
     getTotal: () => {
         const subtotal = get().getSubtotal();
         const tax = get().getTaxAmount();
         const discount = get().getDiscountAmount();
-        return Math.max(0, subtotal + tax - discount);
+        const extra = get().getExtraChargesTotal();
+        return Math.max(0, subtotal + tax + extra - discount);
     },
 
     markItemServed: (menuItemId) =>
         set((state) => ({
-            items: state.items.map((i) => i.menuItemId === menuItemId ? { ...i, status: 'served' } : i)
+            items: state.items.map((i) => 
+                (i.menuItemId === menuItemId || i._id === menuItemId) 
+                ? { ...i, status: 'SERVED' } : i
+            )
+        })),
+
+    markAllServed: () =>
+        set((state) => ({
+            items: state.items.map((i) => 
+                (i.status?.toUpperCase() === 'READY') 
+                ? { ...i, status: 'SERVED' } : i
+            )
         })),
 
     addBulkItems: (newItems) =>
@@ -136,7 +172,7 @@ export const useCartStore = create<CartState>((set, get) => ({
                             : i
                     );
                 } else {
-                    currentItems.push({ ...item, _id: undefined, status: 'preparing' });
+                    currentItems.push({ ...item, _id: undefined, status: 'PREPARING' });
                 }
             });
             return { items: currentItems };

@@ -1,0 +1,340 @@
+/* ═══════════════════════════════════════════════════════════════
+   NetworkErrorOverlay.css — Web POS Dashboard
+   Uses: Dark Teal palette + Neon Lime accent (#C6F53D)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Overlay backdrop ── */
+.neo-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(8, 19, 18, 0.82);
+    backdrop-filter: blur(12px) saturate(1.4);
+    -webkit-backdrop-filter: blur(12px) saturate(1.4);
+    transition: opacity 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+    overflow: hidden;
+}
+
+.neo-overlay--visible {
+    opacity: 1;
+    pointer-events: all;
+}
+
+.neo-overlay--hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* ── Background particles ── */
+.neo-particles {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.neo-particle {
+    position: absolute;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(198, 245, 61, 0.08) 0%, transparent 70%);
+    animation: neo-drift linear infinite;
+}
+
+.neo-particle--1 { width: 300px; height: 300px; top: -10%; left: -5%; animation-duration: 18s; }
+.neo-particle--2 { width: 200px; height: 200px; top: 60%; right: -5%; animation-duration: 22s; animation-delay: -4s; }
+.neo-particle--3 { width: 150px; height: 150px; bottom: -5%; left: 30%; animation-duration: 15s; animation-delay: -8s; }
+.neo-particle--4 { width: 250px; height: 250px; top: 20%; right: 10%; animation-duration: 20s; animation-delay: -2s; }
+.neo-particle--5 { width: 100px; height: 100px; top: 70%; left: 10%; animation-duration: 12s; animation-delay: -6s; }
+.neo-particle--6 { width: 180px; height: 180px; top: 5%; left: 55%; animation-duration: 25s; animation-delay: -10s; }
+
+@keyframes neo-drift {
+    0% { transform: translateY(0) scale(1); opacity: 0.6; }
+    50% { transform: translateY(-40px) scale(1.1); opacity: 1; }
+    100% { transform: translateY(0) scale(1); opacity: 0.6; }
+}
+
+/* ── Main panel ── */
+.neo-panel {
+    position: relative;
+    background: linear-gradient(145deg, #0F1D1B, #132221);
+    border: 1px solid rgba(198, 245, 61, 0.18);
+    border-radius: 24px;
+    padding: 40px 44px 36px;
+    width: min(480px, calc(100vw - 40px));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 0;
+    box-shadow:
+        0 0 0 1px rgba(198, 245, 61, 0.06),
+        0 20px 60px rgba(0, 0, 0, 0.7),
+        0 0 80px rgba(198, 245, 61, 0.06) inset;
+    animation: neo-panel-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes neo-panel-in {
+    from { transform: translateY(32px) scale(0.96); opacity: 0; }
+    to   { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+/* Top accent strip */
+.neo-glow-strip {
+    position: absolute;
+    top: 0;
+    left: 15%;
+    right: 15%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #C6F53D, transparent);
+    border-radius: 1px;
+    box-shadow: 0 0 16px 2px rgba(198, 245, 61, 0.5);
+}
+
+/* ── Icon area ── */
+.neo-icon-wrapper {
+    position: relative;
+    width: 100px;
+    height: 100px;
+    margin-bottom: 20px;
+}
+
+.neo-icon-bg {
+    width: 100px;
+    height: 100px;
+    background: radial-gradient(circle, rgba(198, 245, 61, 0.08) 0%, rgba(198, 245, 61, 0.02) 70%);
+    border: 1.5px solid rgba(198, 245, 61, 0.2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.neo-wifi-icon {
+    width: 56px;
+    height: 56px;
+}
+
+/* Arc animations */
+.neo-arc {
+    stroke-dasharray: 100;
+    stroke-dashoffset: 100;
+    animation: neo-arc-draw 0.6s ease forwards;
+}
+.neo-arc--1 { animation-delay: 0.1s; }
+.neo-arc--2 { animation-delay: 0.25s; }
+.neo-arc--3 { animation-delay: 0.4s; }
+
+@keyframes neo-arc-draw {
+    to { stroke-dashoffset: 0; }
+}
+
+/* Slash animation */
+.neo-slash {
+    stroke-dasharray: 70;
+    stroke-dashoffset: 70;
+    animation: neo-slash-in 0.4s 0.6s ease forwards;
+}
+@keyframes neo-slash-in {
+    to { stroke-dashoffset: 0; }
+}
+
+/* Pulse rings */
+.neo-pulse-ring {
+    position: absolute;
+    inset: -8px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(198, 245, 61, 0.15);
+    animation: neo-pulse 2.5s ease-out infinite;
+}
+.neo-pulse-ring--2 {
+    inset: -18px;
+    animation-delay: 0.8s;
+}
+@keyframes neo-pulse {
+    0%   { transform: scale(0.92); opacity: 0.6; }
+    60%  { transform: scale(1.08); opacity: 0.1; }
+    100% { transform: scale(1.08); opacity: 0; }
+}
+
+/* ── Status chip ── */
+.neo-status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    border-radius: 999px;
+    padding: 5px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #ef4444;
+    letter-spacing: 0.03em;
+    margin-bottom: 18px;
+}
+
+.neo-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #ef4444;
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.8);
+    animation: neo-blink 1.2s ease-in-out infinite;
+}
+@keyframes neo-blink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.3; }
+}
+
+.neo-status-code {
+    background: rgba(239, 68, 68, 0.15);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 10px;
+    color: #fca5a5;
+}
+
+/* ── Text ── */
+.neo-title {
+    font-size: 22px;
+    font-weight: 800;
+    color: #FFFFFF;
+    letter-spacing: -0.02em;
+    margin-bottom: 10px;
+    line-height: 1.2;
+}
+
+.neo-subtitle {
+    font-size: 13.5px;
+    color: #B0BFBD;
+    line-height: 1.6;
+    max-width: 320px;
+    margin-bottom: 28px;
+}
+
+/* ── Retry section ── */
+.neo-retry-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 14px;
+}
+
+.neo-retry-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #C6F53D;
+    color: #0F1D1B;
+    font-weight: 700;
+    font-size: 14px;
+    border: none;
+    border-radius: 12px;
+    padding: 13px 28px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    letter-spacing: 0.01em;
+    box-shadow: 0 4px 20px rgba(198, 245, 61, 0.25);
+}
+
+.neo-retry-btn:hover:not(:disabled) {
+    background: #d9ff55;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 28px rgba(198, 245, 61, 0.4);
+}
+
+.neo-retry-btn:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.neo-retry-btn--loading {
+    background: rgba(198, 245, 61, 0.3);
+    color: #C6F53D;
+    cursor: not-allowed;
+}
+
+.neo-retry-icon {
+    width: 16px;
+    height: 16px;
+}
+
+.neo-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(198, 245, 61, 0.3);
+    border-top-color: #C6F53D;
+    border-radius: 50%;
+    animation: neo-spin 0.7s linear infinite;
+    display: inline-block;
+}
+
+@keyframes neo-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ── Countdown ring ── */
+.neo-countdown {
+    position: relative;
+    width: 52px;
+    height: 52px;
+    flex-shrink: 0;
+}
+
+.neo-countdown-svg {
+    width: 52px;
+    height: 52px;
+    transform: rotate(-90deg);
+}
+
+.neo-countdown-track {
+    fill: none;
+    stroke: rgba(198, 245, 61, 0.1);
+    stroke-width: 3;
+}
+
+.neo-countdown-progress {
+    fill: none;
+    stroke: #C6F53D;
+    stroke-width: 3;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.9s linear;
+    filter: drop-shadow(0 0 4px rgba(198, 245, 61, 0.6));
+}
+
+.neo-countdown-num {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+    color: #C6F53D;
+}
+
+/* ── Footer notes ── */
+.neo-auto-text {
+    font-size: 11.5px;
+    color: #6B8A87;
+    margin-bottom: 20px;
+    letter-spacing: 0.02em;
+}
+
+.neo-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #6B8A87;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.neo-brand-dot {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: rgba(198, 245, 61, 0.4);
+}

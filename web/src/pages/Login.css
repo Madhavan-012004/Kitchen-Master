@@ -12,8 +12,8 @@
     position: absolute;
     inset: 0;
     background:
-        radial-gradient(ellipse 60% 50% at 30% 40%, rgba(255, 107, 53, 0.08) 0%, transparent 70%),
-        radial-gradient(ellipse 50% 60% at 80% 70%, rgba(100, 70, 255, 0.06) 0%, transparent 70%);
+        radial-gradient(ellipse 60% 50% at 30% 40%, rgba(198, 245, 61, 0.08) 0%, transparent 70%),
+        radial-gradient(ellipse 50% 60% at 80% 70%, rgba(10, 90, 80, 0.15) 0%, transparent 70%);
     pointer-events: none;
 }
 
@@ -36,15 +36,22 @@
 }
 
 .login-logo-icon {
-    font-size: 36px;
-    background: var(--accent-light);
-    border-radius: 12px;
-    width: 56px;
-    height: 56px;
+    background: var(--bg-hover);
+    border-radius: 16px;
+    width: 64px;
+    height: 64px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid rgba(255, 107, 53, 0.2);
+    border: 1px solid var(--accent-light);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+}
+
+.login-logo-img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
 }
 
 .login-title {
@@ -61,6 +68,35 @@
     text-transform: uppercase;
     letter-spacing: 0.08em;
 }
+
+.login-tabs {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 24px;
+    background: rgba(0,0,0,0.4);
+    padding: 6px;
+    border-radius: 12px;
+}
+
+.login-tab {
+    flex: 1;
+    background: transparent;
+    color: var(--text-muted);
+    border: none;
+    padding: 10px 0;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.login-tab.active {
+    background: var(--accent);
+    color: var(--accent-text);
+    box-shadow: 0 4px 12px rgba(198, 245, 61, 0.3);
+}
+
 
 .login-form {
     display: flex;
@@ -82,6 +118,26 @@
     letter-spacing: 0.06em;
 }
 
+.login-field input {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.login-field input:focus {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+/* Fix browser autofill enforcing white backgrounds over white text in dark mode */
+.login-field input:-webkit-autofill,
+.login-field input:-webkit-autofill:hover, 
+.login-field input:-webkit-autofill:focus, 
+.login-field input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 30px var(--bg-hover) inset !important;
+    -webkit-text-fill-color: var(--text-primary) !important;
+    transition: background-color 5000s ease-in-out 0s;
+}
+
 .login-error {
     background: rgba(239, 68, 68, 0.1);
     border: 1px solid rgba(239, 68, 68, 0.3);
@@ -92,21 +148,49 @@
 }
 
 .login-btn {
-    background: linear-gradient(135deg, #FF8A5C, #FF6B35);
-    color: white;
+    background: var(--accent);
+    color: var(--accent-text);
     border-radius: var(--radius-md);
     padding: 14px;
     font-weight: 700;
     font-size: 15px;
     margin-top: 8px;
     letter-spacing: 0.02em;
-    box-shadow: 0 8px 24px rgba(255, 107, 53, 0.3);
+    box-shadow: 0 8px 24px var(--accent-glow);
     transition: all 0.2s;
+}
+
+.password-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.password-input-wrapper input {
+    padding-right: 48px;
+}
+
+.password-toggle {
+    position: absolute;
+    right: 12px;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s;
+    z-index: 2;
+}
+
+.password-toggle:hover {
+    color: var(--text-primary);
 }
 
 .login-btn:hover:not(:disabled) {
     transform: translateY(-1px);
-    box-shadow: 0 12px 30px rgba(255, 107, 53, 0.4);
+    box-shadow: 0 12px 30px rgba(198, 245, 61, 0.4);
 }
 
 .login-btn:active:not(:disabled) {

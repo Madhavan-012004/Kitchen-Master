@@ -1,0 +1,308 @@
+/* ═══════════════════════════════════════════════════════════════
+   NetworkErrorOverlay.css — cous_web Customer QR App
+   Uses: #FF4D4D red, #080808 dark, Outfit font, radius: 20px
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Overlay ── */
+.cw-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(8, 8, 8, 0.88);
+    backdrop-filter: blur(14px) saturate(1.3);
+    -webkit-backdrop-filter: blur(14px) saturate(1.3);
+    font-family: 'Outfit', 'Inter', system-ui, sans-serif;
+    overflow: hidden;
+    transition: opacity 0.5s ease;
+}
+
+.cw-overlay--in  { opacity: 1; pointer-events: all; }
+.cw-overlay--out { opacity: 0; pointer-events: none; }
+
+/* ── Floating food emoji particles ── */
+.cw-floaties {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.cw-floaty {
+    position: absolute;
+    font-size: 28px;
+    opacity: 0.12;
+    animation: cw-float linear infinite;
+    user-select: none;
+}
+
+.cw-floaty--1  { left: 5%;  top: 15%; animation-duration: 14s; animation-delay: 0s; }
+.cw-floaty--2  { left: 80%; top: 20%; animation-duration: 18s; animation-delay: -3s; }
+.cw-floaty--3  { left: 20%; top: 75%; animation-duration: 12s; animation-delay: -6s; }
+.cw-floaty--4  { left: 65%; top: 70%; animation-duration: 16s; animation-delay: -2s; }
+.cw-floaty--5  { left: 45%; top: 5%;  animation-duration: 20s; animation-delay: -9s; }
+.cw-floaty--6  { left: 88%; top: 55%; animation-duration: 15s; animation-delay: -4s; }
+
+@keyframes cw-float {
+    0%   { transform: translateY(0) rotate(0deg);  }
+    33%  { transform: translateY(-24px) rotate(8deg);  }
+    66%  { transform: translateY(12px) rotate(-5deg); }
+    100% { transform: translateY(0) rotate(0deg);  }
+}
+
+/* ── Panel ── */
+.cw-panel {
+    position: relative;
+    background: linear-gradient(160deg, #0E0E0E 0%, #1a0a0a 100%);
+    border: 1px solid rgba(255, 77, 77, 0.18);
+    border-radius: 28px;
+    padding: 42px 40px 36px;
+    width: min(440px, calc(100vw - 32px));
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 0;
+    box-shadow:
+        0 0 0 1px rgba(255, 77, 77, 0.07),
+        0 24px 64px rgba(0, 0, 0, 0.85),
+        0 0 100px rgba(255, 77, 77, 0.06) inset;
+    animation: cw-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes cw-pop {
+    from { transform: scale(0.88) translateY(24px); opacity: 0; }
+    to   { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+.cw-panel-glow {
+    position: absolute;
+    top: 0;
+    left: 20%;
+    right: 20%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #FF4D4D, transparent);
+    border-radius: 1px;
+    box-shadow: 0 0 20px 4px rgba(255, 77, 77, 0.45);
+}
+
+/* ── Icon area ── */
+.cw-icon-area {
+    margin-bottom: 22px;
+}
+
+.cw-icon-ring {
+    position: relative;
+    width: 96px;
+    height: 96px;
+    background: radial-gradient(circle, rgba(255, 77, 77, 0.08) 0%, rgba(255, 77, 77, 0.02) 70%);
+    border: 1.5px solid rgba(255, 77, 77, 0.2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+}
+
+.cw-wifi-svg {
+    width: 54px;
+    height: 54px;
+}
+
+/* Arcs */
+.cw-arc {
+    stroke-dasharray: 100;
+    stroke-dashoffset: 100;
+    animation: cw-arc-in 0.6s ease forwards;
+}
+.cw-arc--1 { animation-delay: 0.1s; }
+.cw-arc--2 { animation-delay: 0.25s; }
+.cw-arc--3 { animation-delay: 0.4s; }
+
+@keyframes cw-arc-in {
+    to { stroke-dashoffset: 0; }
+}
+
+/* X line */
+.cw-xline {
+    stroke-dasharray: 80;
+    stroke-dashoffset: 80;
+    animation: cw-arc-in 0.4s 0.6s ease forwards;
+}
+
+/* Pulse ring */
+.cw-ring-pulse {
+    position: absolute;
+    inset: -10px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(255, 77, 77, 0.12);
+    animation: cw-ring-anim 2.2s ease-out infinite;
+}
+@keyframes cw-ring-anim {
+    0%   { transform: scale(0.9); opacity: 0.7; }
+    70%  { transform: scale(1.12); opacity: 0.08; }
+    100% { transform: scale(1.12); opacity: 0; }
+}
+
+/* ── Badge ── */
+.cw-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: rgba(255, 77, 77, 0.1);
+    border: 1px solid rgba(255, 77, 77, 0.22);
+    border-radius: 999px;
+    padding: 5px 14px;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: #FF6B6B;
+    letter-spacing: 0.02em;
+    margin-bottom: 16px;
+}
+
+.cw-badge-code {
+    background: rgba(255, 77, 77, 0.15);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 10px;
+    color: #fca5a5;
+}
+
+/* ── Text ── */
+.cw-title {
+    font-size: 21px;
+    font-weight: 800;
+    color: #F0F0F0;
+    letter-spacing: -0.02em;
+    margin-bottom: 10px;
+    line-height: 1.25;
+}
+
+.cw-tip {
+    font-size: 13.5px;
+    color: rgba(255, 255, 255, 0.45);
+    line-height: 1.6;
+    max-width: 300px;
+    margin-bottom: 26px;
+}
+
+/* ── Retry ── */
+.cw-retry-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 12px;
+}
+
+.cw-retry-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #FF4D4D;
+    color: #fff;
+    font-family: 'Outfit', 'Inter', sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    border: none;
+    border-radius: 14px;
+    padding: 13px 30px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 6px 24px rgba(255, 77, 77, 0.3);
+    letter-spacing: 0.01em;
+}
+
+.cw-retry-btn:hover:not(:disabled) {
+    background: #ff6b6b;
+    transform: translateY(-2px);
+    box-shadow: 0 10px 32px rgba(255, 77, 77, 0.45);
+}
+
+.cw-retry-btn:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.cw-retry-btn--spin {
+    background: rgba(255, 77, 77, 0.25);
+    cursor: not-allowed;
+}
+
+.cw-retry-arrow {
+    font-size: 18px;
+    font-weight: 900;
+}
+
+.cw-btn-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: cw-spin 0.7s linear infinite;
+    display: inline-block;
+}
+@keyframes cw-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ── Countdown ── */
+.cw-cd-wrap {
+    position: relative;
+    width: 50px;
+    height: 50px;
+    flex-shrink: 0;
+}
+
+.cw-cd-wrap svg {
+    width: 50px;
+    height: 50px;
+    transform: rotate(-90deg);
+}
+
+.cw-cd-track {
+    fill: none;
+    stroke: rgba(255, 77, 77, 0.1);
+    stroke-width: 3;
+}
+
+.cw-cd-ring {
+    fill: none;
+    stroke: #FF4D4D;
+    stroke-width: 3;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.9s linear;
+    filter: drop-shadow(0 0 4px rgba(255, 77, 77, 0.55));
+}
+
+.cw-cd-num {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    color: #FF4D4D;
+}
+
+/* ── Footer ── */
+.cw-auto-note {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.25);
+    margin-bottom: 20px;
+    letter-spacing: 0.03em;
+}
+
+.cw-brand {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.2);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}

@@ -1,0 +1,175 @@
+.qm-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    backdrop-filter: blur(4px);
+}
+
+.qm-modal {
+    background: white;
+    width: 900px;
+    max-width: 95vw;
+    max-height: 85vh;
+    border-radius: 16px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+    display: flex;
+    flex-direction: column;
+    animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.qm-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem 2rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.qm-header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    color: #0f172a;
+}
+
+.qm-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: #94a3b8;
+    cursor: pointer;
+    padding: 0.5rem;
+}
+
+.qm-close:hover {
+    color: #0f172a;
+}
+
+.qm-body {
+    padding: 2rem;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.qm-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.qm-table th {
+    text-align: left;
+    padding: 1rem;
+    color: #64748b;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.qm-table td {
+    padding: 1rem;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+}
+
+.qm-row-called {
+    background: #eff6ff;
+}
+
+.qm-token {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #2563eb;
+    font-family: monospace;
+}
+
+.qm-name {
+    font-weight: 600;
+    color: #1e293b;
+    font-size: 1.1rem;
+}
+
+.qm-phone {
+    color: #64748b;
+    font-size: 0.9rem;
+}
+
+.qm-status {
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.qm-status-waiting {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.qm-status-called {
+    background: #dbeafe;
+    color: #2563eb;
+    animation: blinkText 2s infinite;
+}
+
+.qm-time {
+    color: #475569;
+    font-weight: 500;
+}
+
+.qm-time-critical {
+    color: #ef4444;
+    font-weight: 700;
+}
+
+.qm-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.qm-btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.85rem;
+}
+
+.qm-btn-call {
+    background: #2563eb;
+    color: white;
+}
+.qm-btn-call:hover { background: #1d4ed8; }
+
+.qm-btn-seat {
+    background: #10b981;
+    color: white;
+}
+.qm-btn-seat:hover { background: #059669; }
+
+.qm-btn-cancel {
+    background: #f1f5f9;
+    color: #ef4444;
+    padding: 8px 12px;
+}
+.qm-btn-cancel:hover { background: #fee2e2; }
+
+@keyframes slideUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes blinkText {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}

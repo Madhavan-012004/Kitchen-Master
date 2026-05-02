@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
 *,
 *::before,
 *::after {
@@ -7,56 +9,77 @@
 }
 
 :root {
-  --sidebar-width: 220px;
-  --left-panel-width: 320px;
-  --accent: #FF6B35;
-  --accent-light: rgba(255, 107, 53, 0.12);
-  --accent-glow: rgba(255, 107, 53, 0.25);
-  --success: #22c55e;
-  --warning: #f59e0b;
+  --sidebar-width: 240px;
+  --left-panel-width: 340px;
+
+  /* ── NEW BRAND PALETTE: Dark Teal + Neon Lime ── */
+  --accent: #C6F53D;
+  --accent-dark: #a8d42e;
+  --accent-light: rgba(198, 245, 61, 0.12);
+  --accent-glow: rgba(198, 245, 61, 0.25);
+  --accent-text: #0F1D1B;
+  /* Dark text on lime bg for contrast */
+
+  /* Status */
+  --success: #2DD479;
+  --success-light: rgba(45, 212, 121, 0.12);
+  --success-text: #2DD479;
+  --warning: #F59E0B;
+  --warning-light: rgba(245, 158, 11, 0.12);
   --danger: #ef4444;
+  --danger-light: rgba(239, 68, 68, 0.12);
+  --danger-text: #ef4444;
+
+  /* Border radius */
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
   --radius-xl: 20px;
+
   --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
-body.dark-mode {
-  --bg-primary: #121212;
-  /* Deep Gray instead of Blue-Black */
-  --bg-secondary: #1e1e1e;
-  /* Gray Secondary */
-  --bg-card: #252525;
-  /* Lighter Gray for Cards */
-  --bg-hover: #2d2d2d;
-  --text-primary: #ffffff;
-  --text-secondary: #e0e0e0;
-  --text-muted: #b0b0b0;
-  --border: rgba(255, 255, 255, 0.12);
-  --border-hover: rgba(255, 255, 255, 0.2);
-  --shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
-  --danger-light: rgba(239, 68, 68, 0.2);
-  --danger-text: #ff8a8a;
-  --success-light: rgba(34, 197, 94, 0.2);
-  --success-text: #a7f3d0;
+/* ── DARK MODE (Default / Primary) ── */
+:root,
+.dark-mode {
+  --bg-primary: #081312;
+  --bg-secondary: #0F1D1B;
+  --bg-card: #132221;
+  --bg-elevated: #1A2F2D;
+  --bg-hover: #1F3835;
+  --text-primary: #FFFFFF;
+  --text-secondary: #B0BFBD;
+  --text-muted: #6B8A87;
+  --border: rgba(198, 245, 61, 0.1);
+  --border-hover: rgba(198, 245, 61, 0.25);
+  --shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 10px 40px rgba(0, 0, 0, 0.6);
+
+  /* Menu / Sidebar */
+  --menu-bg: #0F1D1B;
+  --menu-text: #FFFFFF;
+  --menu-text-muted: rgba(176, 191, 189, 0.8);
 }
 
-body.light-mode {
-  --bg-primary: #f8fafc;
-  --bg-secondary: #f1f5f9;
-  --bg-card: #ffffff;
-  --bg-hover: #e2e8f0;
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #64748b;
-  --border: rgba(0, 0, 0, 0.08);
-  --border-hover: rgba(0, 0, 0, 0.15);
-  --shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  --danger-light: rgba(239, 68, 68, 0.1);
-  --danger-text: #ef4444;
-  --success-light: rgba(34, 197, 94, 0.1);
-  --success-text: #16a34a;
+/* ── LIGHT MODE ── */
+.light-mode {
+  --bg-primary: #F0F6F5;
+  --bg-secondary: #E4EDEC;
+  --bg-card: #FFFFFF;
+  --bg-elevated: #FFFFFF;
+  --bg-hover: #D6E9E7;
+  --text-primary: #0B2221;
+  --text-secondary: #2B4E4A;
+  --text-muted: #507572;
+  --border: rgba(6, 72, 67, 0.12);
+  --border-hover: rgba(6, 72, 67, 0.28);
+  --shadow: 0 4px 20px rgba(6, 72, 67, 0.08);
+  --shadow-lg: 0 10px 40px rgba(6, 72, 67, 0.15);
+
+  /* Menu / Sidebar */
+  --menu-bg: #064843;
+  --menu-text: #FFFFFF;
+  --menu-text-muted: rgba(255, 255, 255, 0.7);
 }
 
 html,
@@ -71,11 +94,12 @@ body {
   background: var(--bg-primary);
   color: var(--text-primary);
   font-size: 14px;
+  font-weight: 500;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Scrollbars */
+/* ── Scrollbars ── */
 ::-webkit-scrollbar {
   width: 4px;
   height: 4px;
@@ -86,11 +110,15 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--text-muted);
+  background: rgba(198, 245, 61, 0.25);
   border-radius: 4px;
 }
 
-/* Buttons */
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(198, 245, 61, 0.45);
+}
+
+/* ── Buttons ── */
 button {
   border: none;
   cursor: pointer;
@@ -100,11 +128,11 @@ button {
 }
 
 button:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
-/* Inputs */
+/* ── Inputs ── */
 input,
 select,
 textarea {
@@ -117,14 +145,22 @@ textarea {
   outline: none;
   padding: 10px 14px;
   width: 100%;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-light);
 }
 
 input::placeholder {
   color: var(--text-muted);
+}
+
+/* ── Selection ── */
+::selection {
+  background: var(--accent-glow);
+  color: var(--text-primary);
 }

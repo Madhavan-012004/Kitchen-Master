@@ -1,0 +1,113 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@300;400;600;700;900&display=swap');
+
+:root {
+  --primary: #FF4D4D;
+  --primary-hover: #E63B3B;
+  --secondary: #1A1A1A;
+  --accent: #FFD700;
+  --orange: #FF9500;
+  --bg: #080808;
+  --card-bg: rgba(255, 255, 255, 0.04);
+  --glass: rgba(255, 255, 255, 0.08);
+  --glass-border: rgba(255, 255, 255, 0.09);
+  --text: #F0F0F0;
+  --text-muted: rgba(255,255,255,0.4);
+  --text-inverse: #080808;
+  --radius: 20px;
+  --shadow: 0 12px 40px rgba(0,0,0,0.6);
+  --modal-bg: #0E0E0E;
+  --nav-bg: rgba(8,8,8,0.85);
+  --font-family: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+[data-theme="light"] {
+  --bg: #F8F9FA;
+  --card-bg: #FFFFFF;
+  --glass: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --text: #1A1A1A;
+  --text-muted: rgba(0,0,0,0.5);
+  --text-inverse: #FFFFFF;
+  --shadow: 0 12px 40px rgba(0,0,0,0.08);
+  --modal-bg: #FFFFFF;
+  --nav-bg: rgba(255,255,255,0.85);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-family);
+  overflow-x: hidden;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+input, textarea {
+  outline: none;
+  font-family: inherit;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+/* Glassmorphism utility */
+.glass {
+  background: var(--glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+}
+
+/* Fade-in utility */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade {
+  animation: fadeIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Spin utility (used by loaders) */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+/* View Transitions Water Ripple Theme Logic */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-old(root) {
+  z-index: 1;
+}
+::view-transition-new(root) {
+  z-index: 2;
+}
+[data-theme="dark"]::view-transition-old(root) {
+  z-index: 2;
+}
+[data-theme="dark"]::view-transition-new(root) {
+  z-index: 1;
+}

@@ -1,24 +1,139 @@
 import React from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
+import { useStakeholder } from '../context/StakeholderContext.jsx'
 import { useTheme } from '../context/ThemeContext.jsx'
+import { usePOSMode } from '../context/POSModeContext.jsx'
+import { useLanguage } from '../context/LanguageContext.jsx'
+import { useTranslation } from 'react-i18next'
 import './Layout.css'
 
+import logo from '../assets/LOGO.jpeg'
+
 const NAV_ITEMS = [
-    { path: 'pos', icon: '🖥️', label: 'POS / Billing', section: 'pos' },
-    { path: 'kitchen', icon: '👨‍🍳', label: 'Kitchen Display', section: 'kitchen' },
-    { path: 'billing-queue', icon: '🧾', label: 'Bill Printing', section: 'billing' },
-    { path: 'orders', icon: '📋', label: 'Order History', section: 'orders' },
-    { path: 'menu', icon: '🍽️', label: 'Menu', section: 'menu' },
-    { path: 'employees', icon: '👥', label: 'Staff', section: 'employees' },
-    { path: 'analytics', icon: '📊', label: 'Analytics', section: 'analytics' },
-    { path: 'attendance', icon: '📍', label: 'Attendance', section: 'attendance' },
+    { path: 'pos', icon: '🖥️', tKey: 'billing_short', section: 'pos' },
+    { path: 'kitchen', icon: '👨‍🍳', tKey: 'kitchen', section: 'kitchen' },
+    { path: 'billing-queue', icon: '🧾', tKey: 'billing', section: 'billing' },
+    { path: 'orders', icon: '📋', tKey: 'orders', section: 'orders' },
+    { path: 'menu', icon: '🍽️', tKey: 'menu', section: 'menu' },
+    { path: 'employees', icon: '👥', tKey: 'staff', section: 'employees' },
+    { path: 'analytics', icon: '📊', tKey: 'analytics', section: 'analytics' },
+    { path: 'attendance', icon: '📍', tKey: 'attendance', section: 'attendance' },
+    { path: 'ai-assistant', icon: '✨', tKey: 'assistant' },
+    { path: 'inventory', icon: '📦', tKey: 'inventory', section: 'inventory' },
+    { path: 'expenditures', icon: '💸', tKey: 'expenditures', section: 'expenditures' },
+    { path: 'profile', icon: '⚙️', tKey: 'settings' },
 ]
 
+const TOP_NAV_ITEMS = [
+    { path: 'pos', tKey: 'billing_short', section: 'pos' },
+    { path: 'kitchen', tKey: 'kot_short', section: 'kitchen' },
+    { path: 'billing-queue', tKey: 'bill_short', section: 'billing' },
+    { path: 'orders', tKey: 'history_short', section: 'orders' },
+    { path: 'profile', tKey: 'settings_short' }
+]
+
+const SIDE_NAV_ITEMS = [
+    { path: 'orders', icon: '📋', tKey: 'orders', section: 'orders' },
+    { path: 'menu', icon: '🍽️', tKey: 'menu', section: 'menu' },
+    { path: 'employees', icon: '👥', tKey: 'staff', section: 'employees' },
+    { path: 'analytics', icon: '📊', tKey: 'analytics', section: 'analytics' },
+    { path: 'attendance', icon: '📍', tKey: 'attendance', section: 'attendance' },
+    { path: 'inventory', icon: '📦', tKey: 'inventory', section: 'inventory' },
+    { path: 'expenditures', icon: '💸', tKey: 'expenditures', section: 'expenditures' },
+    { path: 'ai-assistant', icon: '✨', tKey: 'assistant' },
+]
+
+// ─── License Expiry Banner ────────────────────────────────────────────────────
+function LicenseExpiryBanner({ user, t }) {
+    const [dismissed, setDismissed] = React.useState(false)
+
+    if (dismissed) return null
+    if (!user || user.isProBloomAdmin) return null
+
+    // Only owner sees the banner (employees inherit owner's license)
+    if (user.role !== 'owner') return null
+
+    const expiresAt = user._licenseExpiresAt || user.subscription?.expiresAt
+    if (!expiresAt) return null
+
+    const daysLeft = Math.ceil((new Date(expiresAt) - new Date()) / (1000 * 60 * 60 * 24))
+    if (daysLeft > 30) return null
+
+    const isCritical = daysLeft <= 7
+    const expDate = new Date(expiresAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+
+    return (
+        <div className={`pb-expiry-banner ${isCritical ? 'pb-expiry-banner--critical' : 'pb-expiry-banner--warning'}`}>
+            <span>{isCritical ? '🔴' : '⚠️'}</span>
+            <span>
+                {daysLeft <= 0
+                    ? t('license.expired')
+                    : t('license.expiring_in', { days: daysLeft, date: expDate })
+                }
+                <strong>{t('license.contact_support')}</strong>
+            </span>
+            <span
+                onClick={() => setDismissed(true)}
+                style={{ marginLeft: '12px', cursor: 'pointer', opacity: 0.6, fontSize: '0.9rem' }}
+                title="Dismiss"
+            >✕</span>
+        </div>
+    )
+}
+
 export default function Layout() {
-    const { user, logout, canAccess } = useAuth()
+    const { user, logout, canAccess, attendance, checkIn, checkOut } = useAuth()
+    const { accessibleRestaurants, selectedRestaurantId, selectRestaurant } = useStakeholder()
     const { theme, toggleTheme } = useTheme()
+    const { supermarketMode, toggleSupermarketMode } = usePOSMode()
+    const { itemNameLanguage, setItemNameLanguage } = useLanguage()
+    const { t, i18n } = useTranslation()
     const navigate = useNavigate()
+    const [loading, setLoading] = React.useState(false)
+    const [isSidebarOpen, setIsSidebarOpen] = React.useState(false)
+    const [showProfileMenu, setShowProfileMenu] = React.useState(false)
+    const profileRef = React.useRef(null)
+
+    React.useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (profileRef.current && !profileRef.current.contains(event.target)) {
+                setShowProfileMenu(false)
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [])
+
+    React.useEffect(() => {
+        setIsSidebarOpen(false)
+    }, [navigate])
+
+    const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen)
+
+    const handleAttendanceAction = async () => {
+        setLoading(true)
+        if (attendance.isActive) {
+            const res = await checkOut()
+            if (!res.success) alert(res.message)
+        } else {
+            if (!navigator.geolocation) {
+                alert('Geolocation is not supported by your browser')
+                setLoading(false)
+                return
+            }
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                const res = await checkIn(pos.coords.latitude, pos.coords.longitude)
+                if (!res.success) alert(res.message)
+                setLoading(false)
+            }, () => {
+                alert('Failed to get location. Please enable GPS.')
+                setLoading(false)
+            })
+            return
+        }
+        setLoading(false)
+    }
 
     const handleLogout = async () => {
         await logout()
@@ -26,47 +141,180 @@ export default function Layout() {
     }
 
     return (
-        <div className="layout">
-            {/* SIDEBAR */}
-            <aside className="sidebar">
-                <div className="sidebar-brand">
-                    <span className="sidebar-logo">🍳</span>
-                    <div>
-                        <div className="sidebar-name">Kitchen Master</div>
-                        <div className="sidebar-sub">POS Desktop</div>
+        <div className={`layout ${isSidebarOpen ? 'sidebar-open' : 'sidebar-collapsed'}`}>
+
+            {/* ── ProBloom License Expiry Banner ── */}
+            <LicenseExpiryBanner user={user} t={t} />
+
+            {/* TOP BAR */}
+            <header className="top-bar">
+                <div className="top-bar-left">
+                    <button className="sidebar-toggle-btn" onClick={toggleSidebar}>
+                        {isSidebarOpen ? '✕' : '☰'}
+                    </button>
+                    <div className="header-logo">
+                        <img src={user?.logo || logo} alt="Logo" className="header-logo-img" />
+                        <span className="header-brand-name"><span style={{ color: 'var(--accent)' }}>P</span>ro<span style={{ color: 'var(--accent)' }}>B</span>loom</span>
                     </div>
                 </div>
-
-                <div className="sidebar-theme-toggle">
-                    <button onClick={toggleTheme} className="theme-toggle-btn" title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}>
-                        {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
-                    </button>
+                <div className="top-bar-center">
+                    {TOP_NAV_ITEMS.filter(item => {
+                        if (supermarketMode && item.section === 'kitchen') return false;
+                        return !item.section || canAccess(item.section);
+                    }).map(item => (
+                        <NavLink
+                            key={item.path}
+                            to={`/${item.path}`}
+                            className={({ isActive }) => `top-nav-item ${isActive ? 'active' : ''}`}
+                            title={t(`nav.${item.tKey}`)}
+                        >
+                            <span className="top-nav-label">{t(`nav.${item.tKey}`)}</span>
+                        </NavLink>
+                    ))}
                 </div>
+                <div className="top-bar-right">
+                    {/* PREMIUM SEGMENTED LANGUAGE CONTROL */}
+                    <div className="premium-lang-switcher" title={itemNameLanguage === 'ta' ? 'Names: English' : 'பெயர்: தமிழ்'}>
+                        <div className={`lang-segment ${itemNameLanguage === 'en' ? 'active' : ''}`} onClick={() => setItemNameLanguage('en')}>
+                            ENG
+                        </div>
+                        <div className={`lang-segment ${itemNameLanguage === 'ta' ? 'active' : ''}`} onClick={() => setItemNameLanguage('ta')}>
+                            தமிழ்
+                        </div>
+                        <div className={`lang-slider ${itemNameLanguage}`} />
+                    </div>
 
+                    <button
+                        className="header-theme-toggle-btn"
+                        onClick={toggleTheme}
+                        title={t('common.switch_to_mode', { mode: theme === 'dark' ? t('settings.light_mode') : t('settings.dark_mode') })}
+                    >
+                        {theme === 'dark' ? '☀️' : '🌙'}
+                    </button>
+                    <button
+                        className={`header-pos-mode-btn ${supermarketMode ? 'sm-active' : ''}`}
+                        onClick={toggleSupermarketMode}
+                        title={supermarketMode ? t('common.switch_to_mode', { mode: t('nav.restaurant') }) : t('common.switch_to_mode', { mode: t('nav.market') })}
+                    >
+                        <span className="pos-mode-icon">{supermarketMode ? '🍽️' : '🛒'}</span>
+                        <span className="pos-mode-label">{supermarketMode ? t('nav.restaurant') : t('nav.market')}</span>
+                    </button>
+                    <div className="header-user-wrapper" ref={profileRef}>
+                        <button
+                            className={`header-user-info-btn ${showProfileMenu ? 'active' : ''}`}
+                            onClick={() => setShowProfileMenu(!showProfileMenu)}
+                        >
+                            <span className="header-user-name">{user?.name}</span>
+                            <div className="header-avatar">
+                                {user?.logo ? (
+                                    <img src={user.logo} alt="user" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                                ) : (
+                                    user?.name?.charAt(0).toUpperCase()
+                                )}
+                            </div>
+                        </button>
+
+                        {showProfileMenu && (
+                            <div className="profile-dropdown animate-fade-in">
+                                <div className="profile-dropdown-header">
+                                    <div className="dropdown-avatar-large">
+                                        {user?.logo ? (
+                                            <img src={user.logo} alt="user" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                                        ) : (
+                                            user?.name?.charAt(0).toUpperCase()
+                                        )}
+                                    </div>
+                                    <div className="dropdown-user-details">
+                                        <div className="dropdown-user-name">{user?.name}</div>
+                                        <div className="dropdown-user-email">{user?.email}</div>
+                                        <div className="dropdown-user-role-badge">
+                                            {t(`role.${user?.role?.toLowerCase()}`)}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="profile-dropdown-body">
+                                    <button className="dropdown-item" onClick={() => { navigate('/profile'); setShowProfileMenu(false); }}>
+                                        <span className="dropdown-item-icon">⚙️</span>
+                                        {t('common.manage_profile')}
+                                    </button>
+                                </div>
+
+                                <div className="profile-dropdown-footer">
+                                    <button className="dropdown-logout-btn" onClick={handleLogout}>
+                                        ↪ {t('common.sign_out')}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </header>
+
+            {/* MINI NAV BAR (Left Vertical Bar) */}
+            <aside className="mini-side-bar">
+                {SIDE_NAV_ITEMS.filter(item => {
+                    if (supermarketMode && item.section === 'menu') return false;
+                    return !item.section || canAccess(item.section);
+                }).map(item => (
+                    <NavLink
+                        key={item.path}
+                        to={`/${item.path}`}
+                        className={({ isActive }) => `mini-nav-item ${isActive ? 'active' : ''}`}
+                        title={t(`nav.${item.tKey}`)}
+                    >
+                        <span className="mini-nav-icon">{item.icon}</span>
+                    </NavLink>
+                ))}
+            </aside>
+
+            {/* OVERLAY FOR MOBILE/DRAWER */}
+            {isSidebarOpen && <div className="sidebar-overlay" onClick={() => setIsSidebarOpen(false)} />}
+
+            {/* SIDEBAR */}
+            <aside className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
                 <nav className="sidebar-nav">
-                    {NAV_ITEMS.filter(item => canAccess(item.section)).map(item => (
+                    {NAV_ITEMS.filter(item => {
+                        if (supermarketMode && (item.section === 'kitchen' || item.section === 'menu')) return false;
+                        // Items without a section (profile, ai-assistant) are always accessible
+                        if (!item.section) return true;
+                        return canAccess(item.section);
+                    }).map(item => (
                         <NavLink
                             key={item.path}
                             to={`/${item.path}`}
                             className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
                         >
                             <span className="nav-icon">{item.icon}</span>
-                            <span className="nav-label">{item.label}</span>
+                            <span className="nav-label">{t(`nav.${item.tKey}`)}</span>
                         </NavLink>
                     ))}
                 </nav>
 
                 <div className="sidebar-footer">
                     <div className="sidebar-user" onClick={() => navigate('/profile')} style={{ cursor: 'pointer' }}>
-                        <div className="sidebar-avatar">{user?.name?.charAt(0)?.toUpperCase()}</div>
+                        <div className="sidebar-avatar">
+                            {user?.logo ? (
+                                <img src={user.logo} alt="user" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                            ) : (
+                                user?.name?.charAt(0)?.toUpperCase()
+                            )}
+                        </div>
                         <div className="sidebar-user-info">
                             <div className="sidebar-user-name">{user?.name}</div>
                             <div className="sidebar-user-role">{user?.role?.toUpperCase()}</div>
                         </div>
                     </div>
-                    <button className="logout-btn" onClick={handleLogout}>
-                        ↪ Sign Out
-                    </button>
+
+                    {user?.role !== 'owner' && (
+                        <button
+                            className={`attendance-action-btn ${attendance.isActive ? 'active' : ''}`}
+                            onClick={handleAttendanceAction}
+                            disabled={loading}
+                        >
+                            {loading ? 'Processing...' : (attendance.isActive ? '🚩 Finish Shift (Check Out)' : '📍 Start Shift (Check In)')}
+                        </button>
+                    )}
                 </div>
             </aside>
 

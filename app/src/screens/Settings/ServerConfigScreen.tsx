@@ -2,17 +2,28 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
     View, Text, StyleSheet, TextInput, TouchableOpacity,
     KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator,
-    Animated,
+    Animated, StatusBar,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { saveServerUrl, testServerConnection, getServerBaseUrl } from '../../config/api';
-import { Colors, Typography, Spacing, Radius, Shadows } from '../../theme';
+import { saveServerUrl, testServerConnection, getServerBaseUrl, resetServerUrl } from '../../config/api';
+import { useAppTheme, Typography, Spacing, Radius, Shadows } from '../../theme';
+import { useAuthStore } from '../../store/useAuthStore';
 
 type Status = 'idle' | 'testing' | 'success' | 'error';
 
 export default function ServerConfigScreen({ navigation }: any) {
+    const { user } = useAuthStore();
+    const { colors, gradients, isDark } = useAppTheme();
+
+    useEffect(() => {
+        if (user?.role === 'waiter') {
+            navigation.goBack();
+        }
+    }, [user, navigation]);
+
+    const themedStyles = React.useMemo(() => createStyles(colors, gradients, isDark), [colors, gradients, isDark]);
     const [url, setUrl] = useState('');
     const [status, setStatus] = useState<Status>('idle');
     const [message, setMessage] = useState('');
@@ -54,9 +65,9 @@ export default function ServerConfigScreen({ navigation }: any) {
         if (!fullUrl.startsWith('http://') && !fullUrl.startsWith('https://')) {
             fullUrl = `http://${fullUrl}`;
         }
-        // Auto-append :5001 if no port specified
+        // Auto-append :8080 if no port specified
         if (!fullUrl.match(/:\d{2,5}(\/|$)/)) {
-            fullUrl = `${fullUrl}:5001`;
+            fullUrl = `${fullUrl}:8080`;
         }
 
         setStatus('testing');
@@ -75,80 +86,90 @@ export default function ServerConfigScreen({ navigation }: any) {
         }
     };
 
+    const handleReset = async () => {
+        await resetServerUrl();
+        const fallback = await getServerBaseUrl();
+        setUrl(fallback);
+        setStatus('success');
+        setMessage('✅  Reset to default Cloud URL.');
+        pulse();
+    };
+
     const statusColor = {
-        idle: Colors.textMuted,
-        testing: Colors.accentBlue,
-        success: Colors.success,
-        error: Colors.error,
+        idle: colors.textMuted,
+        testing: colors.accentBlue || '#4C8EFF',
+        success: colors.success || '#00D68F',
+        error: colors.error || '#FF5C7C',
     }[status];
 
     const statusBg = {
         idle: 'transparent',
-        testing: 'rgba(76,142,255,0.08)',
-        success: 'rgba(0,214,143,0.08)',
-        error: 'rgba(255,92,124,0.08)',
+        testing: (colors.accentBlue || '#4C8EFF') + '14',
+        success: (colors.success || '#00D68F') + '14',
+        error: (colors.error || '#FF5C7C') + '14',
     }[status];
 
     return (
-        <LinearGradient colors={['#0A0C18', '#0D0F1A', '#111428']} style={styles.gradient}>
+        <LinearGradient colors={gradients.background} style={themedStyles.gradient}>
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor="transparent" translucent />
             {/* Decorative glows */}
-            <View style={styles.glow1} />
-            <View style={styles.glow2} />
+            <View style={themedStyles.glow1} />
+            <View style={themedStyles.glow2} />
 
-            <SafeAreaView style={styles.safe}>
-                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
-                    <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            <SafeAreaView style={themedStyles.safe} edges={['top']}>
+                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={themedStyles.flex}>
+                    <ScrollView contentContainerStyle={themedStyles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
                         {/* Header */}
-                        <Animated.View style={[styles.header, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-                            <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-                                <Ionicons name="arrow-back" size={22} color={Colors.textPrimary} />
+                        <Animated.View style={[themedStyles.header, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+                            <TouchableOpacity style={themedStyles.backBtn} onPress={() => navigation.goBack()}>
+                                <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
                             </TouchableOpacity>
 
-                            <View style={styles.iconBadge}>
-                                <LinearGradient colors={['#4C8EFF', '#2563EB']} style={styles.iconCircle} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-                                    <Ionicons name="server-outline" size={30} color={Colors.white} />
+                            <View style={themedStyles.iconBadge}>
+                                <LinearGradient colors={gradients.primary} style={themedStyles.iconCircle} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+                                    <Ionicons name="server-outline" size={30} color={colors.white} />
                                 </LinearGradient>
                             </View>
 
-                            <Text style={styles.title}>Server Setup</Text>
-                            <Text style={styles.subtitle}>
-                                Connect to your Kitchen Master backend running on your PC / server.
+                            <Text style={themedStyles.title}>Server Setup</Text>
+                            <Text style={themedStyles.subtitle}>
+                                Connect to your Kitchen Master backend running on your Local Network.
                             </Text>
                         </Animated.View>
 
                         {/* Instructions card */}
-                        <Animated.View style={[styles.infoCard, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-                            <View style={styles.infoRow}>
-                                <Ionicons name="information-circle" size={20} color={Colors.accentBlue} />
-                                <Text style={styles.infoTitle}>How to find your PC's IP</Text>
+                        <Animated.View style={[themedStyles.infoCard, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+                            <View style={themedStyles.infoRow}>
+                                <Ionicons name="information-circle" size={20} color={colors.accentBlue || '#4C8EFF'} />
+                                <Text style={themedStyles.infoTitle}>How to find your PC's IP</Text>
                             </View>
-                            <View style={styles.steps}>
-                                <StepRow num="1" text="Make sure phone & PC are on the same Wi-Fi" />
-                                <StepRow num="2" text="On PC: open PowerShell and run  ipconfig" />
-                                <StepRow num="3" text={`Look for "IPv4 Address" under Wi-Fi adapter`} />
-                                <StepRow num="4" text="Enter that IP below (e.g. 192.168.1.5)" />
+                            <View style={themedStyles.steps}>
+                                <StepRow num="1" text="Make sure phone & PC are on the same Wi-Fi" colors={colors} />
+                                <StepRow num="2" text="On PC: open PowerShell and run 'ipconfig'" colors={colors} />
+                                <StepRow num="3" text={`Look for "IPv4 Address" under Wi-Fi adapter`} colors={colors} />
+                                <StepRow num="4" text="Enter that IP below (e.g. 192.168.1.5)" colors={colors} />
                             </View>
                         </Animated.View>
 
                         {/* Input card */}
-                        <Animated.View style={[styles.card, { opacity: fadeAnim, transform: [{ scale: pulseAnim }] }]}>
-                            <Text style={styles.label}>SERVER IP ADDRESS</Text>
+                        <Animated.View style={[themedStyles.card, { opacity: fadeAnim, transform: [{ scale: pulseAnim }] }]}>
+                            <Text style={themedStyles.label}>SERVER IP ADDRESS</Text>
 
-                            <View style={styles.inputRow}>
-                                <View style={styles.prefixBox}>
-                                    <Text style={styles.prefix}>http://</Text>
+                            <View style={themedStyles.inputRow}>
+                                <View style={themedStyles.prefixBox}>
+                                    <Text style={themedStyles.prefix}>http://</Text>
                                 </View>
                                 <TextInput
-                                    style={styles.input}
+                                    style={themedStyles.input}
                                     value={url.replace(/^https?:\/\//, '')}
                                     onChangeText={(t) => {
                                         setUrl(t);
                                         setStatus('idle');
                                         setMessage('');
                                     }}
-                                    placeholder="192.168.x.x:5001"
-                                    placeholderTextColor={Colors.textMuted}
+                                    placeholder="192.168.x.x:8080"
+                                    placeholderTextColor={colors.textMuted}
                                     keyboardType="url"
                                     autoCapitalize="none"
                                     autoCorrect={false}
@@ -157,7 +178,7 @@ export default function ServerConfigScreen({ navigation }: any) {
 
                             {/* Status feedback */}
                             {message ? (
-                                <View style={[styles.statusBox, { backgroundColor: statusBg, borderColor: `${statusColor}30` }]}>
+                                <View style={[themedStyles.statusBox, { backgroundColor: statusBg, borderColor: statusColor + '4D' }]}>
                                     {status === 'testing' ? (
                                         <ActivityIndicator size="small" color={statusColor} />
                                     ) : (
@@ -167,45 +188,54 @@ export default function ServerConfigScreen({ navigation }: any) {
                                             color={statusColor}
                                         />
                                     )}
-                                    <Text style={[styles.statusText, { color: statusColor }]}>{message}</Text>
+                                    <Text style={[themedStyles.statusText, { color: statusColor }]}>{message}</Text>
                                 </View>
                             ) : null}
 
                             {/* Save button */}
                             <TouchableOpacity
-                                style={[styles.saveBtn, status === 'testing' && styles.saveBtnDisabled]}
+                                style={[themedStyles.saveBtn, status === 'testing' && themedStyles.saveBtnDisabled]}
                                 onPress={handleSave}
                                 disabled={status === 'testing'}
                                 activeOpacity={0.85}
                             >
                                 <LinearGradient
-                                    colors={status === 'testing' ? ['#555', '#444'] : ['#4C8EFF', '#2563EB']}
-                                    style={styles.saveBtnGradient}
+                                    colors={status === 'testing' ? [colors.border, colors.border] : gradients.primary}
+                                    style={themedStyles.saveBtnGradient}
                                     start={{ x: 0, y: 0 }}
                                     end={{ x: 1, y: 0 }}
                                 >
                                     {status === 'testing' ? (
-                                        <ActivityIndicator color={Colors.white} size="small" />
+                                        <ActivityIndicator color={colors.white} size="small" />
                                     ) : (
                                         <>
-                                            <Ionicons name="wifi" size={18} color={Colors.white} />
-                                            <Text style={styles.saveBtnText}>Test & Save</Text>
+                                            <Ionicons name="wifi" size={18} color={colors.white} />
+                                            <Text style={themedStyles.saveBtnText}>Test & Save</Text>
                                         </>
                                     )}
                                 </LinearGradient>
                             </TouchableOpacity>
 
                             {status === 'success' && (
-                                <TouchableOpacity style={styles.continueBtn} onPress={() => navigation.goBack()} activeOpacity={0.85}>
-                                    <Text style={styles.continueBtnText}>← Back to Login</Text>
+                                <TouchableOpacity style={themedStyles.continueBtn} onPress={() => navigation.goBack()} activeOpacity={0.85}>
+                                    <Text style={themedStyles.continueBtnText}>← Back to Settings</Text>
                                 </TouchableOpacity>
                             )}
+                            
+                            <TouchableOpacity 
+                                style={themedStyles.resetBtn} 
+                                onPress={handleReset}
+                                activeOpacity={0.7}
+                            >
+                                <Ionicons name="refresh-circle-outline" size={16} color={colors.textSecondary} />
+                                <Text style={themedStyles.resetBtnText}>Reset to Default (Cloud)</Text>
+                            </TouchableOpacity>
                         </Animated.View>
 
                         {/* Tip */}
-                        <View style={styles.tipRow}>
-                            <Ionicons name="bulb-outline" size={14} color={Colors.accentYellow} />
-                            <Text style={styles.tipText}>
+                        <View style={themedStyles.tipRow}>
+                            <Ionicons name="bulb-outline" size={14} color={colors.warning} />
+                            <Text style={themedStyles.tipText}>
                                 Tip: Backend startup logs print your LAN IP automatically!
                             </Text>
                         </View>
@@ -217,90 +247,81 @@ export default function ServerConfigScreen({ navigation }: any) {
     );
 }
 
-function StepRow({ num, text }: { num: string; text: string }) {
+function StepRow({ num, text, colors }: { num: string; text: string; colors: any }) {
     return (
         <View style={styles.stepRow}>
-            <View style={styles.stepNum}>
-                <Text style={styles.stepNumText}>{num}</Text>
+            <View style={[styles.stepNum, { backgroundColor: (colors.accentBlue || '#4C8EFF') + '40' }]}>
+                <Text style={[styles.stepNumText, { color: colors.accentBlue || '#4C8EFF' }]}>{num}</Text>
             </View>
-            <Text style={styles.stepText}>{text}</Text>
+            <Text style={[Typography.body2, { color: colors.textSecondary, flex: 1 }]}>{text}</Text>
         </View>
     );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any, gradients: any, isDark: boolean) => StyleSheet.create({
     gradient: { flex: 1 },
     safe: { flex: 1 },
     flex: { flex: 1 },
     glow1: {
         position: 'absolute', width: 280, height: 280, borderRadius: 140,
-        backgroundColor: 'rgba(76, 142, 255, 0.08)', top: -60, left: -80,
+        backgroundColor: colors.primary + '0D', top: -60, left: -80,
     },
     glow2: {
         position: 'absolute', width: 200, height: 200, borderRadius: 100,
-        backgroundColor: 'rgba(255, 107, 53, 0.06)', bottom: 120, right: -60,
+        backgroundColor: (colors.accentBlue || '#4C8EFF') + '0D', bottom: 120, right: -60,
     },
-    scroll: { flexGrow: 1, paddingHorizontal: Spacing.xl, paddingVertical: Spacing.xxl },
-    header: { alignItems: 'center', marginBottom: Spacing.xxl, marginTop: Spacing.lg },
+    scroll: { flexGrow: 1, paddingHorizontal: Spacing.xl, paddingVertical: Spacing.xl },
+    header: { alignItems: 'center', marginBottom: Spacing.xxl },
     backBtn: {
-        position: 'absolute', left: 0, top: 0,
-        padding: Spacing.sm,
-        backgroundColor: 'rgba(255,255,255,0.06)',
+        position: 'absolute', left: 0, top: 0, width: 40, height: 40,
+        justifyContent: 'center', alignItems: 'center',
+        backgroundColor: colors.glass,
         borderRadius: Radius.md,
-        borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+        borderWidth: 1, borderColor: colors.border,
     },
     iconBadge: { marginBottom: Spacing.lg, marginTop: Spacing.xl },
     iconCircle: {
         width: 80, height: 80, borderRadius: 40,
         justifyContent: 'center', alignItems: 'center',
-        ...Shadows.blue,
+        ...Shadows.primary,
     },
-    title: { ...Typography.h3, color: Colors.textPrimary, marginBottom: Spacing.sm, textAlign: 'center' },
-    subtitle: { ...Typography.body2, color: Colors.textSecondary, textAlign: 'center', lineHeight: 22, paddingHorizontal: Spacing.lg },
+    title: { ...Typography.h3, color: colors.textPrimary, marginBottom: Spacing.sm, textAlign: 'center' },
+    subtitle: { ...Typography.body2, color: colors.textSecondary, textAlign: 'center', lineHeight: 22, paddingHorizontal: Spacing.lg },
     infoCard: {
-        backgroundColor: 'rgba(76, 142, 255, 0.06)',
+        backgroundColor: (colors.accentBlue || '#4C8EFF') + '0D',
         borderRadius: Radius.lg,
         padding: Spacing.lg,
-        borderWidth: 1, borderColor: 'rgba(76, 142, 255, 0.2)',
+        borderWidth: 1, borderColor: (colors.accentBlue || '#4C8EFF') + '33',
         marginBottom: Spacing.xl,
     },
     infoRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: Spacing.md },
-    infoTitle: { ...Typography.h5, color: Colors.accentBlue },
+    infoTitle: { ...Typography.h5, color: colors.accentBlue || '#4C8EFF' },
     steps: { gap: 10 },
-    stepRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-    stepNum: {
-        width: 22, height: 22, borderRadius: 11,
-        backgroundColor: 'rgba(76, 142, 255, 0.25)',
-        justifyContent: 'center', alignItems: 'center',
-        marginTop: 1,
-    },
-    stepNumText: { fontSize: 11, fontWeight: '700', color: Colors.accentBlue },
-    stepText: { ...Typography.body2, color: Colors.textSecondary, flex: 1 },
     card: {
-        backgroundColor: 'rgba(26, 32, 64, 0.85)',
+        backgroundColor: colors.card,
         borderRadius: Radius.xl,
-        padding: Spacing.xxl,
-        borderWidth: 1, borderColor: Colors.glassBorder,
+        padding: Spacing.xl,
+        borderWidth: 1, borderColor: colors.border,
         ...Shadows.lg,
         marginBottom: Spacing.lg,
     },
-    label: { ...Typography.overline, color: Colors.textMuted, marginBottom: Spacing.md },
+    label: { ...Typography.overline, color: colors.textMuted, marginBottom: Spacing.md },
     inputRow: {
         flexDirection: 'row', alignItems: 'center',
         borderRadius: Radius.md,
-        borderWidth: 1, borderColor: Colors.border,
-        backgroundColor: Colors.glass,
+        borderWidth: 1, borderColor: colors.border,
+        backgroundColor: colors.glass,
         overflow: 'hidden',
         marginBottom: Spacing.lg,
     },
     prefixBox: {
         paddingHorizontal: Spacing.md, paddingVertical: 15,
-        backgroundColor: 'rgba(76, 142, 255, 0.1)',
-        borderRightWidth: 1, borderRightColor: Colors.border,
+        backgroundColor: (colors.accentBlue || '#4C8EFF') + '1A',
+        borderRightWidth: 1, borderRightColor: colors.border,
     },
-    prefix: { ...Typography.body2, color: Colors.accentBlue, fontWeight: '600' },
+    prefix: { ...Typography.body2, color: colors.accentBlue || '#4C8EFF', fontWeight: '600' },
     input: {
-        flex: 1, ...Typography.body1, color: Colors.textPrimary,
+        flex: 1, ...Typography.body1, color: colors.textPrimary,
         paddingHorizontal: Spacing.md, paddingVertical: 15,
     },
     statusBox: {
@@ -309,23 +330,46 @@ const styles = StyleSheet.create({
         borderWidth: 1, marginBottom: Spacing.lg,
     },
     statusText: { ...Typography.body2, flex: 1 },
-    saveBtn: { borderRadius: Radius.md, overflow: 'hidden', marginBottom: Spacing.md, ...Shadows.blue },
+    saveBtn: { borderRadius: Radius.md, overflow: 'hidden', marginBottom: Spacing.md, ...Shadows.primary },
     saveBtnDisabled: { opacity: 0.6 },
     saveBtnGradient: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
         paddingVertical: 16, gap: 10,
     },
-    saveBtnText: { ...Typography.button, color: Colors.white },
+    saveBtnText: { ...Typography.button, color: colors.white },
     continueBtn: {
         alignItems: 'center', paddingVertical: 14,
         borderRadius: Radius.md,
-        borderWidth: 1, borderColor: Colors.borderLight,
-        backgroundColor: Colors.glass,
+        borderWidth: 1, borderColor: colors.border,
+        backgroundColor: colors.glass,
     },
-    continueBtnText: { ...Typography.buttonSm, color: Colors.textPrimary },
+    continueBtnText: { ...Typography.buttonSm, color: colors.textPrimary },
+    resetBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: Spacing.xl,
+        gap: 6,
+        padding: Spacing.sm,
+    },
+    resetBtnText: {
+        ...Typography.body2,
+        color: colors.textSecondary,
+        textDecorationLine: 'underline',
+    },
     tipRow: {
         flexDirection: 'row', alignItems: 'center', gap: 8,
         justifyContent: 'center', paddingHorizontal: Spacing.lg,
     },
-    tipText: { ...Typography.caption, color: Colors.textMuted, flex: 1 },
+    tipText: { ...Typography.caption, color: colors.textMuted, flex: 1 },
+});
+
+const styles = StyleSheet.create({
+    stepRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+    stepNum: {
+        width: 22, height: 22, borderRadius: 11,
+        justifyContent: 'center', alignItems: 'center',
+        marginTop: 1,
+    },
+    stepNumText: { fontSize: 11, fontWeight: '700' },
 });

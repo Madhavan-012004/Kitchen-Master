@@ -11,9 +11,6 @@ export const aiAPI = {
     parseVoiceOrder: (text: string) =>
         apiClient.post('/ai/voice-kot', { text }),
 
-    getUpsellSuggestions: (cartItems: any[]) =>
-        apiClient.post('/ai/upsell', { cartItems }),
-
     getInventoryForecast: () => apiClient.get('/ai/inventory-forecast'),
 
     digitizeMenu: (formData: FormData) =>

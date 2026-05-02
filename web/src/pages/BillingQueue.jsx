@@ -3,6 +3,7 @@ import api from '../api/client.js'
 import socket from '../api/socket.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import './BillingQueue.css'
+import logo from '../assets/LOGO.jpeg'
 
 export default function BillingQueue() {
     const { user } = useAuth()
@@ -29,7 +30,9 @@ export default function BillingQueue() {
         fetchQueue()
 
         if (socket) {
-            socket.emit('join:restaurant', restaurantId)
+            const joinRoom = () => socket.emit('join:restaurant', String(restaurantId))
+            if (socket.connected) joinRoom()
+            socket.on('connect', joinRoom)
 
             socket.on('billing:newRequest', (data) => {
                 if (!data.order) return
@@ -37,7 +40,11 @@ export default function BillingQueue() {
                     if (prev.find(o => o._id === data.order._id)) return prev
                     return [data.order, ...prev]
                 })
-                // Play a subtle notification sound if possible, or just a visual cue
+                
+                // Auto-print immediately (no hesitation)
+                printBill(data.order)
+
+                // Play a subtle notification sound
                 new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play().catch(() => { })
             })
 
@@ -48,96 +55,220 @@ export default function BillingQueue() {
 
         return () => {
             if (socket) {
+                socket.off('connect')
                 socket.off('billing:newRequest')
                 socket.off('billing:printed')
             }
         }
     }, [restaurantId])
 
+    // Print Queue logic to handle multiple bills and prevent popup blockers
+    const queueRef = React.useRef([]);
+    const isPrintingRef = React.useRef(false);
+
     const printBill = (order) => {
-        const printWindow = window.open('', '_blank');
-        const billRows = (order.items || []).map(c => `
-            <tr>
-                <td style="padding: 5px 0;">${c.name}</td>
-                <td style="padding: 5px 0; text-align: center;">${c.quantity}</td>
-                <td style="padding: 5px 0; text-align: right;">₹${(c.price * c.quantity).toFixed(2)}</td>
-            </tr>
-        `).join('');
+        const newJobs = [];
+        
+        // If no Counter IP is set, browser needs to print the Customer Copy
+        if (!user?.counterPrinterIp) {
+            newJobs.push({ order, type: 'CUSTOMER COPY', isKot: false });
+        }
+        
+        // If no Kitchen IP is set, browser needs to print the Kitchen Copy
+        if (!user?.kitchenPrinterIp) {
+            newJobs.push({ order, type: 'KITCHEN COPY', isKot: true });
+        }
 
-        const displayName = order.tableNumber || (order.tokenNumber ? `Token ${order.tokenNumber}` : 'Takeaway');
+        if (newJobs.length > 0) {
+            queueRef.current.push(...newJobs);
+        }
 
-        const billHTML = `
-            <html>
-            <head>
-                <title>Bill - ${displayName}</title>
-                <style>
-                    @page { margin: 0; }
-                    body { 
-                        font-family: 'Courier New', Courier, monospace; 
-                        padding: 10px; 
-                        width: 80mm; 
-                        margin: 0;
-                        font-size: 12px;
-                        color: #000;
-                    }
-                    .center { text-align: center; }
-                    .bold { font-weight: bold; }
-                    .header { margin-bottom: 10px; border-bottom: 1px dashed #000; padding-bottom: 5px; }
-                    table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-                    .total-section { border-top: 1px dashed #000; padding-top: 5px; margin-top: 5px; }
-                    .footer { margin-top: 15px; border-top: 1px dashed #000; padding-top: 5px; font-size: 10px; }
-                </style>
-            </head>
-            <body onload="window.print(); window.close();">
-                <div class="header center">
-                    <div class="bold" style="font-size: 16px;">KITCHEN MASTER</div>
-                    <div>Restaurant Management System</div>
-                    <div style="margin-top: 5px;">Bill : ${displayName}</div>
-                    <div>Date: ${new Date(order.createdAt).toLocaleString()}</div>
-                </div>
-                <table>
-                    <thead>
-                        <tr style="border-bottom: 1px solid #000;">
-                            <th style="text-align: left;">Item</th>
-                            <th style="text-align: center;">Qty</th>
-                            <th style="text-align: right;">Price</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${billRows}
-                    </tbody>
-                </table>
-                <div class="total-section">
-                    <div style="display: flex; justify-content: space-between;">
-                        <span>Subtotal:</span>
-                        <span>₹${order.subtotal.toFixed(2)}</span>
-                    </div>
-                    ${order.taxAmount > 0 ? `
-                        <div style="display: flex; justify-content: space-between;">
-                            <span>GST:</span>
-                            <span>₹${order.taxAmount.toFixed(2)}</span>
+        if (!isPrintingRef.current) {
+            processQueue();
+        }
+    };
+
+    const processQueue = async () => {
+        if (isPrintingRef.current || queueRef.current.length === 0) return;
+        
+        isPrintingRef.current = true;
+        
+        const printIframe = document.getElementById('print-iframe');
+        if (!printIframe) {
+            console.error('Print iframe not found');
+            isPrintingRef.current = false;
+            return;
+        }
+        const printWindow = printIframe.contentWindow;
+
+        while (queueRef.current.length > 0) {
+            const job = queueRef.current.shift();
+            const { order, type, isKot } = job;
+            const displayName = order.tableNumber || (order.tokenNumber ? `Token ${order.tokenNumber}` : 'Takeaway');
+            const restaurantName = user.restaurantName || 'RESTAURANT';
+            const logoUrl = user.logo ? (user.logo.startsWith('http') ? user.logo : window.location.origin + user.logo) : (logo.startsWith('http') ? logo : window.location.origin + logo);
+            const logoImg = `<img src="${logoUrl}" class="logo" alt="logo" />`;
+
+            const getBillBody = () => {
+                const items = order.items || [];
+                const totalItemsCount = items.reduce((acc, item) => acc + item.quantity, 0);
+                const subtotal = order.subtotal || 0;
+                const extraChargesTotal = order.extraCharges ? order.extraCharges.reduce((s,c) => s + c.amount, 0) : 0;
+                const totalGst = order.taxAmount ? order.taxAmount.toFixed(2) : ((subtotal * 0.05).toFixed(2));
+                const sgst = (parseFloat(totalGst) / 2).toFixed(2);
+                const cgst = (parseFloat(totalGst) / 2).toFixed(2);
+                const grandTotal = order.total ? order.total.toFixed(2) : (subtotal + parseFloat(totalGst) + extraChargesTotal).toFixed(2);
+
+                return `
+                <div class="${isKot ? 'kot-section' : 'customer-section'}">
+                    <div class="header center">
+                        <div style="font-size: 11px; margin-bottom: 2px; border: 1px solid #000; display: inline-block; padding: 1px 5px; font-weight: bold;">${type}</div>
+                        <br/>
+                        ${logoImg}
+                        <div class="bold" style="font-size: 20px; text-transform: uppercase; margin: 3px 0; font-weight: bold;">${restaurantName}</div>
+                        ${!isKot ? `<div style="font-size: 15px; margin-bottom: 3px; font-weight: normal;">GSTIN: ${user?.gstNumber || 'N/A'}</div>` : ''}
+                        <div style="border-top: 1px solid #000; border-bottom: 1px solid #000; margin: 4px 0; padding: 3px 0;">
+                            <div style="display: flex; justify-content: space-between; font-size: 15px; padding: 0 5px; font-weight: normal;">
+                                <span>Bill No: <span>${order.orderNumber || String(order._id).slice(-8).toUpperCase()}</span></span>
+                                <span>Table: <span>${displayName}</span></span>
+                            </div>
                         </div>
-                    ` : ''}
-                    <div style="display: flex; justify-content: space-between; font-size: 14px; font-weight: bold; margin-top: 5px;">
-                        <span>TOTAL:</span>
-                        <span>₹${order.total.toFixed(2)}</span>
+                        <div style="font-size: 15px; font-weight: normal;">Date: ${new Date(order.createdAt).toLocaleString()}</div>
                     </div>
+                    <table>
+                        <thead>
+                            <tr style="border-bottom: 1px solid #000; font-size: 18px; font-weight: bold;">
+                                <th style="text-align: left; width: 50%;">Item</th>
+                                <th style="text-align: center; width: 15%;">Qty</th>
+                                ${!isKot ? '<th style="text-align: right; width: 15%;">Price</th>' : ''}
+                                ${!isKot ? '<th style="text-align: right; width: 20%;">Amt</th>' : ''}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${items.map((c, index) => `
+                                <tr>
+                                    <td style="padding: 2px 0; font-size: 16px; font-weight: bold;">${c.name}</td>
+                                    <td style="padding: 2px 0; text-align: center; font-size: 15px; font-weight: normal;">${c.quantity}</td>
+                                    ${!isKot ? `<td style="padding: 2px 0; text-align: right; font-size: 15px; font-weight: normal;">${parseFloat(c.price).toFixed(2)}</td>` : ''}
+                                    ${!isKot ? `<td style="padding: 2px 0; text-align: right; font-size: 15px; font-weight: normal;">${(c.price * c.quantity).toFixed(2)}</td>` : ''}
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                    ${!isKot ? `
+                        <div class="total-section" style="font-size: 15px; font-weight: normal;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+                                <span>Subtotal:</span>
+                                <span>₹${subtotal.toFixed(2)}</span>
+                            </div>
+                            ${order.extraCharges?.length > 0 ? order.extraCharges.map(charge => `
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+                                <span>${charge.name}:</span>
+                                <span>₹${charge.amount.toFixed(2)}</span>
+                            </div>
+                            `).join('') : ''}
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 12px; border-top: 1px dotted #ccc; padding-top: 2px;">
+                                <span>SGST:</span>
+                                <span>₹${sgst}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 12px;">
+                                <span>CGST:</span>
+                                <span>₹${cgst}</span>
+                            </div>
+                            ${order.discountAmount > 0 ? `
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+                                <span>Discount:</span>
+                                <span>-₹${order.discountAmount.toFixed(2)}</span>
+                            </div>
+                            ` : ''}
+                            <div style="display: flex; justify-content: space-between; font-size: 16px; font-weight: bold; margin-top: 5px; border-top: 1px solid #000; padding-top: 3px;">
+                                <span>GRAND TOTAL:</span>
+                                <span>₹${grandTotal}</span>
+                            </div>
+                        </div>
+                        <div style="margin-top: 8px; font-size: 12px; border-top: 1px dashed #ccc; padding-top: 5px;">
+                            <div style="font-weight: bold; margin-bottom: 2px;">Total Items: ${totalItemsCount}</div>
+                            <div>Payment: <span class="bold">${order.paymentMethod?.toUpperCase() || 'CASH'}</span></div>
+                            <div>Waiter: ${order.waiterName || 'Staff'}</div>
+                        </div>
+                        <div class="footer center">
+                            <div class="bold" style="font-size: 14px; margin-bottom: 3px;">Thank You! Visit Again</div>
+                            <div class="software-ref">Software by ProBloom</div>
+                            <div style="font-size: 9px; margin-top: 2px; opacity: 0.7;">#${String(order._id).slice(-8).toUpperCase()}</div>
+                        </div>
+                    ` : `
+                        <div class="footer center" style="margin-top: 5px; border-top: 1px dashed #000; padding-top: 5px;">
+                            <div style="font-weight: bold; margin-bottom: 2px;">Total Items: ${totalItemsCount}</div>
+                            <div class="bold" style="font-size: 16px;">ORDER REF: #${order.orderNumber || String(order._id).slice(-8).toUpperCase()}</div>
+                            <div style="font-size: 11px; margin-top: 3px; font-weight: bold;">(KITCHEN COPY)</div>
+                        </div>
+                    `}
                 </div>
-                <div style="margin-top: 10px;">
-                    <div>Payment: <span class="bold">${order.paymentMethod?.toUpperCase() || 'CASH'}</span></div>
-                    <div>Waiter: ${order.waiterName || 'Staff'}</div>
-                </div>
-                <div class="footer center">
-                    <div>Thank You for Dining with Us!</div>
-                    <div style="font-size: 8px; margin-top: 5px;">#${order._id.slice(-8).toUpperCase()}</div>
-                </div>
-            </body>
-            </html>
-        `;
+                `;
+            };
 
-        printWindow.document.write(billHTML);
-        printWindow.document.close();
-    }
+            const billHTML = `
+                <html>
+                <head>
+                    <title>Bill - ${displayName}</title>
+                    <style>
+                        @page { margin: 0; size: 80mm auto; }
+                        body { 
+                            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; 
+                            padding: 0; 
+                            width: 80mm; 
+                            margin: 0;
+                            font-size: 15px;
+                            color: #000;
+                            overflow-x: hidden;
+                            line-height: 1.2;
+                        }
+                        .center { text-align: center; }
+                        .bold { font-weight: bold; }
+                        .header { margin-bottom: 5px; padding: 5px 10px; }
+                        table { width: 100%; border-collapse: collapse; margin: 5px 0; padding: 0 10px; }
+                        th, td { padding: 0 10px; }
+                        .total-section { border-top: 1px dashed #000; padding: 5px 10px; margin-top: 5px; }
+                        .footer { margin-top: 10px; border-top: 1px dashed #000; padding: 5px 10px; font-size: 11px; }
+                        .logo { max-height: 55px; max-width: 140px; margin-bottom: 2px; object-fit: contain; }
+                        .software-ref { font-size: 9px; margin-top: 5px; color: #444; border-top: 1px dotted #ccc; padding-top: 3px; }
+                        @media print { body { width: 80mm; } }
+                    </style>
+                </head>
+                <body>
+                    ${getBillBody()}
+                </body>
+                </html>
+            `;
+
+            printWindow.document.open();
+            printWindow.document.write(billHTML);
+            printWindow.document.close();
+            
+            // Wait for resources to load if any, then print
+            await new Promise(resolve => {
+                const img = printWindow.document.querySelector('img');
+                if (img && !img.complete) {
+                    img.onload = resolve;
+                    img.onerror = resolve;
+                    // Timeout as fallback
+                    setTimeout(resolve, 1000);
+                } else {
+                    // Small delay for layout to settle
+                    setTimeout(resolve, 300);
+                }
+            });
+
+            printWindow.print();
+
+            // Small delay between jobs to allow the printer/browser to reset
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+
+        isPrintingRef.current = false;
+    };
+
+
 
     const markAsPrinted = async (id) => {
         // Optimistic UI update: Remove from list locally for instant feedback
@@ -243,6 +374,21 @@ export default function BillingQueue() {
                     ))}
                 </div>
             )}
+
+            {/* Hidden iframe for professional silent printing */}
+            <iframe
+                id="print-iframe"
+                title="print-iframe"
+                style={{ 
+                    position: 'absolute', 
+                    top: '-10000px', 
+                    left: '-10000px', 
+                    width: '0px', 
+                    height: '0px', 
+                    border: 'none',
+                    visibility: 'hidden'
+                }}
+            />
         </div>
     )
 }

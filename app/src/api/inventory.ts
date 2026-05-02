@@ -12,6 +12,8 @@ export const inventoryAPI = {
 
     delete: (id: string) => apiClient.delete(`/inventory/${id}`),
 
-    restock: (id: string, quantity: number, notes?: string) =>
-        apiClient.post(`/inventory/${id}/restock`, { quantity, notes }),
+    getMovements: () => apiClient.get('/inventory/movements'),
+
+    adjustStock: (id: string, data: { type: string; quantity: number; reason: string; totalCost?: number; recordAsExpense?: boolean }) =>
+        apiClient.post(`/inventory/${id}/adjust`, data),
 };

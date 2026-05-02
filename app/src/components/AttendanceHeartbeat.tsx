@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import * as Location from 'expo-location';
 import { useAuthStore } from '../store/useAuthStore';
+import { useAttendanceStore } from '../store/useAttendanceStore';
 import apiClient from '../api/client';
 
 const PING_INTERVAL_MS = 3 * 60 * 1000; // Every 3 minutes
@@ -12,11 +13,21 @@ const PING_INTERVAL_MS = 3 * 60 * 1000; // Every 3 minutes
  */
 export default function AttendanceHeartbeat() {
     const { user, logout, isAuthenticated } = useAuthStore();
+    const { isActive, fetchStatus } = useAttendanceStore();
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     useEffect(() => {
-        // Only run for employees (not owners/managers who set up the restaurant)
-        if (!isAuthenticated || !user || user.role === 'owner') return;
+        if (isAuthenticated && user?.role !== 'owner') {
+            fetchStatus();
+        }
+    }, [isAuthenticated, user?.role]);
+
+    useEffect(() => {
+        // Only run if shift is active and it's an employee
+        if (!isAuthenticated || !user || user.role === 'owner' || !isActive) {
+            if (intervalRef.current) clearInterval(intervalRef.current);
+            return;
+        }
 
         const ping = async () => {
             try {

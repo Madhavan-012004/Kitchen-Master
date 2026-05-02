@@ -1,25 +1,26 @@
 {
   "expo": {
-    "name": "Kitchen Master",
+    "name": "ProBloom",
     "slug": "kitchen-master",
     "version": "1.0.0",
-    "sdkVersion": "54.0.0",
+    "sdkVersion": "52.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/LOGO.jpeg",
     "userInterfaceStyle": "dark",
-    "scheme": "kitchenmaster",
+    "scheme": "probloom",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/LOGO.jpeg",
       "resizeMode": "contain",
       "backgroundColor": "#1A1A2E"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.kitchenmaster.app",
+      "bundleIdentifier": "com.probloom.app",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Kitchen Master needs microphone access for Voice-to-KOT ordering.",
-        "NSCameraUsageDescription": "Kitchen Master needs camera access to scan and digitize menus.",
-        "NSPhotoLibraryUsageDescription": "Kitchen Master needs photo access to upload menu images for AI digitization."
+        "NSMicrophoneUsageDescription": "ProBloom needs microphone access for Voice-to-KOT ordering.",
+        "NSCameraUsageDescription": "ProBloom needs camera access to scan and digitize menus.",
+        "NSPhotoLibraryUsageDescription": "ProBloom needs photo access to upload menu images for AI digitization.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -27,15 +28,24 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1A1A2E"
       },
-      "package": "com.kitchenmaster.app",
+      "package": "com.probloom.app",
       "permissions": [
         "RECORD_AUDIO",
         "CAMERA",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
         "ACCESS_NETWORK_STATE",
-        "VIBRATE"
-      ]
+        "VIBRATE",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyCYlrrl1EGaXHACVUsJ-nNvzGDFK6OS6M4"
+        }
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -44,15 +54,16 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow Kitchen Master to use the camera."
+          "cameraPermission": "Allow ProBloom to use the camera."
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-location"
     ],
     "extra": {
-      "API_URL": "http://YOUR_PC_LAN_IP:5001",
+      "API_URL": "https://kitchen-master.onrender.com",
       "eas": {
-        "projectId": "kitchen-master"
+        "projectId": "9a30d950-23b0-4f0f-870d-bf37cc0ea95b"
       }
     }
   }

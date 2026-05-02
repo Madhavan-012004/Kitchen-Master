@@ -1,0 +1,234 @@
+package com.probloom.service;
+
+import com.probloom.model.entity.Orders;
+import com.probloom.model.entity.OrderItem;
+import com.probloom.model.entity.User;
+import org.springframework.stereotype.Service;
+
+import java.io.OutputStream;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
+import java.time.format.DateTimeFormatter;
+
+@Service
+public class PrintService {
+
+    private static final byte[] INIT = {0x1B, 0x40};
+    private static final byte[] CUT = {0x1D, 0x56, 0x41, 0x10};
+    private static final byte[] ALIGN_LEFT = {0x1B, 0x61, 0};
+    private static final byte[] ALIGN_CENTER = {0x1B, 0x61, 1};
+    private static final byte[] ALIGN_RIGHT = {0x1B, 0x61, 2};
+    private static final byte[] BOLD_ON = {0x1B, 0x45, 1};
+    private static final byte[] BOLD_OFF = {0x1B, 0x45, 0};
+    private static final byte[] SIZE_NORMAL = {0x1D, 0x21, 0x00};
+    private static final byte[] SIZE_DOUBLE = {0x1D, 0x21, 0x11};
+    private static final byte[] SIZE_DOUBLE_H = {0x1D, 0x21, 0x01};
+
+    private void write(OutputStream out, String text) throws Exception {
+        out.write(text.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private void write(OutputStream out, byte[] command) throws Exception {
+        out.write(command);
+    }
+
+    private String getDisplayName(Orders order) {
+        if (order.getTableNumber() != null && !order.getTableNumber().isEmpty()) {
+            return "Table " + order.getTableNumber();
+        }
+        if (order.getTokenNumber() != null && !order.getTokenNumber().isEmpty()) {
+            return "Token " + order.getTokenNumber();
+        }
+        return "Takeaway";
+    }
+
+    /**
+     * Prints a KOT (Kitchen Order Ticket) directly to the specified IP Address
+     */
+    public boolean printKOT(Orders order, String printerIp) {
+        if (printerIp == null || printerIp.trim().isEmpty()) return false;
+
+        try (Socket socket = new Socket(printerIp.trim(), 9100);
+             OutputStream out = socket.getOutputStream()) {
+
+            write(out, INIT);
+            write(out, ALIGN_CENTER);
+            write(out, BOLD_ON);
+            write(out, SIZE_DOUBLE);
+            write(out, "KOT\n");
+            
+            write(out, SIZE_NORMAL);
+            write(out, "--------------------------------\n");
+            write(out, ALIGN_LEFT);
+            
+            write(out, SIZE_DOUBLE_H);
+            write(out, "Order: " + (order.getOrderNumber() != null ? order.getOrderNumber() : order.getId().toString().substring(0, 8)) + "\n");
+            write(out, "Loc: " + getDisplayName(order) + "\n");
+            write(out, SIZE_NORMAL);
+            
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm");
+            write(out, "Date: " + order.getCreatedAt().format(formatter) + "\n");
+            
+            if (order.getWaiterName() != null) {
+                write(out, "Wait: " + order.getWaiterName() + "\n");
+            }
+
+            write(out, "--------------------------------\n");
+            write(out, BOLD_ON);
+            write(out, SIZE_DOUBLE_H);
+            write(out, String.format("%-25s %4s\n", "ITEM", "QTY"));
+            write(out, SIZE_NORMAL);
+            write(out, BOLD_OFF);
+            write(out, "--------------------------------\n");
+
+            // Items
+            int totalItems = 0;
+            write(out, BOLD_ON);
+            write(out, SIZE_DOUBLE_H);
+            if (order.getItems() != null) {
+                for (OrderItem item : order.getItems()) {
+                    totalItems += item.getQuantity();
+                    String name = item.getName();
+                    if (name.length() > 25) name = name.substring(0, 25);
+                    write(out, String.format("%-25s %4d\n", name, item.getQuantity()));
+                    
+                    if (item.getNotes() != null && !item.getNotes().isEmpty()) {
+                        write(out, SIZE_NORMAL);
+                        write(out, " *Note: " + item.getNotes() + "\n");
+                        write(out, SIZE_DOUBLE_H);
+                    }
+                }
+            }
+            write(out, SIZE_NORMAL);
+            write(out, BOLD_OFF);
+            
+            write(out, "--------------------------------\n");
+            write(out, ALIGN_CENTER);
+            write(out, "Total Items: " + totalItems + "\n");
+            
+            // Feed and Cut
+            write(out, "\n\n\n\n");
+            write(out, CUT);
+
+            out.flush();
+            System.out.println("✅ IP Print KOT Success: " + printerIp);
+            return true;
+        } catch (Exception e) {
+            System.err.println("❌ IP Print KOT Failed to " + printerIp + ": " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Prints a Customer Bill directly to the specified IP Address
+     */
+    public boolean printBill(Orders order, User restaurant, String printerIp) {
+        if (printerIp == null || printerIp.trim().isEmpty()) return false;
+
+        try (Socket socket = new Socket(printerIp.trim(), 9100);
+             OutputStream out = socket.getOutputStream()) {
+
+            write(out, INIT);
+            
+            // Header
+            write(out, ALIGN_CENTER);
+            write(out, BOLD_ON);
+            write(out, SIZE_DOUBLE);
+            write(out, (restaurant.getRestaurantName() != null ? restaurant.getRestaurantName() : "RESTAURANT") + "\n");
+            write(out, SIZE_NORMAL);
+            write(out, BOLD_OFF);
+
+            if (restaurant.getAddress() != null) {
+                write(out, restaurant.getAddress() + "\n");
+            }
+            if (restaurant.getPhone() != null) {
+                write(out, "Ph: " + restaurant.getPhone() + "\n");
+            }
+            if (restaurant.getGstNumber() != null && !restaurant.getGstNumber().isEmpty()) {
+                write(out, "GSTIN: " + restaurant.getGstNumber() + "\n");
+            }
+            
+            write(out, "--------------------------------\n");
+            write(out, BOLD_ON);
+            write(out, "TAX INVOICE\n");
+            write(out, BOLD_OFF);
+            write(out, "--------------------------------\n");
+
+            // Meta
+            write(out, ALIGN_LEFT);
+            write(out, "Bill No : " + (order.getOrderNumber() != null ? order.getOrderNumber() : order.getId().toString().substring(0, 8)) + "\n");
+            write(out, "Loc     : " + getDisplayName(order) + "\n");
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm");
+            write(out, "Date    : " + order.getCreatedAt().format(formatter) + "\n");
+            if (order.getWaiterName() != null) {
+                write(out, "Staff   : " + order.getWaiterName() + "\n");
+            }
+            write(out, "--------------------------------\n");
+
+            // Items Table
+            write(out, BOLD_ON);
+            // Example format: 20 chars name, 3 qty, 7 price
+            write(out, String.format("%-18s %3s %7s\n", "Item", "Qty", "Amt"));
+            write(out, BOLD_OFF);
+            write(out, "--------------------------------\n");
+
+            if (order.getItems() != null) {
+                for (OrderItem item : order.getItems()) {
+                    String name = item.getName();
+                    if (name.length() > 18) name = name.substring(0, 18);
+                    double tot = item.getPrice() * item.getQuantity();
+                    
+                    write(out, String.format("%-18s %3d %7.2f\n", name, item.getQuantity(), tot));
+                }
+            }
+            write(out, "--------------------------------\n");
+
+            // Totals
+            write(out, ALIGN_RIGHT);
+            write(out, String.format("Subtotal:  %7.2f\n", order.getSubtotal() != null ? order.getSubtotal() : 0.0));
+            
+            if (order.getExtraCharges() != null && !order.getExtraCharges().isEmpty()) {
+                for (com.probloom.model.entity.ExtraCharge charge : order.getExtraCharges()) {
+                    String cName = charge.getName();
+                    if (cName.length() > 14) cName = cName.substring(0, 14);
+                    write(out, String.format("%s:  %7.2f\n", cName, charge.getAmount()));
+                }
+            }
+            
+            if (order.getTaxAmount() != null && order.getTaxAmount() > 0) {
+                double halfTax = order.getTaxAmount() / 2.0;
+                write(out, String.format("SGST:  %7.2f\n", halfTax));
+                write(out, String.format("CGST:  %7.2f\n", halfTax));
+            }
+
+            if (order.getDiscountAmount() != null && order.getDiscountAmount() > 0) {
+                write(out, String.format("Discount: -%7.2f\n", order.getDiscountAmount()));
+            }
+            
+            write(out, "--------------------------------\n");
+            write(out, BOLD_ON);
+            write(out, SIZE_DOUBLE_H);
+            write(out, String.format("TOTAL: %7.2f\n", order.getTotal() != null ? order.getTotal() : 0.0));
+            write(out, SIZE_NORMAL);
+            write(out, BOLD_OFF);
+            write(out, "--------------------------------\n");
+
+            // Footer
+            write(out, ALIGN_CENTER);
+            write(out, "Payment: " + (order.getPaymentMethod() != null ? order.getPaymentMethod().name().toUpperCase() : "CASH") + "\n");
+            write(out, "\nThank You! Please Visit Again.\n");
+            write(out, "Software by ProBloom\n");
+
+            // Feed and Cut
+            write(out, "\n\n\n\n");
+            write(out, CUT);
+
+            out.flush();
+            System.out.println("✅ IP Print Bill Success: " + printerIp);
+            return true;
+        } catch (Exception e) {
+            System.err.println("❌ IP Print Bill Failed to " + printerIp + ": " + e.getMessage());
+            return false;
+        }
+    }
+}

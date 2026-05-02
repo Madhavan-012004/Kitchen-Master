@@ -1,0 +1,39 @@
+{
+  "customer": {
+    "welcome": "Welcome back,",
+    "search_placeholder": "Search dishes…",
+    "all": "All",
+    "best_seller": "BESTSELLER",
+    "add_to_order": "Add to Order",
+    "recommended_extras": "Recommended Extras",
+    "total": "Total",
+    "item_total": "Item Total",
+    "taxes": "GST & Charges",
+    "to_pay": "To Pay",
+    "review_order": "Review Order",
+    "place_order": "Place Order",
+    "order_notes": "Special Requests",
+    "notes_placeholder": "e.g. less spicy, no onions…",
+    "how_to_pay": "Payment Method",
+    "order_received": "Order Placed!",
+    "chef_working": "Our chef is working on your meal! 🍳",
+    "got_it": "Got it!",
+    "live_tracker": "LIVE ORDER",
+    "details": "Details",
+    "bill": "Request Bill",
+    "preparing": "Preparing",
+    "ready": "Ready",
+    "served": "Served",
+    "no_dishes": "No Dishes Found",
+    "try_again": "Show All"
+  },
+  "welcome": {
+    "headline": "Welcome! Let's",
+    "headline2": "get you started",
+    "subline": "Enter your name and number to place orders, track your food live, and request the bill — all from here.",
+    "name_placeholder": "Your full name",
+    "phone_placeholder": "10-digit mobile number",
+    "cta": "View Menu & Order",
+    "privacy": "Your number is only used to serve your order."
+  }
+}
