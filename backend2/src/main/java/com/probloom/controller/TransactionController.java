@@ -32,11 +32,25 @@ public class TransactionController {
         return ok("Transaction record created", transactionService.create(restaurant, body));
     }
 
+    @DeleteMapping("/wipe")
+    public ResponseEntity<?> wipe() {
+        User restaurant = resolver.getRestaurantOwner();
+        transactionService.wipe(restaurant);
+        return ok("Transaction ledger wiped", null);
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable("id") @NonNull Long id) {
         User restaurant = resolver.getRestaurantOwner();
         transactionService.delete(restaurant, id);
         return ok("Transaction deleted", null);
+    }
+
+    @PutMapping("/{id}/status")
+    public ResponseEntity<?> updateStatus(@PathVariable("id") @NonNull Long id, @RequestBody Map<String, String> body) {
+        User restaurant = resolver.getRestaurantOwner();
+        String status = body.get("status");
+        return ok("Transaction status updated", transactionService.updatePaymentStatus(restaurant, id, java.util.Objects.requireNonNull(status)));
     }
 
     private ResponseEntity<Map<String, Object>> ok(String message, Object data) {

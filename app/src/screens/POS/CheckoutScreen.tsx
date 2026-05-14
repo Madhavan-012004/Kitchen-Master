@@ -649,8 +649,8 @@ const createStyles = (colors: any, gradients: any, isDark: boolean) => StyleShee
     checkoutBtn: { flex: 1.5, borderRadius: Radius.xl, overflow: 'hidden', ...Shadows.primary },
     checkoutGradient: { flexDirection: 'row', alignItems: 'center', paddingVertical: 18, paddingHorizontal: 20, justifyContent: 'space-between' },
     checkoutActionGroup: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-    checkoutText: { ...Typography.h5, color: colors.white, fontWeight: '700' },
-    checkoutPriceText: { ...Typography.h5, color: colors.white, fontWeight: '800' },
+    checkoutText: { ...Typography.h5, color: '#000000', fontWeight: '700' },
+    checkoutPriceText: { ...Typography.h5, color: '#000000', fontWeight: '800' },
     advancedActionsCenter: { flexDirection: 'row', justifyContent: 'center', marginTop: Spacing.lg },
     advancedBtn: { width: '60%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: Radius.xl, backgroundColor: colors.primary + '1A', borderWidth: 1, borderColor: colors.primary + '33' },
     advancedBtnText: { ...Typography.button, color: colors.primary, fontWeight: '700' },
@@ -676,5 +676,5 @@ const createStyles = (colors: any, gradients: any, isDark: boolean) => StyleShee
     modalInput: { backgroundColor: colors.glass, borderWidth: 1, borderColor: colors.border, borderRadius: Radius.md, padding: Spacing.md, color: colors.textPrimary, ...Typography.body1, marginBottom: Spacing.xl },
     modalActionBtn: { borderRadius: Radius.lg, overflow: 'hidden' },
     modalActionGradient: { paddingVertical: 16, alignItems: 'center', justifyContent: 'center' },
-    modalActionText: { ...Typography.h5, color: colors.white },
+    modalActionText: { ...Typography.h5, color: '#000000' },
 });

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
     View, Text, StyleSheet, FlatList, TouchableOpacity,
-    ActivityIndicator, Animated, StatusBar, RefreshControl
+    ActivityIndicator, Animated, StatusBar, RefreshControl, Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -60,6 +60,30 @@ export default function InventoryScreen({ navigation }: any) {
         }
     };
 
+    const handleDeleteItem = (item: any) => {
+        Alert.alert(
+            "Delete Item",
+            `Are you sure you want to delete ${item.name}? This action cannot be undone.`,
+            [
+                { text: "Cancel", style: "cancel" },
+                { 
+                    text: "Delete", 
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            await inventoryAPI.delete(item._id || item.id);
+                            fetchData(true);
+                        } catch (error) {
+                            console.error(error);
+                            Alert.alert("Error", "Failed to delete item.");
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+
     const safeItems = Array.isArray(items) ? items : [];
     const lowItems = safeItems.filter(i => i.currentStock <= i.lowStockThreshold);
     const displayItems = filter === 'low' ? lowItems : safeItems;
@@ -111,13 +135,22 @@ export default function InventoryScreen({ navigation }: any) {
                                 {item.currentStock === 0 ? 'Out of Stock' : isLow ? 'Low Stock' : 'Optimal'}
                             </Text>
                         </View>
-                        <TouchableOpacity 
-                            style={themedStyles.adjustBtn} 
-                            onPress={() => { setSelectedItem(item); setShowAdjustModal(true); }}
-                        >
-                            <Ionicons name="flash" size={14} color={colors.primary} />
-                            <Text style={themedStyles.adjustText}>Adjust</Text>
-                        </TouchableOpacity>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <TouchableOpacity 
+                                style={[themedStyles.adjustBtn, { borderLeftWidth: 0 }]} 
+                                onPress={() => handleDeleteItem(item)}
+                            >
+                                <Ionicons name="trash-outline" size={14} color={colors.error} />
+                                <Text style={[themedStyles.adjustText, { color: colors.error }]}>Delete</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                                style={themedStyles.adjustBtn} 
+                                onPress={() => { setSelectedItem(item); setShowAdjustModal(true); }}
+                            >
+                                <Ionicons name="flash" size={14} color={colors.primary} />
+                                <Text style={themedStyles.adjustText}>Adjust</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 </LinearGradient>
             </View>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     View, Text, StyleSheet, FlatList, TouchableOpacity,
-    ActivityIndicator, StatusBar, Alert, Share, Platform, ScrollView
+    ActivityIndicator, StatusBar, Alert, Share, Platform, ScrollView, Linking
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -111,6 +111,45 @@ export default function OrderHistoryScreen({ navigation }: any) {
         }
     };
 
+    const handleA4Invoice = async (orderId: string, orderNumber: string) => {
+        try {
+            const baseUrl = api.defaults.baseURL || '';
+            const downloadUrl = `${baseUrl.replace('/api', '')}/api/orders/${orderId}/invoice/a4`;
+            Linking.openURL(downloadUrl);
+        } catch (error) {
+            console.error('Failed to download invoice', error);
+            Alert.alert('Error', 'Failed to download invoice.');
+        }
+    };
+
+    const handleWhatsApp = (order: any) => {
+        Alert.prompt(
+            'WhatsApp Receipt',
+            'Enter customer WhatsApp number (e.g. 919876543210):',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Send',
+                    onPress: (phone) => {
+                        if (!phone) return;
+                        const text = `*${user?.restaurantName || 'RESTAURANT'}*\n\nOrder #${order.orderNumber || String(order._id).slice(-8).toUpperCase()}\nAmount: ₹${order.total?.toFixed(2) || order.subtotal?.toFixed(2) || 0}\nStatus: ${order.status || 'PREPARING'}\n\nThank you for your order!`;
+                        const url = `whatsapp://send?phone=${phone}&text=${encodeURIComponent(text)}`;
+                        Linking.canOpenURL(url).then(supported => {
+                            if (supported) {
+                                Linking.openURL(url);
+                            } else {
+                                const webUrl = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+                                Linking.openURL(webUrl);
+                            }
+                        });
+                    }
+                }
+            ],
+            'plain-text',
+            order.customerPhone || ''
+        );
+    };
+
     const formatTime = (dateString: string) => {
         const d = new Date(dateString);
         return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
@@ -174,11 +213,19 @@ export default function OrderHistoryScreen({ navigation }: any) {
                                     : 'Unknown'}
                             </Text>
                         </View>
-                        {isOwner && (
-                            <TouchableOpacity onPress={() => handleDelete(item._id)} style={themedStyles.deleteBtn}>
-                                <Ionicons name="trash-outline" size={18} color={colors.error} />
+                        <View style={{ flexDirection: 'row', gap: 6 }}>
+                            <TouchableOpacity onPress={() => handleA4Invoice(item._id, item.orderNumber)} style={[themedStyles.actionBtn, { backgroundColor: '#3b82f61A' }]}>
+                                <Text style={{ fontSize: 16 }}>📄</Text>
                             </TouchableOpacity>
-                        )}
+                            <TouchableOpacity onPress={() => handleWhatsApp(item)} style={[themedStyles.actionBtn, { backgroundColor: '#25D3661A' }]}>
+                                <Text style={{ fontSize: 16 }}>💬</Text>
+                            </TouchableOpacity>
+                            {isOwner && (
+                                <TouchableOpacity onPress={() => handleDelete(item._id)} style={themedStyles.deleteBtn}>
+                                    <Ionicons name="trash-outline" size={18} color={colors.error} />
+                                </TouchableOpacity>
+                            )}
+                        </View>
                     </View>
                 </View>
             </View>
@@ -399,5 +446,6 @@ const createStyles = (colors: any, gradients: any, isDark: boolean) => StyleShee
     statusDot: { width: 6, height: 6, borderRadius: 3 },
     statusText: { fontSize: 12, fontWeight: '700' },
 
+    actionBtn: { width: 32, height: 32, borderRadius: Radius.round, justifyContent: 'center', alignItems: 'center' },
     deleteBtn: { width: 32, height: 32, backgroundColor: colors.error + '1A', borderRadius: Radius.round, justifyContent: 'center', alignItems: 'center' },
 });

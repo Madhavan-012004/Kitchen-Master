@@ -362,10 +362,10 @@ export default function POSPage() {
                 buffer = lines.pop(); // Keep partial line
                 
                 for (const line of lines) {
-                    const match = line.match(/(\d+\.?\d*)/);
+                    const match = line.match(/[-+]?\d*\.?\d+/);
                     if (match) {
-                        const val = parseFloat(match[1]);
-                        if (!isNaN(val)) setScaleWeight(val);
+                        const val = parseFloat(match[0]);
+                        if (!isNaN(val)) setScaleWeight(Math.abs(val));
                     }
                 }
             }
@@ -543,7 +543,9 @@ export default function POSPage() {
                     price: c.price,
                     quantity: c.quantity,
                     notes: c.notes,
-                    status: c.status
+                    status: c.status,
+                    inventoryItemId: c.inventoryItemId,
+                    barcode: c.barcode
                 })),
                 orderType: (selectedTable && selectedTable.startsWith('Takeaway')) ? 'takeaway' : 'dine-in',
                 extraCharges: orderExtraCharges,
@@ -765,12 +767,22 @@ export default function POSPage() {
                     table: order.tableNumber || (order.tokenNumber ? `Token ${order.tokenNumber}` : 'Takeaway'),
                     subtotal: order.total || order.subtotal || 0,
                     extraCharges: order.extraCharges || [],
-                    createdAt: order.createdAt || new Date()
+                    createdAt: order.createdAt || new Date(),
+                    paymentMethod: order.paymentMethod || paymentMethod || 'Cash',
+                    // Pharmacy / custom bill fields
+                    billTemplate: order.billTemplate || 'standard',
+                    doctorName: order.doctorName || '',
+                    numberOfDays: order.numberOfDays || '',
+                    customerName: order.customerName || '',
+                    customerPhone: order.customerPhone || '',
+                    customerFirm: order.customerFirm || '',
+                    billNo: order.billNo || order.orderNumber || '',
+                    discountPct: order.discountPct || 0,
                 } 
             });
         }
 
-        if (printKitchenCopy) {
+        if (printKitchenCopy && !order.skipKOT) {
             newJobs.push({ 
                 type: t('bill.kitchen_copy', 'KITCHEN COPY'), 
                 isKot: true,
@@ -813,6 +825,36 @@ export default function POSPage() {
         setShowPaymentModal(true);
     };
 
+    const handleA4Invoice = async () => {
+        if (!selectedTable) return;
+        const existing = orders[selectedTable];
+        if (!existing) return;
+        try {
+            const res = await api.get(`/orders/${existing._id}/invoice/a4`, { responseType: 'blob' });
+            const url = window.URL.createObjectURL(new Blob([res.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `Invoice-${existing.orderNumber || existing._id}.pdf`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } catch (e) {
+            console.error('Failed to download invoice', e);
+            notify('Failed to download A4 Invoice');
+        }
+    };
+
+    const handleWhatsApp = () => {
+        if (!selectedTable) return;
+        const existing = orders[selectedTable];
+        if (!existing) return;
+        const phone = prompt("Enter customer WhatsApp number (e.g. 919876543210):", existing.customerPhone || "");
+        if (!phone) return;
+        const text = `*${user?.restaurantName || 'RESTAURANT'}*\n\nOrder #${existing.orderNumber || String(existing._id).slice(-8).toUpperCase()}\nAmount: ₹${existing.total?.toFixed(2) || existing.subtotal?.toFixed(2) || 0}\nStatus: ${existing.status || 'PREPARING'}\n\nThank you for your order!`;
+        const url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+        window.open(url, '_blank');
+    };
+
     const processQueue = async (logoImg, restaurantName) => {
         if (isPrintingRef.current || queueRef.current.length === 0) return;
         isPrintingRef.current = true;
@@ -829,6 +871,22 @@ export default function POSPage() {
             const job = queueRef.current.shift();
             const { type, isKot, orderData, printLang = 'en' } = job;
             const { items, orderNumber, table, subtotal, extraCharges, createdAt } = orderData;
+
+            // ── Destructure pharmacy-specific fields FIRST (used inside getBillBody) ──
+            const {
+                billTemplate: jobBillTemplate,
+                doctorName: jobDoctorName,
+                numberOfDays: jobNumberOfDays,
+                customerName: jobCustomerName,
+                customerPhone: jobCustomerPhone,
+                customerFirm: jobCustomerFirm,
+                billNo: jobBillNo,
+                discountPct: jobDiscountPct,
+                paymentMethod: jobPaymentMethod,
+            } = orderData;
+
+            // KOT is ALWAYS thermal, never pharmacy A4
+            const isPharmacy = !isKot && (jobBillTemplate === 'pharmacy' || jobBillTemplate === 'A4');
             
             const getBillBody = () => {
                 const totalItemsCount = items.reduce((acc, item) => acc + item.quantity, 0);
@@ -853,6 +911,8 @@ export default function POSPage() {
                         </div>
                     </div>
                     <div class="center" style="font-size: 15px; font-weight: normal;">${t('bill.date', 'Date')}: ${new Date(createdAt).toLocaleString()}</div>
+                    ${jobDoctorName ? `<div class="center" style="font-size:12px; margin-top:2px;">Dr: <b>${jobDoctorName}</b></div>` : ''}
+                    ${jobNumberOfDays ? `<div class="center" style="font-size:12px;">Days: <b>${jobNumberOfDays}</b></div>` : ''}
                     <hr style="border-top:1px dashed #000; margin: 5px 0;"/>
                     <table>
                         <thead>
@@ -909,7 +969,7 @@ export default function POSPage() {
                         <hr style="border-top:1px dashed #000; margin: 10px 0;"/>
                         <div style="font-size: 12px; padding: 0 10px; margin-bottom: 5px;">
                             <div style="font-weight: bold; margin-bottom: 2px;">${t('pos.items', 'Total Items')}: ${totalItemsCount}</div>
-                            <div>${t('bill.payment_mode', 'Payment Mode')}: <span class="bold">${t('bill.cash', 'CASH')}</span></div>
+                            <div>${t('bill.payment_mode', 'Payment Mode')}: <span class="bold">${(jobPaymentMethod || 'Cash').toUpperCase()}</span></div>
                         </div>
                         <div class="center footer">
                             <div class="bold" style="font-size: 14px; margin-bottom: 3px;">${t('bill.thank_you', 'Thank You! Visit Again')}</div>
@@ -926,7 +986,219 @@ export default function POSPage() {
                 `;
             };
 
-            const billHTML = `
+            // ── Pharmacy A4 Invoice Template ──────────────────────────────
+            const getPharmacyBillBody = () => {
+                const invoiceDate = new Date(createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                const invoiceTime = new Date(createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+                
+                let taxableTotal = 0, cgstTotal = 0, sgstTotal = 0, grandTotalPharm = 0;
+                const gstSummary = {}; // To group by GST%
+
+                const itemRows = (items || []).map((item, i) => {
+                    const qty = parseFloat(item.quantity) || 0;
+                    const mrp = parseFloat(item.mrp || item.price) || 0;
+                    const gstPct = parseFloat(item.tax || 5.00); // Default to 5% if not provided
+                    
+                    // Calculation: rate = mrp / (1 + gstPct/100)
+                    const rate = +(mrp / (1 + gstPct / 100)).toFixed(2);
+                    const taxable = +(rate * qty).toFixed(2);
+                    const gstAmt = +(taxable * gstPct / 100).toFixed(2);
+                    const cgst = +(gstAmt / 2).toFixed(2);
+                    const sgst = +(gstAmt / 2).toFixed(2);
+                    const total = +(taxable + gstAmt).toFixed(2);
+
+                    taxableTotal += taxable;
+                    cgstTotal += cgst;
+                    sgstTotal += sgst;
+                    grandTotalPharm += total;
+
+                    // Group for tax summary
+                    if (!gstSummary[gstPct]) gstSummary[gstPct] = { taxable: 0, cgst: 0, sgst: 0, total: 0 };
+                    gstSummary[gstPct].taxable += taxable;
+                    gstSummary[gstPct].cgst += cgst;
+                    gstSummary[gstPct].sgst += sgst;
+                    gstSummary[gstPct].total += total;
+
+                    return `<tr>
+                        <td style="border-left:1px solid #000;border-right:1px solid #000;padding:2px 4px;text-align:center">${i + 1}</td>
+                        <td style="border-right:1px solid #000;padding:2px 4px;text-align:center">${item.hsnCode || '-'}</td>
+                        <td style="border-right:1px solid #000;padding:2px 4px;text-align:left"><b>${item.name || ''}</b></td>
+                        <td style="border-right:1px solid #000;padding:2px 4px;text-align:center">${item.batchNo || '-'}</td>
+                        <td style="border-right:1px solid #000;padding:2px 4px;text-align:center">${item.expDate || '-'}</td>
+                        <td style="border-right:1px solid #000;padding:2px 4px;text-align:center">${qty}</td>
+                        <td style="border-right:1px solid #000;padding:2px 4px;text-align:right">${mrp.toFixed(2)}</td>
+                        <td style="border-right:1px solid #000;padding:2px 4px;text-align:center">${gstPct.toFixed(2)}</td>
+                        <td style="border-right:1px solid #000;padding:2px 4px;text-align:right">${total.toFixed(2)}</td>
+                    </tr>`;
+                }).join('');
+
+                const taxRows = Object.keys(gstSummary).map(pct => {
+                    const s = gstSummary[pct];
+                    const halfPct = (parseFloat(pct) / 2).toFixed(2);
+                    return `<tr>
+                        <td style="border:1px solid #ccc;padding:2px 4px;text-align:center">${halfPct}+${halfPct}</td>
+                        <td style="border:1px solid #ccc;padding:2px 4px;text-align:right">${s.taxable.toFixed(2)}</td>
+                        <td style="border:1px solid #ccc;padding:2px 4px;text-align:right">${s.cgst.toFixed(2)}</td>
+                        <td style="border:1px solid #ccc;padding:2px 4px;text-align:right">${s.sgst.toFixed(2)}</td>
+                        <td style="border:1px solid #ccc;padding:2px 4px;text-align:right">${s.total.toFixed(2)}</td>
+                    </tr>`;
+                }).join('');
+
+                return `
+                <div style="font-family:Arial,sans-serif;font-size:11px;color:#000;max-width:210mm;margin:0 auto;padding:10px;border:1px solid #3b82f6;border-radius:12px;position:relative;">
+                  
+                  <!-- HEADER -->
+                  <div style="text-align:center;position:relative;margin-bottom:10px">
+                    ${logoImg ? `<img src="${logoImg.match(/src="([^"]+)"/)?.[1]||''}" style="position:absolute;left:0;top:0;max-height:60px"/>` : ''}
+                    <div style="font-size:24px;font-weight:900;color:#1e40af;letter-spacing:1px">${restaurantName.toUpperCase()}</div>
+                    <div style="font-size:12px;margin:3px 0">${user?.address || ''}</div>
+                    <div style="font-size:12px">Phones : ${user?.phone || ''}  E-mail : ${user?.email || ''}</div>
+                    <div style="font-size:11px;margin-top:4px">DL. No. TN-05-20-00065/05-21-00065/05-20F-00004 TIN. No. - GST No. ${user?.gstNumber || ''}</div>
+                    <div style="font-size:11px">CIN No. CIN</div>
+                    ${logoImg ? `<img src="${logoImg.match(/src="([^"]+)"/)?.[1]||''}" style="position:absolute;right:0;top:0;max-height:60px"/>` : ''}
+                  </div>
+
+                  <div style="display:flex;justify-content:space-between;font-weight:700;border-top:2px solid #000;padding:4px 0">
+                    <div>${restaurantName.toUpperCase()} SALES</div>
+                    <div style="font-size:14px">Sales Bill</div>
+                  </div>
+
+                  <!-- BILL INFO GRID -->
+                  <table width="100%" style="border-collapse:collapse;margin-bottom:10px">
+                    <tr>
+                        <td width="15%" style="border:1px solid #000;padding:4px">Bill No</td>
+                        <td width="30%" style="border:1px solid #000;padding:4px;font-weight:900;font-size:14px">${jobBillNo || orderNumber || ''}</td>
+                        <td rowspan="2" style="border:1px solid #000;text-align:center;vertical-align:middle">
+                            <div style="font-family:'Libre Barcode 39', cursive;font-size:40px">|||| || || |||</div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="border:1px solid #000;padding:4px">Bill Date</td>
+                        <td style="border:1px solid #000;padding:4px">${invoiceDate} ${invoiceTime}</td>
+                    </tr>
+                    <tr>
+                        <td style="border:1px solid #000;padding:4px">Reg.No</td>
+                        <td colspan="2" style="border:1px solid #000;padding:4px">Reg No : ${jobCustomerFirm || '-'}</td>
+                    </tr>
+                    <tr>
+                        <td style="border:1px solid #000;padding:4px">Pat.Name</td>
+                        <td colspan="2" style="border:1px solid #000;padding:4px;font-weight:700">${jobCustomerName || '-'}</td>
+                    </tr>
+                    <tr>
+                        <td style="border:1px solid #000;padding:4px">Doc.Name</td>
+                        <td colspan="2" style="border:1px solid #000;padding:4px">Dr. ${jobDoctorName || '-'}</td>
+                    </tr>
+                  </table>
+
+                  <!-- ITEM TABLE -->
+                  <table width="100%" style="border-collapse:collapse;margin-bottom:10px">
+                    <thead>
+                        <tr style="border:1px solid #000;background:#f8fafc">
+                            <th style="border:1px solid #000;padding:4px;width:30px">S. No</th>
+                            <th style="border:1px solid #000;padding:4px;width:70px">HSN</th>
+                            <th style="border:1px solid #000;padding:4px">Description</th>
+                            <th style="border:1px solid #000;padding:4px;width:70px">Batch</th>
+                            <th style="border:1px solid #000;padding:4px;width:60px">Exp.dt</th>
+                            <th style="border:1px solid #000;padding:4px;width:40px">Qty</th>
+                            <th style="border:1px solid #000;padding:4px;width:60px">Price</th>
+                            <th style="border:1px solid #000;padding:4px;width:50px">GST%</th>
+                            <th style="border:1px solid #000;padding:4px;width:70px">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody style="min-height:300px">
+                        ${itemRows}
+                        <!-- Fill empty space -->
+                        ${Array(Math.max(0, 10 - (items?.length || 0))).fill(0).map(() => `
+                            <tr>
+                                <td style="border-left:1px solid #000;border-right:1px solid #000;padding:8px"></td>
+                                <td style="border-right:1px solid #000;"></td>
+                                <td style="border-right:1px solid #000;"></td>
+                                <td style="border-right:1px solid #000;"></td>
+                                <td style="border-right:1px solid #000;"></td>
+                                <td style="border-right:1px solid #000;"></td>
+                                <td style="border-right:1px solid #000;"></td>
+                                <td style="border-right:1px solid #000;"></td>
+                                <td style="border-right:1px solid #000;"></td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                    <tfoot>
+                        <tr style="border-top:1px solid #000">
+                            <td colspan="9" style="border:1px solid #000;padding:0"></td>
+                        </tr>
+                    </tfoot>
+                  </table>
+
+                  <!-- PAID STAMP -->
+                  <div style="position:absolute;top:55%;left:40%;transform:rotate(-20deg);border:4px solid rgba(239,68,68,0.3);color:rgba(239,68,68,0.3);font-size:60px;font-weight:900;padding:10px 20px;border-radius:10px;pointer-events:none">PAID</div>
+
+                  <!-- SUMMARY SECTION -->
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                    <div width="60%">
+                        <div style="margin-bottom:10px">Total No.of Medicines : ${(items || []).length}</div>
+                        <table style="border-collapse:collapse;font-size:10px">
+                            <tr style="background:#f8fafc">
+                                <th style="border:1px solid #ccc;padding:2px 6px">GST %</th>
+                                <th style="border:1px solid #ccc;padding:2px 6px">Price</th>
+                                <th style="border:1px solid #ccc;padding:2px 6px">CGST</th>
+                                <th style="border:1px solid #ccc;padding:2px 6px">SGST</th>
+                                <th style="border:1px solid #ccc;padding:2px 6px">Total</th>
+                            </tr>
+                            ${taxRows}
+                        </table>
+                    </div>
+                    <div width="40%" style="text-align:right">
+                        <table align="right" style="font-size:13px">
+                            <tr>
+                                <td style="padding:2px 10px;text-align:left"><b>Total Value :</b></td>
+                                <td style="padding:2px 0;width:80px"><b>${taxableTotal.toFixed(2)}</b></td>
+                            </tr>
+                            <tr>
+                                <td style="padding:2px 10px;text-align:left"><b>Total GST :</b></td>
+                                <td><b>${(cgstTotal + sgstTotal).toFixed(2)}</b></td>
+                            </tr>
+                            <tr style="font-size:16px">
+                                <td style="padding:10px 10px 2px 10px;text-align:left"><b>Grand Total :</b></td>
+                                <td style="padding:10px 0 2px 0"><b>Rs ${Math.round(grandTotalPharm).toFixed(2)}</b></td>
+                            </tr>
+                        </table>
+                    </div>
+                  </div>
+
+                  <!-- SIGNATURES -->
+                  <div style="margin-top:40px;display:flex;justify-content:space-between;text-align:center;font-size:11px">
+                    <div style="width:100px">
+                        <div style="font-weight:700">${user?.name || ''}</div>
+                        <div style="border-top:1px solid #ccc;padding-top:4px">Billed By</div>
+                    </div>
+                    <div style="width:100px">
+                        <div style="height:15px"></div>
+                        <div style="border-top:1px solid #ccc;padding-top:4px">Taken By</div>
+                    </div>
+                    <div style="width:100px">
+                        <div style="height:15px"></div>
+                        <div style="border-top:1px solid #ccc;padding-top:4px">Checked By</div>
+                    </div>
+                    <div style="width:150px">
+                        <div style="height:15px"></div>
+                        <div style="border-top:1px solid #ccc;padding-top:4px;font-weight:700">Signature of Pharmacist</div>
+                    </div>
+                  </div>
+
+                  <div style="text-align:right;font-size:10px;margin-top:10px;color:#666">Page 1 of 1</div>
+                </div>`;
+            };
+
+            const billHTML = isPharmacy ? `
+                <html><head><title>BILL - ${jobBillNo || orderNumber}</title>
+                <style>
+                    @page { size: A4; margin: 10mm; }
+                    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: #000; margin: 0; padding: 0; }
+                    * { box-sizing: border-box; }
+                    @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
+                </style></head>
+                <body>${getPharmacyBillBody()}</body></html>
+            ` : `
                 <html>
                 <head>
                     <title>${t('bill.receipt', 'Bill')} - ${table}</title>
@@ -959,6 +1231,7 @@ export default function POSPage() {
                 </body>
                 </html>
             `;
+
 
             printWindow.document.open();
             printWindow.document.write(billHTML);
@@ -1398,6 +1671,24 @@ export default function POSPage() {
                                         disabled={!orders[selectedTable] || savingOrder}
                                     >
                                         🧾 {t('bill.receipt')}
+                                    </button>
+                                </div>
+                                <div className="compact-actions-grid single-action" style={{ marginTop: '5px' }}>
+                                    <button
+                                        className="compact-btn"
+                                        onClick={handleA4Invoice}
+                                        disabled={!orders[selectedTable] || savingOrder}
+                                        style={{ background: 'linear-gradient(135deg, #4f46e5, #3b82f6)' }}
+                                    >
+                                        📄 A4 PDF
+                                    </button>
+                                    <button
+                                        className="compact-btn"
+                                        onClick={handleWhatsApp}
+                                        disabled={!orders[selectedTable] || savingOrder}
+                                        style={{ background: 'linear-gradient(135deg, #25D366, #128C7E)' }}
+                                    >
+                                        💬 WhatsApp
                                     </button>
                                 </div>
                                 <button 

@@ -38,6 +38,15 @@ public class Transaction {
     private String paymentMethod;
     private String referenceId;
 
+    @Builder.Default
+    private String paymentStatus = "PAID"; // PAID, UNPAID
+
+    // Invoice grouping & tax tracking fields
+    private String invoiceNumber;
+    private Double gstAmount;
+    private Double discountAmount;
+    private Integer itemCount;
+
     public enum TransactionType {
         INCOME, EXPENSE
     }

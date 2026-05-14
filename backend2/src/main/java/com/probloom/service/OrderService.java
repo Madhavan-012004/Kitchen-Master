@@ -6,6 +6,7 @@ import com.probloom.model.entity.OrderItem;
 import com.probloom.model.entity.ExtraCharge;
 import com.probloom.model.entity.User;
 import com.probloom.model.entity.MenuItem;
+import com.probloom.model.entity.InventoryItem;
 import com.probloom.repository.OrdersRepository;
 import com.probloom.repository.MenuItemRepository;
 import lombok.RequiredArgsConstructor;
@@ -157,19 +158,23 @@ public class OrderService {
                     .discountValue(parseOptionalDouble(data, "discountValue", 0.0))
                     .discountAmount(parseOptionalDouble(data, "discountAmount", 0.0))
                     .orderType(data.containsKey("orderType") ? Orders.OrderType.valueOf(data.get("orderType").toString().toUpperCase().replace("-", "_")) : Orders.OrderType.DINE_IN)
-                    .customerName((String) data.get("customerName"))
-                    .customerPhone((String) data.get("customerPhone"))
-                    .notes((String) data.get("notes"))
+                    .customerName(data.get("customerName") != null ? data.get("customerName").toString() : null)
+                    .customerPhone(data.get("customerPhone") != null ? data.get("customerPhone").toString() : null)
+                    .notes(data.get("notes") != null ? data.get("notes").toString() : null)
                     .isOffline(Boolean.TRUE.equals(data.get("isOffline")))
                     .offlineId(offlineId)
                     .syncedAt(offlineId != null ? LocalDateTime.now() : null)
+                    .billTemplate(data.getOrDefault("billTemplate", "standard").toString())
+                    .doctorName(data.get("doctorName") != null ? data.get("doctorName").toString() : null)
+                    .numberOfDays(data.get("numberOfDays") != null ? data.get("numberOfDays").toString() : null)
+                    .customerFirm(data.get("customerFirm") != null ? data.get("customerFirm").toString() : null)
                     .build();
             // Default status for new order
             order.setStatus(Orders.OrderStatus.PENDING);
         } else {
             // Update the existing order for new items
             if (data.containsKey("notes")) {
-                String newNotes = (String) data.get("notes");
+                String newNotes = data.get("notes") != null ? data.get("notes").toString() : null;
                 if (newNotes != null && !newNotes.isEmpty()) {
                     order.setNotes(order.getNotes() != null ? order.getNotes() + " | Supplement: " + newNotes : newNotes);
                 }
@@ -194,8 +199,8 @@ public class OrderService {
                 OrderItem oi = OrderItem.builder()
                         .order(order)
                         .menuItem(menuItem)
-                        .name((String) itemData.get("name"))
-                        .category(itemData.containsKey("category") ? (String) itemData.get("category") : null)
+                        .name(itemData.get("name") != null ? itemData.get("name").toString() : null)
+                        .category(itemData.get("category") != null ? itemData.get("category").toString() : null)
                         .quantity(parseOptionalInt(itemData, "quantity", 1))
                         .price(parseOptionalDouble(itemData, "price", 0.0))
                         .taxRate(parseOptionalDouble(itemData, "taxRate", 0.0))
@@ -203,8 +208,14 @@ public class OrderService {
                         .status(OrderItem.ItemStatus.PENDING)
                         .addedBy(createdBy)
                         .addedByName(createdBy != null ? createdBy.getName() : "Customer")
-                        .barcode(itemData.containsKey("barcode") ? (String) itemData.get("barcode") : null)
-                        .inventoryItemId(itemData.get("inventoryItemId") != null ? Long.valueOf(itemData.get("inventoryItemId").toString()) : null)
+                        .barcode(itemData.get("barcode") != null ? itemData.get("barcode").toString() : null)
+                        .inventoryItemId((itemData.get("inventoryItemId") != null && !itemData.get("inventoryItemId").toString().trim().isEmpty() && !itemData.get("inventoryItemId").toString().equals("null")) ? Long.valueOf(itemData.get("inventoryItemId").toString()) : null)
+                        .batchNo(itemData.get("batchNo") != null ? itemData.get("batchNo").toString() : null)
+                        .mfgDate(itemData.get("mfgDate") != null ? itemData.get("mfgDate").toString() : null)
+                        .expDate(itemData.get("expDate") != null ? itemData.get("expDate").toString() : null)
+                        .hsnCode(itemData.get("hsnCode") != null ? itemData.get("hsnCode").toString() : null)
+                        .mrp(parseOptionalDouble(itemData, "mrp", null))
+                        .disPct(parseOptionalDouble(itemData, "disPct", 0.0))
                         .build();
                 order.getItems().add(oi);
                 if (menuItem != null) {
@@ -220,7 +231,7 @@ public class OrderService {
             List<ExtraCharge> extraCharges = new ArrayList<>();
             for (Map<String, Object> chargeData : extraChargesData) {
                 ExtraCharge charge = new ExtraCharge();
-                charge.setName((String) chargeData.get("name"));
+                charge.setName(chargeData.get("name") != null ? chargeData.get("name").toString() : null);
                 charge.setAmount(parseOptionalDouble(chargeData, "amount", 0.0));
                 extraCharges.add(charge);
             }
@@ -290,10 +301,14 @@ public class OrderService {
         order.setSubtotal(parseOptionalDouble(data, "subtotal", order.getSubtotal()));
         order.setTaxAmount(parseOptionalDouble(data, "taxAmount", order.getTaxAmount()));
         order.setTotal(parseOptionalDouble(data, "total", order.getTotal()));
-        order.setNotes((String) data.get("notes"));
+        order.setNotes(data.get("notes") != null ? data.get("notes").toString() : null);
         if (data.containsKey("orderType")) {
             order.setOrderType(Orders.OrderType.valueOf(data.get("orderType").toString().toUpperCase().replace("-", "_")));
         }
+        if (data.containsKey("billTemplate")) order.setBillTemplate(data.get("billTemplate").toString());
+        if (data.containsKey("doctorName")) order.setDoctorName(data.get("doctorName") != null ? data.get("doctorName").toString() : null);
+        if (data.containsKey("numberOfDays")) order.setNumberOfDays(data.get("numberOfDays") != null ? data.get("numberOfDays").toString() : null);
+        if (data.containsKey("customerFirm")) order.setCustomerFirm(data.get("customerFirm") != null ? data.get("customerFirm").toString() : null);
 
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> itemsData = (List<Map<String, Object>>) data.get("items");
@@ -331,13 +346,19 @@ public class OrderService {
                 // For existing items: do NOT touch status — preserve whatever the DB has
                 // (e.g. READY, SERVED) so kitchen marks are never overwritten by POS re-saves
                 
-                oi.setName((String) itemData.get("name"));
+                oi.setName(itemData.get("name") != null ? itemData.get("name").toString() : null);
                 oi.setQuantity(parseOptionalInt(itemData, "quantity", 1));
                 oi.setPrice(parseOptionalDouble(itemData, "price", 0.0));
                 oi.setTaxRate(parseOptionalDouble(itemData, "taxRate", 0.0));
                 oi.setNotes(itemData.getOrDefault("notes", "").toString());
-                if (itemData.containsKey("barcode")) oi.setBarcode((String) itemData.get("barcode"));
-                if (itemData.get("inventoryItemId") != null) oi.setInventoryItemId(Long.valueOf(itemData.get("inventoryItemId").toString()));
+                if (itemData.containsKey("barcode") && itemData.get("barcode") != null) oi.setBarcode(itemData.get("barcode").toString());
+                if (itemData.get("inventoryItemId") != null && !itemData.get("inventoryItemId").toString().trim().isEmpty() && !itemData.get("inventoryItemId").toString().equals("null")) oi.setInventoryItemId(Long.valueOf(itemData.get("inventoryItemId").toString()));
+                if (itemData.containsKey("batchNo")) oi.setBatchNo(itemData.get("batchNo") != null ? itemData.get("batchNo").toString() : null);
+                if (itemData.containsKey("mfgDate")) oi.setMfgDate(itemData.get("mfgDate") != null ? itemData.get("mfgDate").toString() : null);
+                if (itemData.containsKey("expDate")) oi.setExpDate(itemData.get("expDate") != null ? itemData.get("expDate").toString() : null);
+                if (itemData.containsKey("hsnCode")) oi.setHsnCode(itemData.get("hsnCode") != null ? itemData.get("hsnCode").toString() : null);
+                if (itemData.containsKey("mrp")) oi.setMrp(parseOptionalDouble(itemData, "mrp", null));
+                if (itemData.containsKey("disPct")) oi.setDisPct(parseOptionalDouble(itemData, "disPct", 0.0));
                 
                 newItems.add(oi);
             }
@@ -358,7 +379,7 @@ public class OrderService {
             List<ExtraCharge> extraCharges = new ArrayList<>();
             for (Map<String, Object> chargeData : extraChargesUpdateData) {
                 ExtraCharge charge = new ExtraCharge();
-                charge.setName((String) chargeData.get("name"));
+                charge.setName(chargeData.get("name") != null ? chargeData.get("name").toString() : null);
                 charge.setAmount(parseOptionalDouble(chargeData, "amount", 0.0));
                 extraCharges.add(charge);
             }
@@ -470,7 +491,7 @@ public class OrderService {
         Orders saved = orderRepository.save(order);
 
         // --- SILENT IP PRINTING (BILL) ---
-        if (Orders.PaymentStatus.PAID.equals(order.getPaymentStatus()) && Boolean.TRUE.equals(restaurant.getBillPrinterEnabled()) && restaurant.getCounterPrinterIp() != null && !restaurant.getCounterPrinterIp().trim().isEmpty()) {
+        if (!"pharmacy".equalsIgnoreCase(order.getBillTemplate()) && Orders.PaymentStatus.PAID.equals(order.getPaymentStatus()) && Boolean.TRUE.equals(restaurant.getBillPrinterEnabled()) && restaurant.getCounterPrinterIp() != null && !restaurant.getCounterPrinterIp().trim().isEmpty()) {
             final Orders finalSaved = saved;
             final User finalRestaurant = restaurant;
             new Thread(() -> printService.printBill(finalSaved, finalRestaurant, finalRestaurant.getCounterPrinterIp())).start();
@@ -956,11 +977,30 @@ public class OrderService {
 
     private void deductStockFromOrder(Orders order) {
         for (OrderItem item : order.getItems()) {
-            if (item.getInventoryItemId() != null) {
-                try {
+            try {
+                InventoryItem inventoryItem = null;
+                
+                // 1. Try by direct ID
+                if (item.getInventoryItemId() != null) {
+                    inventoryItem = inventoryService.getById(Objects.requireNonNull(order.getRestaurant()), Objects.requireNonNull(item.getInventoryItemId()));
+                } 
+                // 2. Try by Barcode
+                else if (item.getBarcode() != null && !item.getBarcode().trim().isEmpty()) {
+                    try {
+                        inventoryItem = inventoryService.getByBarcode(Objects.requireNonNull(order.getRestaurant()), Objects.requireNonNull(item.getBarcode()));
+                    } catch (Exception ignored) {}
+                }
+                // 3. Try by Name (Exact Match)
+                if (inventoryItem == null && item.getName() != null) {
+                    try {
+                        inventoryItem = inventoryService.getByName(Objects.requireNonNull(order.getRestaurant()), Objects.requireNonNull(item.getName()));
+                    } catch (Exception ignored) {}
+                }
+
+                if (inventoryItem != null) {
                     inventoryService.adjustStock(
                         Objects.requireNonNull(order.getRestaurant()), 
-                        Objects.requireNonNull(item.getInventoryItemId()), 
+                        Objects.requireNonNull(inventoryItem.getId()), 
                         Objects.requireNonNull(Map.of(
                             "type", "DEDUCT",
                             "quantity", Double.valueOf(item.getQuantity()),
@@ -968,9 +1008,11 @@ public class OrderService {
                         )),
                         order.getCreatedBy()
                     );
-                } catch (Exception e) {
-                    System.err.println("⚠️ Failed to deduct stock for item " + item.getName() + ": " + e.getMessage());
+                } else {
+                    System.err.println("⚠️ Could not find inventory item to deduct for: " + item.getName());
                 }
+            } catch (Exception e) {
+                System.err.println("⚠️ Failed to deduct stock for item " + item.getName() + ": " + e.getMessage());
             }
         }
     }

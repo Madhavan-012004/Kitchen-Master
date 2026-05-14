@@ -22,6 +22,7 @@ const NAV_ITEMS = [
     { path: 'ai-assistant', icon: '✨', tKey: 'assistant' },
     { path: 'inventory', icon: '📦', tKey: 'inventory', section: 'inventory' },
     { path: 'expenditures', icon: '💸', tKey: 'expenditures', section: 'expenditures' },
+    { path: 'kanban', icon: '📋', tKey: 'kanban' },
     { path: 'profile', icon: '⚙️', tKey: 'settings' },
 ]
 
@@ -41,6 +42,7 @@ const SIDE_NAV_ITEMS = [
     { path: 'attendance', icon: '📍', tKey: 'attendance', section: 'attendance' },
     { path: 'inventory', icon: '📦', tKey: 'inventory', section: 'inventory' },
     { path: 'expenditures', icon: '💸', tKey: 'expenditures', section: 'expenditures' },
+    { path: 'kanban', icon: '📋', tKey: 'kanban' },
     { path: 'ai-assistant', icon: '✨', tKey: 'assistant' },
 ]
 

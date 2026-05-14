@@ -7,10 +7,13 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface TransactionRepository extends JpaRepository<Transaction, Long> {
     List<Transaction> findByRestaurantAndDateBetweenOrderByDateDesc(User restaurant, LocalDateTime start, LocalDateTime end);
     List<Transaction> findByRestaurantInAndDateBetweenOrderByDateDesc(List<User> restaurants, LocalDateTime start, LocalDateTime end);
     List<Transaction> findByRestaurantOrderByDateDesc(User restaurant);
+    List<Transaction> findByRestaurantAndReferenceId(User restaurant, String referenceId);
+    Optional<Transaction> findByRestaurantAndInvoiceNumber(User restaurant, String invoiceNumber);
 }

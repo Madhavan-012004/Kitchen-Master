@@ -62,6 +62,27 @@ public class InventoryItem {
     @Column(name = "supplier_phone")
     private String supplierPhone;
 
+    @Column(name = "batch_no")
+    private String batchNo;
+
+    @Column(name = "exp_date")
+    private String expDate;
+
+    @Column(name = "hsn_code")
+    private String hsnCode;
+
+    @Column(name = "manufacturer")
+    private String manufacturer;
+
+    @Column(name = "pack_size")
+    private String packSize;
+
+    @Column(name = "pack_multiplier")
+    private Integer packMultiplier = 1;
+
+    @Column(name = "gst_percent")
+    private Double gstPercent = 0.0;
+
     @Column(name = "is_active")
     private Boolean isActive = true;
 
@@ -110,6 +131,22 @@ public class InventoryItem {
     public void setIsActive(Boolean isActive) { this.isActive = isActive; }
     public LocalDateTime getLastRestockedAt() { return lastRestockedAt; }
     public void setLastRestockedAt(LocalDateTime lastRestockedAt) { this.lastRestockedAt = lastRestockedAt; }
+    
+    public String getBatchNo() { return batchNo; }
+    public void setBatchNo(String batchNo) { this.batchNo = batchNo; }
+    public String getExpDate() { return expDate; }
+    public void setExpDate(String expDate) { this.expDate = expDate; }
+    public String getHsnCode() { return hsnCode; }
+    public void setHsnCode(String hsnCode) { this.hsnCode = hsnCode; }
+    public String getManufacturer() { return manufacturer; }
+    public void setManufacturer(String manufacturer) { this.manufacturer = manufacturer; }
+    public String getPackSize() { return packSize; }
+    public void setPackSize(String packSize) { this.packSize = packSize; }
+    public Integer getPackMultiplier() { return packMultiplier; }
+    public void setPackMultiplier(Integer packMultiplier) { this.packMultiplier = packMultiplier; }
+    public Double getGstPercent() { return gstPercent; }
+    public void setGstPercent(Double gstPercent) { this.gstPercent = gstPercent; }
+
     public List<StockMovement> getStockMovements() { return stockMovements; }
     public void setStockMovements(List<StockMovement> stockMovements) { this.stockMovements = stockMovements; }
     public LocalDateTime getCreatedAt() { return createdAt; }
@@ -140,6 +177,13 @@ public class InventoryItem {
         public InventoryItemBuilder isBilliable(Boolean b) { item.setIsBilliable(b); return this; }
         public InventoryItemBuilder supplierName(String n) { item.setSupplierName(n); return this; }
         public InventoryItemBuilder supplierPhone(String p) { item.setSupplierPhone(p); return this; }
+        public InventoryItemBuilder manufacturer(String m) { item.setManufacturer(m); return this; }
+        public InventoryItemBuilder packSize(String s) { item.setPackSize(s); return this; }
+        public InventoryItemBuilder packMultiplier(Integer m) { item.setPackMultiplier(m); return this; }
+        public InventoryItemBuilder gstPercent(Double g) { item.setGstPercent(g); return this; }
+        public InventoryItemBuilder batchNo(String b) { item.setBatchNo(b); return this; }
+        public InventoryItemBuilder expDate(String e) { item.setExpDate(e); return this; }
+        public InventoryItemBuilder hsnCode(String h) { item.setHsnCode(h); return this; }
         public InventoryItemBuilder isActive(Boolean i) { item.setIsActive(i); return this; }
         public InventoryItem build() { return item; }
     }

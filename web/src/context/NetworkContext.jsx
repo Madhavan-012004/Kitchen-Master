@@ -27,7 +27,7 @@ export function NetworkProvider({ children }) {
         }
     }, [])
 
-    const checkHealth = useCallback(async () => {
+    const checkHealth = useCallback(async (isRecheck = false) => {
         try {
             const token = sessionStorage.getItem('km_token')
             const res = await fetch(HEALTH_URL, {
@@ -43,7 +43,12 @@ export function NetworkProvider({ children }) {
                 stopPolling()
                 return true  // server reachable
             }
-            // 5xx from server — still "down"
+            // 5xx from health endpoint — confirm with a re-check before showing overlay
+            // to avoid flashing on a single transient failure
+            if (!isRecheck) {
+                setTimeout(() => checkHealth(true), 2000)
+                return false
+            }
             if (!isOfflineRef.current) {
                 setIsOffline(true)
                 setErrorType('server_error')

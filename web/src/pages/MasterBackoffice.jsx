@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import api from '../api/client.js'
+import emailjs from '@emailjs/browser'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useTheme } from '../context/ThemeContext.jsx'
 import './MasterBackoffice.css'
@@ -22,7 +23,8 @@ const Icons = {
     Copy: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>,
     LogOut: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
     Sun: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>,
-    Moon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    Moon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>,
+    Eye: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -46,6 +48,169 @@ function LicenseTypeBadge({ type }) {
 }
 
 // AddClientModal removed entirely from this file. It is now its own page.
+
+// ─── Offline License Generator ────────────────────────────────────────────────
+function OfflineLicenseGenerator({ clientOverride = null, onComplete = null, refreshList = null }) {
+    const [reqFile, setReqFile] = useState(null)
+    const [reqData, setReqData] = useState(null)
+    const [expiryDate, setExpiryDate] = useState(() => {
+        const d = new Date(); d.setFullYear(d.getFullYear() + 1);
+        return d.toISOString().split('T')[0];
+    })
+    const [generating, setGenerating] = useState(false)
+    const [result, setResult] = useState(null) // { success, message }
+    const [open, setOpen] = useState(false)
+
+    const handleReqFile = (e) => {
+        const file = e.target.files[0]
+        if (!file) return
+        setReqFile(file)
+        setResult(null)
+        const reader = new FileReader()
+        reader.onload = (ev) => {
+            try {
+                const data = JSON.parse(ev.target.result)
+                setReqData(data)
+            } catch {
+                setResult({ success: false, message: 'Invalid machine.req — could not parse JSON.' })
+            }
+        }
+        reader.readAsText(file)
+    }
+
+    const pemToArrayBuffer = (pem) => {
+        const b64 = pem.replace(/-----[^-]+-----/g, '').replace(/\s/g, '')
+        const binary = atob(b64)
+        const bytes = new Uint8Array(binary.length)
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+        return bytes.buffer
+    }
+
+    const arrayBufferToBase64 = (buffer) => {
+        const bytes = new Uint8Array(buffer)
+        let binary = ''
+        bytes.forEach(b => binary += String.fromCharCode(b))
+        return btoa(binary)
+    }
+
+    const handleGenerate = async () => {
+        if (!reqFile) return setResult({ success: false, message: 'Please upload a machine.req file first.' })
+
+        setGenerating(true)
+        setResult(null)
+        try {
+            const formData = new FormData()
+            formData.append('file', reqFile)
+            formData.append('expiryDate', expiryDate)
+
+            const res = await api.post('/master/clients/generate-and-email-license', formData)
+
+            const { licenseB64, email, generatedPassword, customerName } = res.data.data;
+
+            // ─── Dispatch via EmailJS ─────────────────────────────────────────
+            // Updated with correct credentials provided by user
+            const SERVICE_ID = 'service_oblwsjg'; 
+            const TEMPLATE_ID = 'template_aalh1yb';
+            const PUBLIC_KEY = 'Vjm57tVlA_OAiZ1H8';
+
+            console.log('Attempting EmailJS dispatch to:', email);
+            
+            // Send as raw base64 (EmailJS dashboard attachment should handle this)
+            await emailjs.send(
+                SERVICE_ID,
+                TEMPLATE_ID,
+                {
+                    to_email: email,
+                    customer_name: customerName,
+                    generated_password: generatedPassword,
+                    license_file: licenseB64,
+                    expiry_date: expiryDate
+                },
+                PUBLIC_KEY
+            );
+
+            // ─── Local Download ───────────────────────────────────────────────
+            // Save base64 string directly as the app expects encoded content
+            const blob = new Blob([licenseB64], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `license_${customerName.replace(/\s+/g, '_')}.lic`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            setResult({ success: true, message: `✓ License generated, downloaded, and emailed to ${email}!` })
+            if (refreshList) refreshList()
+            if (onComplete) setTimeout(onComplete, 2000)
+        } catch (err) {
+            setResult({ success: false, message: 'Process Failed: ' + (err.response?.data?.message || err.message) })
+        } finally {
+            setGenerating(false)
+        }
+    }
+
+    return (
+        <div className={`hq-offline-generator ${clientOverride ? 'in-modal' : ''}`}>
+            {!clientOverride && (
+                <div className="hq-offline-header" onClick={() => setOpen(o => !o)} style={{ marginBottom: open ? '1.5rem' : 0 }}>
+                    <div className="hq-offline-header-left">
+                        <div className="hq-offline-icon">{Icons.Key}</div>
+                        <div>
+                            <div className="hq-offline-title">Offline License Generator</div>
+                            <div className="hq-offline-subtitle">Generate a signed .lic file from a customer machine.req</div>
+                        </div>
+                    </div>
+                    <span className="hq-offline-chevron">{open ? '▲' : '▼'}</span>
+                </div>
+            )}
+
+            {(open || clientOverride) && (
+                <div className="hq-offline-body">
+                    {clientOverride && (
+                        <div style={{ marginBottom: '1rem', padding: '0.75rem', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                            <p style={{ margin: 0, fontSize: '0.9rem' }}>
+                                This license will be provisioned for <strong>{clientOverride.restaurantName}</strong> and emailed to <strong>{clientOverride.email}</strong>.
+                            </p>
+                        </div>
+                    )}
+                    <div>
+                        <label className="hq-offline-label">Step 1 — Upload machine.req</label>
+                        <input id="offline-req-input" type="file" accept=".req,.json" onChange={handleReqFile} className="hq-offline-input" />
+                        {reqData && (
+                            <div className="hq-offline-success">
+                                ✓ Hardware ID: <strong>{reqData.hardwareId}</strong>
+                            </div>
+                        )}
+                    </div>
+
+                    <div>
+                        <label className="hq-offline-label">Step 2 — License Expiry Date</label>
+                        <input id="offline-expiry-input" type="date" value={expiryDate} onChange={e => setExpiryDate(e.target.value)} className="hq-offline-input" />
+                    </div>
+
+                    <div className="hq-offline-action-row">
+                        {result && (
+                            <div className={`hq-offline-result ${result.success ? 'success' : 'error'}`}>
+                                {result.message}
+                            </div>
+                        )}
+                        {!result && <div></div>}
+                        <button
+                            id="btn-generate-offline-license"
+                            onClick={handleGenerate}
+                            disabled={generating || !reqData}
+                            className="hq-offline-btn"
+                        >
+                            {generating ? 'Signing & Generating...' : <>{Icons.Download} Generate & Dispatch license.lic</>}
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
 
 // ─── License Key Modal ────────────────────────────────────────────────────────
 function LicenseModal({ client, licenseKey, onClose }) {
@@ -112,6 +277,58 @@ function LicenseModal({ client, licenseKey, onClose }) {
     )
 }
 
+function ClientDetailsModal({ client, onClose }) {
+    if (!client) return null;
+    return (
+        <div className="hq-modal-overlay" onClick={onClose}>
+            <div className="hq-modal hq-modal-xl" onClick={e => e.stopPropagation()}>
+                <div className="hq-modal-header border-bottom">
+                    <h3 className="hq-modal-title"><span>{Icons.Eye} Tenant Details</span></h3>
+                </div>
+                <div className="hq-modal-body">
+                    <div className="hq-details-grid">
+                        <div className="hq-detail-item">
+                            <label>Restaurant Name</label>
+                            <p>{client.restaurantName || '—'}</p>
+                        </div>
+                        <div className="hq-detail-item">
+                            <label>Owner Name</label>
+                            <p>{client.name || '—'}</p>
+                        </div>
+                        <div className="hq-detail-item">
+                            <label>Email Address</label>
+                            <p>{client.email || '—'}</p>
+                        </div>
+                        <div className="hq-detail-item">
+                            <label>Phone Number</label>
+                            <p>{client.phone || '—'}</p>
+                        </div>
+                        <div className="hq-detail-item">
+                            <label>License Type</label>
+                            <p style={{textTransform: 'capitalize'}}>{client.licenseType || '—'}</p>
+                        </div>
+                        <div className="hq-detail-item">
+                            <label>Status</label>
+                            <p>{client.isActive ? 'Active' : 'Suspended'}</p>
+                        </div>
+                        <div className="hq-detail-item">
+                            <label>Database</label>
+                            <p>{client.databaseType || 'Shared Cluster'}</p>
+                        </div>
+                        <div className="hq-detail-item">
+                            <label>Created At</label>
+                            <p>{formatDate(client.createdAt)}</p>
+                        </div>
+                    </div>
+                    <div className="hq-modal-footer">
+                        <button className="hq-btn hq-btn-outline" onClick={onClose}>Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+}
+
 export default function MasterBackoffice() {
     const { user, logout } = useAuth()
     const { theme, toggleTheme } = useTheme()
@@ -125,6 +342,7 @@ export default function MasterBackoffice() {
     const [statusFilter, setStatusFilter] = useState('all')
     const [typeFilter, setTypeFilter] = useState('all')
     const [modal, setModal] = useState(null)
+    const [detailsModal, setDetailsModal] = useState(null)
     const [toast, setToast] = useState('')
     const [actionLoading, setActionLoading] = useState(null)
 
@@ -247,6 +465,9 @@ export default function MasterBackoffice() {
             </nav>
 
             <main className="hq-main">
+                <div className="hq-layout-inner">
+                    <OfflineLicenseGenerator refreshList={fetchClients} />
+                </div>
                 {/* ── Metrics Grid ── */}
                 <div className="hq-metrics-grid">
                     <div className="hq-metric-card">
@@ -378,13 +599,16 @@ export default function MasterBackoffice() {
                                                         {actionLoading === c._id + '_renew' ? <span className="hq-spinner hq-spinner-sm"/> : Icons.Refresh} Extension
                                                     </button>
                                                     {c.licenseType === 'prime' && (
-                                                        <button className="hq-act-btn hq-btn-license" onClick={() => handleGenerateLicense(c)} disabled={actionLoading === c._id + '_lic'} title="Extract cryptographic .lic payload">
-                                                            {actionLoading === c._id + '_lic' ? <span className="hq-spinner hq-spinner-sm"/> : Icons.Download} Payload
+                                                        <button className="hq-act-btn hq-btn-prime" onClick={() => setModal({ type: 'offline-gen', client: c })} title="Generate Hardware-Bound Offline License">
+                                                            {Icons.Key} Offline Lic
                                                         </button>
                                                     )}
                                                     <button className="hq-act-btn hq-btn-suspend" onClick={() => handleToggleStatus(c)} disabled={actionLoading === c._id + '_status'} title="Toggle network killswitch">
                                                         {actionLoading === c._id + '_status' ? <span className="hq-spinner hq-spinner-sm"/> : c.isActive ? Icons.Ban : Icons.CheckCircle} 
                                                         {c.isActive ? 'Kill' : 'Restore'}
+                                                    </button>
+                                                    <button className="hq-act-btn hq-btn-outline" onClick={() => setDetailsModal(c)} title="Seek Customer Details">
+                                                        {Icons.Eye} Details
                                                     </button>
                                                     <button className="hq-act-btn hq-btn-delete" onClick={() => handleDelete(c)} title="Permanent Data Eradication">
                                                         {Icons.Trash}
@@ -406,6 +630,20 @@ export default function MasterBackoffice() {
 
             {/* ── Modals & Toasts ── */}
             {modal?.type === 'license' && <LicenseModal client={modal.client} licenseKey={modal.key} onClose={() => setModal(null)} />}
+            {modal?.type === 'offline-gen' && (
+                <div className="hq-modal-overlay" onClick={() => setModal(null)}>
+                    <div className="hq-modal hq-modal-lg" onClick={e => e.stopPropagation()}>
+                        <div className="hq-modal-header border-bottom">
+                            <h3 className="hq-modal-title"><span>{Icons.Key} Generate Offline License</span></h3>
+                            <p className="hq-text-muted">Target Customer: <strong>{modal.client.restaurantName}</strong></p>
+                        </div>
+                        <div className="hq-modal-body">
+                            <OfflineLicenseGenerator clientOverride={modal.client} onComplete={() => setModal(null)} refreshList={fetchClients} />
+                        </div>
+                    </div>
+                </div>
+            )}
+            {detailsModal && <ClientDetailsModal client={detailsModal} onClose={() => setDetailsModal(null)} />}
 
             {toast && (
                 <div className="hq-notification-toast">

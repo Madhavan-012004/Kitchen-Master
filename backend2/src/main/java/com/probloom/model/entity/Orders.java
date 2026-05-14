@@ -136,6 +136,18 @@ public class Orders {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @Column(name = "bill_template")
+    private String billTemplate = "standard";
+
+    @Column(name = "doctor_name")
+    private String doctorName;
+
+    @Column(name = "number_of_days")
+    private String numberOfDays;
+
+    @Column(name = "customer_firm")
+    private String customerFirm;
+
     // Getters and Setters
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -204,6 +216,15 @@ public class Orders {
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 
+    public String getBillTemplate() { return billTemplate; }
+    public void setBillTemplate(String billTemplate) { this.billTemplate = billTemplate; }
+    public String getDoctorName() { return doctorName; }
+    public void setDoctorName(String doctorName) { this.doctorName = doctorName; }
+    public String getNumberOfDays() { return numberOfDays; }
+    public void setNumberOfDays(String numberOfDays) { this.numberOfDays = numberOfDays; }
+    public String getCustomerFirm() { return customerFirm; }
+    public void setCustomerFirm(String customerFirm) { this.customerFirm = customerFirm; }
+
     public enum OrderStatus { PENDING, PREPARING, READY, SERVED, PAID, CANCELLED }
     public enum PaymentMethod { CASH, CARD, UPI, PENDING }
     public enum PaymentStatus { UNPAID, PAID, PARTIAL }
@@ -237,6 +258,10 @@ public class Orders {
         public OrdersBuilder tokenNumber(String t) { o.setTokenNumber(t); return this; }
         public OrdersBuilder mergedTables(String t) { o.setMergedTables(t); return this; }
         public OrdersBuilder covers(Integer c) { o.setCovers(c); return this; }
+        public OrdersBuilder billTemplate(String t) { o.setBillTemplate(t); return this; }
+        public OrdersBuilder doctorName(String n) { o.setDoctorName(n); return this; }
+        public OrdersBuilder numberOfDays(String d) { o.setNumberOfDays(d); return this; }
+        public OrdersBuilder customerFirm(String f) { o.setCustomerFirm(f); return this; }
         public Orders build() { return o; }
     }
 }

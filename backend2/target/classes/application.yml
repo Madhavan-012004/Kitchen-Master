@@ -33,7 +33,7 @@ app:
     secret: ${JWT_SECRET:kitchen_master_super_secret_jwt_key_2024}
     expiration: 2592000000   # 30 days in ms
   gemini:
-    api-key: ${GEMINI_API_KEY:your-gemini-api-key-here}
+    api-key: ${GEMINI_API_KEY:AIzaSyCBd_MdqR-3qIYgDt2iD3XnzyeyBtt11hA}
     model: ${GEMINI_MODEL:gemini-1.5-flash}
     api-url: https://generativelanguage.googleapis.com/v1beta/models
   upload:
@@ -42,5 +42,5 @@ app:
 
 logging:
   level:
-    com.kitchenmaster: DEBUG
+    com.probloom: DEBUG
     org.springframework.security: WARN

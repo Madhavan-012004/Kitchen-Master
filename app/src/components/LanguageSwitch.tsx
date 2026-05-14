@@ -36,8 +36,8 @@ export default function LanguageSwitch({ isTamil, onToggle }: LanguageSwitchProp
                 
                 {/* The text labels layer */}
                 <View style={styles.textLayer}>
-                    <Text style={[styles.text, { color: isTamil ? '#F36F25' : '#fff' }]}>TA</Text>
-                    <Text style={[styles.text, { color: isTamil ? '#fff' : '#F36F25' }]}>EN</Text>
+                    <Text style={[styles.text, { color: isTamil ? '#C6F53D' : '#000000' }]}>TA</Text>
+                    <Text style={[styles.text, { color: isTamil ? '#000000' : '#C6F53D' }]}>EN</Text>
                 </View>
             </View>
         </TouchableWithoutFeedback>
@@ -48,7 +48,7 @@ const styles = StyleSheet.create({
     container: {
         width: 70,
         height: 30,
-        backgroundColor: '#F36F25',
+        backgroundColor: '#C6F53D',
         borderRadius: 30,
         justifyContent: 'center',
         overflow: 'hidden',

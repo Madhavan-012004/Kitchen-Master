@@ -281,6 +281,29 @@ export default function OrdersPage() {
         isPrintingRef.current = false;
     }
 
+    const handleA4Invoice = async (order) => {
+        try {
+            const res = await api.get(`/orders/${order._id}/invoice/a4`, { responseType: 'blob' });
+            const url = window.URL.createObjectURL(new Blob([res.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `Invoice-${order.orderNumber || order._id}.pdf`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } catch (e) {
+            console.error('Failed to download invoice', e);
+            alert('Failed to download A4 Invoice');
+        }
+    };
+
+    const handleWhatsApp = (order) => {
+        const text = `*${user?.restaurantName || 'RESTAURANT'}*\n\nOrder #${order.orderNumber || String(order._id).slice(-8).toUpperCase()}\nAmount: ₹${order.total?.toFixed(2) || 0}\nStatus: ${order.status}\n\nThank you for your order!`;
+        const phone = order.customerPhone || '';
+        const url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+        window.open(url, '_blank');
+    };
+
     return (
         <div className="simple-page order-history-page">
             <div className="orders-page-header">
@@ -341,9 +364,26 @@ export default function OrdersPage() {
                         </div>
                     </div>
 
-                    <div className="filter-group filter-action">
+                    <div className="filter-group filter-action" style={{ display: 'flex', gap: '10px' }}>
                         <button onClick={loadOrders} className="refresh-btn">
                             <span className="btn-icon">↻</span> Refresh
+                        </button>
+                        <button 
+                            onClick={async () => {
+                                if (!window.confirm("Are you sure you want to CLEAR ALL order history? This action cannot be undone.")) return;
+                                if (!window.confirm("FINAL WARNING: This will PERMANENTLY DELETE all orders for your restaurant. Proceed?")) return;
+                                try {
+                                    await api.delete('/orders/history/clear');
+                                    alert("Order history cleared successfully");
+                                    setOrders([]);
+                                } catch (err) {
+                                    alert("Failed to clear history");
+                                }
+                            }} 
+                            className="refresh-btn" 
+                            style={{ background: '#ef4444', borderColor: '#ef4444', color: '#fff' }}
+                        >
+                            <span className="btn-icon">🗑️</span> Clear All
                         </button>
                     </div>
                 </div>
@@ -397,7 +437,7 @@ export default function OrdersPage() {
                                         <span className="total-label">Total</span>
                                         <span className="total-amount">&#8377;{(o.total || o.totalAmount || 0).toFixed(2)}</span>
                                     </div>
-                                    <div className="footer-right">
+                                    <div className="footer-right" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                                         <span className={`status-pill status-${o.status.toLowerCase()}`}>
                                             <span className="status-dot"></span>
                                             {o.status}
@@ -408,6 +448,21 @@ export default function OrdersPage() {
                                             title="Print Receipt"
                                         >
                                             🧾
+                                        </button>
+                                        <button
+                                            className="icon-btn print-action"
+                                            onClick={() => handleA4Invoice(o)}
+                                            title="Download A4 Invoice"
+                                        >
+                                            📄
+                                        </button>
+                                        <button
+                                            className="icon-btn print-action"
+                                            onClick={() => handleWhatsApp(o)}
+                                            title="Send via WhatsApp"
+                                            style={{ color: '#25D366' }}
+                                        >
+                                            💬
                                         </button>
                                     </div>
                                 </div>

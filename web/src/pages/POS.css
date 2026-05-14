@@ -386,7 +386,7 @@
 
 .panel-badge.occupied-badge {
     background: var(--accent);
-    color: white;
+    color: black;
     box-shadow: 0 2px 8px var(--accent-glow);
 }
 
@@ -465,7 +465,7 @@
 
 .new-takeaway-btn {
     background: var(--accent);
-    color: white;
+    color: black;
     border: none;
     padding: 4px 12px;
     border-radius: 2px;
@@ -1123,7 +1123,7 @@
 
 .staff-mode-btn.active {
     background: var(--accent);
-    color: white;
+    color: var(--accent-text);
 }
 
 .menu-item-card {
@@ -1512,7 +1512,7 @@
 .primary-btn {
     background: var(--accent);
     border: 1px solid var(--accent);
-    color: white;
+    color: var(--accent-text);
 }
 
 .primary-btn:hover:not(:disabled) {
@@ -1652,7 +1652,7 @@
 .review-qty-btn:hover:not(:disabled) {
     background: var(--accent);
     border-color: var(--accent);
-    color: white;
+    color: var(--accent-text);
 }
 
 .review-qty-btn:disabled {
@@ -1693,7 +1693,7 @@
     top: -8px;
     right: -8px;
     background: var(--accent);
-    color: white;
+    color: var(--accent-text);
     width: 20px;
     height: 20px;
     border-radius: 50%;

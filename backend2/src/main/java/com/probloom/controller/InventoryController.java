@@ -4,6 +4,7 @@ import com.probloom.config.CurrentUserResolver;
 import com.probloom.model.entity.User;
 import com.probloom.model.entity.InventoryItem;
 import com.probloom.service.InventoryService;
+import com.probloom.service.AiService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -20,7 +21,30 @@ import org.springframework.lang.NonNull;
 public class InventoryController {
 
     private final InventoryService inventoryService;
+    private final AiService aiService;
     private final CurrentUserResolver resolver;
+
+    @PostMapping("/ocr-scan")
+    public ResponseEntity<?> ocrScan(@RequestParam("file") org.springframework.web.multipart.MultipartFile file) throws Exception {
+        String contentType = file.getContentType();
+        List<Map<String, Object>> data;
+
+        String originalName = file.getOriginalFilename();
+        if (contentType != null && (contentType.equals("text/csv") || (originalName != null && originalName.endsWith(".csv")))) {
+            data = inventoryService.parseInvoiceCsv(file.getBytes());
+        } else {
+            data = aiService.analyzeInvoiceImage(file.getBytes(), contentType != null ? contentType : "image/jpeg");
+        }
+
+        return ok("Invoice parsed successfully", data);
+    }
+
+    @PostMapping("/import-csv")
+    public ResponseEntity<?> importCsv(@RequestParam("file") org.springframework.web.multipart.MultipartFile file) throws Exception {
+        User restaurant = resolver.getRestaurantOwner();
+        int count = inventoryService.importCsv(restaurant, file);
+        return ok("Inventory imported successfully", Map.of("imported", count));
+    }
 
     @GetMapping
     public ResponseEntity<?> getAll(

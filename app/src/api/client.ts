@@ -29,6 +29,11 @@ apiClient.interceptors.request.use(
             }
         }
 
+        // Path normalization: ensure requests are relative to the baseURL
+        if (config.url) {
+            if (config.url.startsWith('/')) config.url = config.url.substring(1);
+            if (config.url.startsWith('api/')) config.url = config.url.substring(4);
+        }
         return config;
     },
     (error) => Promise.reject(error)

@@ -104,6 +104,22 @@ public class AiService {
         }
     }
 
+    public List<Map<String, Object>> analyzeInvoiceImage(byte[] imageBytes, String mimeType) {
+        String prompt = "Extract pharmacy invoice items into a JSON array. Each object should have: name, batchNo, expDate, hsnCode, qty, mrp, ptr, pack. Format: [{\"name\":\"...\", \"batchNo\":\"...\", \"expDate\":\"...\", \"hsnCode\":\"...\", \"qty\":0, \"mrp\":0, \"ptr\":0, \"pack\":\"...\"}]";
+        String base64Image = Base64.getEncoder().encodeToString(imageBytes);
+        List<Map<String, Object>> parts = new ArrayList<>();
+        parts.add(Map.of("text", prompt));
+        parts.add(Map.of("inline_data", Map.of("mime_type", mimeType, "data", base64Image)));
+
+        String text = callGemini(parts);
+        String json = extractJson(text, true);
+        try {
+            return objectMapper.readValue(json, new TypeReference<List<Map<String, Object>>>() {});
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to parse invoice data from image.");
+        }
+    }
+
     public Map<String, Object> parseVoiceOrder(String transcribedText, List<Map<String, Object>> availableItems) {
         String prompt = "Parse this order into JSON: " + transcribedText;
         String text = callGemini(List.of(Map.of("text", prompt)));

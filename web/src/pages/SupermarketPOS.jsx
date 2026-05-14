@@ -37,10 +37,10 @@ function calcRow(row, taxType) {
 }
 
 function emptyRow() {
-    return { id: Date.now(), productId: '', productName: '', qty: 1, mrp: 0, basic: 0, rate: 0, disPct: 0, disRs: 0, sgst: 0, cgst: 0, igst: 0, tax: 0, total: 0, remarks: '', inStock: 0 }
+    return { id: Date.now(), productId: '', productName: '', qty: 1, mrp: 0, basic: 0, rate: 0, disPct: 0, disRs: 0, sgst: 0, cgst: 0, igst: 0, tax: 0, total: 0, remarks: '', inStock: 0, batchNo: '', mfgDate: '', expDate: '', hsnCode: '' }
 }
 
-export default function SupermarketPOS({ printBill }) {
+function SupermarketPOSContent({ printBill, isActive, onBillNoChange }) {
     const { user } = useAuth()
     const today = new Date().toLocaleDateString('en-CA') // YYYY-MM-DD
 
@@ -92,6 +92,7 @@ export default function SupermarketPOS({ printBill }) {
     const [activeRowIdx, setActiveRowIdx] = useState(0)
     const [activeCol, setActiveCol] = useState('productId')
     const [rowWithDeleteBtn, setRowWithDeleteBtn] = useState(null)
+    const [outOfStockAlert, setOutOfStockAlert] = useState(null)
 
     // Auto-focus the active cell
     useEffect(() => {
@@ -135,12 +136,19 @@ export default function SupermarketPOS({ printBill }) {
         }
     }
 
-    // ── Customer ─────────────────────────────────────────────
+    // ── Customer & Bill Details ──────────────────────────────
     const [customerId, setCustomerId]       = useState('')
     const [customerName, setCustomerName]   = useState('')
     const [customerMobile, setCustomerMobile] = useState('')
     const [prevBalance, setPrevBalance]       = useState(0)
     const [customerTab, setCustomerTab]       = useState('customer') // 'customer' | 'receipt'
+    
+    // ── Pharmacy/Custom Bill Fields ──────────────────────────
+    const [billTemplate, setBillTemplate]     = useState('standard')
+    const [doctorName, setDoctorName]         = useState('')
+    const [numberOfDays, setNumberOfDays]     = useState('')
+    const [isPharmacyDetailsOpen, setIsPharmacyDetailsOpen] = useState(true)
+    const [showTemplateModal, setShowTemplateModal] = useState(false)
 
     // ── Inventory lookup ─────────────────────────────────────
     const [inventory, setInventory]   = useState([])
@@ -152,6 +160,7 @@ export default function SupermarketPOS({ printBill }) {
     const [notification, setNotification] = useState('')
     const [saving, setSaving]             = useState(false)
     const [inStock, setInStock]           = useState(0)
+    const lastEnterTimeRef = useRef(0)
     
     // ── Scale state ──────────────────────────────────────────
     const [scaleData, setScaleData] = useState(0)
@@ -191,6 +200,11 @@ export default function SupermarketPOS({ printBill }) {
         // Generate bill number
         setBillNo('TRP' + String(Math.floor(1000 + Math.random() * 9000)));
     }, [refreshInventory]);
+
+    useEffect(() => {
+        if (onBillNoChange) onBillNoChange(billNo);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [billNo]);
 
     function notify(msg, ms = 2500) {
         setNotification(msg)
@@ -235,7 +249,7 @@ export default function SupermarketPOS({ printBill }) {
                                 const match = line.match(/[-+]?\d*\.?\d+/);
                                 if (match) {
                                     const val = parseFloat(match[0]);
-                                    if (!isNaN(val)) setScaleData(val);
+                                    if (!isNaN(val)) setScaleData(Math.abs(val));
                                 }
                             }
                         }
@@ -291,7 +305,33 @@ export default function SupermarketPOS({ printBill }) {
     function updateRow(idx, field, value) {
         setRows(prev => {
             const next = [...prev]
-            next[idx] = { ...next[idx], [field]: value }
+            let finalValue = value;
+
+            if (field === 'qty' && next[idx] && next[idx].productId) {
+                const newQty = parseFloat(value) || 0;
+                let otherQty = 0;
+                for (let i = 0; i < next.length; i++) {
+                    if (i !== idx && next[i].productId === next[idx].productId) {
+                        otherQty += (parseFloat(next[i].qty) || 0);
+                    }
+                }
+                const totalRequested = otherQty + newQty;
+                const available = parseFloat(next[idx].inStock) || 0;
+                
+                if (totalRequested > available) {
+                    setTimeout(() => {
+                        setOutOfStockAlert({
+                            name: next[idx].productName,
+                            available: available,
+                            requested: totalRequested
+                        });
+                    }, 10);
+                    finalValue = available - otherQty;
+                    if (finalValue < 0) finalValue = 0;
+                }
+            }
+
+            next[idx] = { ...next[idx], [field]: finalValue }
             next[idx] = calcRow(next[idx], taxType)
             return next
         })
@@ -342,10 +382,16 @@ export default function SupermarketPOS({ printBill }) {
                 ...next[idx],
                 productId:   safeId,
                 productName: found.name,
-                mrp:         found.price || 0,
+                mrp:         found.price ? Number(found.price).toFixed(2) : 0,
                 inStock:     found.currentStock || 0,
                 unit:        found.unit || 'PIECE',
-                qty:         next[idx].qty > 0 ? next[idx].qty : 1 // default qty to 1 if empty
+                qty:         next[idx].qty > 0 ? next[idx].qty : 1, // default qty to 1 if empty
+                batchNo:     found.batchNo || '',
+                mfgDate:     found.mfgDate || '',
+                expDate:     found.expDate || '',
+                hsnCode:     found.hsnCode || '',
+                barcode:     found.barcode || '',
+                inventoryItemId: found._id || found.id || ''
             }, taxType)
             return next
         })
@@ -428,11 +474,13 @@ export default function SupermarketPOS({ printBill }) {
         }
         window.addEventListener('keydown', onKey)
         return () => window.removeEventListener('keydown', onKey)
-    }, [activeRowIdx, inventory, taxType])
+    }, [activeRowIdx, inventory, taxType, isActive, isScaleConnected])
 
     // ── Keyboard shortcuts ────────────────────────────────────
     useEffect(() => {
         function onShortcut(e) {
+            if (!isActive) return;
+            if (e.altKey && e.key.toLowerCase() === 's') { e.preventDefault(); isScaleConnected ? disconnectScale() : connectScale() }
             if (e.key === 'F1')  { e.preventDefault(); handleNewBill() }
             if (e.key === 'F2')  { e.preventDefault(); handleSave() }
             if (e.key === 'F3')  { e.preventDefault(); loadHistory() }
@@ -450,7 +498,24 @@ export default function SupermarketPOS({ printBill }) {
                 e.preventDefault(); 
                 if (activeRowIdx !== null) handleDeleteRow(activeRowIdx) 
             }
-            if (e.key === 'Enter' && showSettlement) { e.preventDefault(); confirmSave() }
+            if (e.key === 'Enter') {
+                const now = Date.now()
+                const diff = now - lastEnterTimeRef.current
+                lastEnterTimeRef.current = now
+
+                if (showSettlement) {
+                    e.preventDefault()
+                    confirmSave()
+                } else if (diff < 500) {
+                    // Double enter detected
+                    const validRows = computed.filter(r => r.productName && r.qty > 0)
+                    if (validRows.length > 0) {
+                        e.preventDefault()
+                        handleSave()
+                    }
+                }
+            }
+
             if (e.key === 'Escape') {
                 if (showSettlement) setShowSettlement(false)
                 if (showHistoryModal) setShowHistoryModal(false)
@@ -458,13 +523,13 @@ export default function SupermarketPOS({ printBill }) {
                 if (showHeldModal) setShowHeldModal(false)
                 if (showSearchModalForIdx !== null) setShowSearchModalForIdx(null)
             }
-            
+
             if (e.key === 'F11') { e.preventDefault(); setUpdateRate(p=>!p); notify('💰 Update Rate mode toggled') }
             if (e.key === 'F9')  { e.preventDefault(); document.getElementById('sm-customer-name')?.focus() }
         }
         window.addEventListener('keydown', onShortcut)
         return () => window.removeEventListener('keydown', onShortcut)
-    }, [rows, saving, showSettlement, showHistoryModal, showEmailModal, showHeldModal, grandTotal, activeRowIdx])
+    }, [rows, saving, showSettlement, showHistoryModal, showEmailModal, showHeldModal, grandTotal, activeRowIdx, isActive, isScaleConnected])
 
     function handleNewBill() {
         const activeRows = rows.filter(r => r.productId || r.total > 0)
@@ -476,6 +541,7 @@ export default function SupermarketPOS({ printBill }) {
         setActiveRowIdx(0)
         setActiveCol('productId')
         setCustomerId(''); setCustomerName(''); setCustomerMobile(''); setPrevBalance(0)
+        setDoctorName(''); setNumberOfDays(''); setBillTemplate('standard'); setIsPharmacyDetailsOpen(true)
         setFreightCharges(0); setVehicleNumber(''); setEmpCode('')
         setBillNo('TRP' + String(Math.floor(1000 + Math.random() * 9000)))
         setBillDate(today)
@@ -490,6 +556,9 @@ export default function SupermarketPOS({ printBill }) {
             rows: [...rows],
             customerName,
             customerMobile,
+            doctorName,
+            numberOfDays,
+            billTemplate,
             disPctHeader,
             freightCharges,
             taxType,
@@ -512,6 +581,21 @@ export default function SupermarketPOS({ printBill }) {
             notify('❌ Failed to load history')
         } finally {
             setHistoryLoading(false)
+        }
+    }
+
+    const clearBillHistory = async () => {
+        if (!window.confirm("Are you sure you want to CLEAR ALL bill history? This action cannot be undone.")) return;
+        if (!window.confirm("FINAL WARNING: This will PERMANENTLY DELETE all orders. Proceed?")) return;
+        
+        try {
+            await api.delete('/orders/history/clear');
+            notify("✅ Bill history cleared successfully");
+            setHistoryOrders([]);
+            setShowHistoryModal(false);
+        } catch (err) {
+            console.error(err);
+            notify("❌ Failed to clear history");
         }
     }
 
@@ -557,6 +641,9 @@ export default function SupermarketPOS({ printBill }) {
         setRows(bill.rows)
         setCustomerName(bill.customerName || '')
         setCustomerMobile(bill.customerMobile || '')
+        setDoctorName(bill.doctorName || '')
+        setNumberOfDays(bill.numberOfDays || '')
+        setBillTemplate(bill.billTemplate || 'standard')
         setDisPctHeader(bill.disPctHeader || 0)
         setFreightCharges(bill.freightCharges || 0)
         setTaxType(bill.taxType || 'Inclusive') // Default to Inclusive if not set
@@ -572,6 +659,30 @@ export default function SupermarketPOS({ printBill }) {
         if (saving) return
         const validRows = computed.filter(r => r.productName && r.qty > 0)
         if (validRows.length === 0) { notify('⚠️ Add at least one item'); return }
+
+        // --- OUT OF STOCK CHECK ---
+        const stockMap = {};
+        for (const r of validRows) {
+            if (r.inventoryItemId) {
+                stockMap[r.inventoryItemId] = {
+                    name: r.productName,
+                    inStock: parseFloat(r.inStock) || 0,
+                    qty: (stockMap[r.inventoryItemId]?.qty || 0) + parseFloat(r.qty)
+                };
+            }
+        }
+        for (const id in stockMap) {
+            const item = stockMap[id];
+            if (item.qty > item.inStock) {
+                setOutOfStockAlert({
+                    name: item.name,
+                    available: item.inStock,
+                    requested: item.qty
+                });
+                return;
+            }
+        }
+
         setTenderCash(grandTotal)
         setTenderUPI(0)
         setTenderCard(0)
@@ -611,16 +722,27 @@ export default function SupermarketPOS({ printBill }) {
                     name: r.productName,
                     price: r.rate,
                     quantity: parseFloat(r.qty),
-                    barcode: r.productId,
+                    barcode: r.barcode || r.productId,
+                    inventoryItemId: r.inventoryItemId,
+                    batchNo: r.batchNo || '',
+                    mfgDate: r.mfgDate || '',
+                    expDate: r.expDate || '',
+                    hsnCode: r.hsnCode || '',
+                    mrp: r.mrp,
+                    disPct: r.disPct,
                 })),
                 billCategory,
                 taxType,
                 payment,
                 customerName,
-                customerMobile,
+                customerPhone: customerMobile,
                 discountPct: parseFloat(disPctHeader) || 0,
                 freightCharges: parseFloat(freightCharges) || 0,
                 billNo,
+                doctorName,
+                numberOfDays,
+                billTemplate,
+                customerFirm: customerId,
             }
             const existing = null // for new bill always create
             const res = await api.post('/orders', payload)
@@ -634,6 +756,42 @@ export default function SupermarketPOS({ printBill }) {
                     paymentStatus: 'PAID' 
                 })
                 notify('✅ Bill saved & paid!')
+                const printOrderObj = {
+                    ...(res.data.data || res.data.order || res.data),
+                    _id: orderId,
+                    items: validRows.map(r => ({
+                        name: r.productName,
+                        price: r.rate,
+                        mrp: r.mrp,
+                        quantity: parseFloat(r.qty),
+                        barcode: r.productId,
+                        disPct: r.disPct,
+                        sgst: r.sgst,
+                        cgst: r.cgst,
+                        igst: r.igst,
+                        tax: r.tax,
+                        total: r.total,
+                        batchNo: r.batchNo || '',
+                        mfgDate: r.mfgDate || '',
+                        expDate: r.expDate || '',
+                        hsnCode: r.hsnCode || '',
+                    })),
+                    customerName,
+                    customerPhone: customerMobile,
+                    customerFirm: customerId,
+                    doctorName,
+                    numberOfDays,
+                    billTemplate: (billTemplate === 'pharmacy' || billType === 'A4') ? 'pharmacy' : 'standard',
+                    billNo,
+                    taxType,
+                    total: grandTotal,
+                    discountPct: parseFloat(disPctHeader) || 0,
+                    freightCharges: parseFloat(freightCharges) || 0,
+                    createdAt: new Date(),
+                    skipKOT: true,
+                    isPharmacy: (billTemplate === 'pharmacy' || billType === 'A4')
+                }
+                printBill(printOrderObj, true, false, 'en')
                 setTimeout(() => handleNewBill(), 1200)
             }
         } catch (err) {
@@ -652,7 +810,7 @@ export default function SupermarketPOS({ printBill }) {
 
     // ── Render ────────────────────────────────────────────────
     return (
-        <div className="sm-pos-root">
+        <div className="sm-pos-root" style={{ display: isActive ? 'flex' : 'none', flex: 1 }}>
             {notification && <div className="sm-pos-toast">{notification}</div>}
 
             {/* ── HEADER FIELDS ── */}
@@ -680,7 +838,7 @@ export default function SupermarketPOS({ printBill }) {
                         <label>Category</label>
                         <select value={category} onChange={e => setCategory(e.target.value)}>
                             <option value="">Please select</option>
-                            <option>Grocery</option><option>Electronics</option><option>Clothing</option>
+                            <option>Grocery</option><option>Electronics</option><option>Clothing</option><option>Pharmacy</option>
                         </select>
                     </div>
                     <div className="sm-field-group">
@@ -741,6 +899,10 @@ export default function SupermarketPOS({ printBill }) {
                                     <th className="col-name">Product Name</th>
                                     <th className="col-weight">Weight</th>
                                     <th className="col-qty">Qty</th>
+                                    <th className="col-batch">Batch</th>
+                                    <th className="col-date">Mfg Date</th>
+                                    <th className="col-date">Exp Date</th>
+                                    <th className="col-hsn">HSN</th>
                                     <th className="col-mrp">MRP</th>
                                     <th className="col-basic">Basic</th>
                                     <th className="col-rate">Rate</th>
@@ -815,6 +977,50 @@ export default function SupermarketPOS({ printBill }) {
                                                 />
                                             </div>
                                         </td>
+                                        <td className="col-batch">
+                                            <input
+                                                id={`cell-${idx}-batchNo`}
+                                                className={activeRowIdx === idx && activeCol === 'batchNo' ? 'cell-active' : ''}
+                                                value={row.batchNo}
+                                                onChange={e => updateRow(idx, 'batchNo', e.target.value)}
+                                                onKeyDown={e => handleCellKeyDown(e, idx, 'batchNo')}
+                                                onFocus={() => { setActiveRowIdx(idx); setActiveCol('batchNo') }}
+                                                placeholder="BATCH"
+                                            />
+                                        </td>
+                                        <td className="col-date">
+                                            <input
+                                                id={`cell-${idx}-mfgDate`}
+                                                className={activeRowIdx === idx && activeCol === 'mfgDate' ? 'cell-active' : ''}
+                                                value={row.mfgDate}
+                                                onChange={e => updateRow(idx, 'mfgDate', e.target.value)}
+                                                onKeyDown={e => handleCellKeyDown(e, idx, 'mfgDate')}
+                                                onFocus={() => { setActiveRowIdx(idx); setActiveCol('mfgDate') }}
+                                                placeholder="MM/YY"
+                                            />
+                                        </td>
+                                        <td className="col-date">
+                                            <input
+                                                id={`cell-${idx}-expDate`}
+                                                className={activeRowIdx === idx && activeCol === 'expDate' ? 'cell-active' : ''}
+                                                value={row.expDate}
+                                                onChange={e => updateRow(idx, 'expDate', e.target.value)}
+                                                onKeyDown={e => handleCellKeyDown(e, idx, 'expDate')}
+                                                onFocus={() => { setActiveRowIdx(idx); setActiveCol('expDate') }}
+                                                placeholder="MM/YY"
+                                            />
+                                        </td>
+                                        <td className="col-hsn">
+                                            <input
+                                                id={`cell-${idx}-hsnCode`}
+                                                className={activeRowIdx === idx && activeCol === 'hsnCode' ? 'cell-active' : ''}
+                                                value={row.hsnCode}
+                                                onChange={e => updateRow(idx, 'hsnCode', e.target.value)}
+                                                onKeyDown={e => handleCellKeyDown(e, idx, 'hsnCode')}
+                                                onFocus={() => { setActiveRowIdx(idx); setActiveCol('hsnCode') }}
+                                                placeholder="HSN"
+                                            />
+                                        </td>
                                         <td className="col-mrp">
                                             <input type="number" min="0" step="0.01"
                                                 id={`cell-${idx}-mrp`}
@@ -858,7 +1064,9 @@ export default function SupermarketPOS({ printBill }) {
                             <tfoot>
                                 <tr className="sm-totals-row">
                                     <td colSpan={3} className="totals-label">TOTALS</td>
+                                    <td></td>
                                     <td>{totalItems.toFixed(2)}</td>
+                                    <td colSpan={4}></td>
                                     <td></td><td></td><td></td><td></td>
                                     <td>{totalDiscount.toFixed(2)}</td>
                                     <td>{computed.reduce((s,r)=>s+r.sgst,0).toFixed(2)}</td>
@@ -938,7 +1146,10 @@ export default function SupermarketPOS({ printBill }) {
                     <div className="sm-cust-field"><label>Mobile Number</label><input value={customerMobile} onChange={e => setCustomerMobile(e.target.value)} /></div>
                     <div className="sm-cust-field"><label>Previous Balance</label><input readOnly value={prevBalance} className="readonly" /></div>
                 </div>
+
+                {/* ── Details Section removed ── */}
             </div>
+
 
             {/* ── ACTION BUTTONS ── */}
             <div className="sm-action-bar">
@@ -1118,6 +1329,7 @@ export default function SupermarketPOS({ printBill }) {
                         <div className="sm-tender-body">
                             <div className="tender-row total">
                                 <label>Net Amount payable</label>
+                                <br />
                                 <span>₹{grandTotal.toFixed(2)}</span>
                             </div>
                             <div className="tender-row mt-3">
@@ -1131,6 +1343,96 @@ export default function SupermarketPOS({ printBill }) {
                             <div className="tender-row">
                                 <label>Card</label>
                                 <input type="number" min="0" value={tenderCard} onChange={e => setTenderCard(parseFloat(e.target.value)||0)} onFocus={e => e.target.select()} />
+                            </div>
+
+                            <div className="sm-template-section" style={{ margin: '20px 0', background: 'none', border: 'none', boxShadow: 'none', padding: 0 }}>
+                                <div className="sm-template-toggle" style={{ marginBottom: '16px', display: 'flex', gap: '10px' }}>
+                                    <button 
+                                        className={`sm-template-btn ${billTemplate === 'standard' ? 'active' : ''}`}
+                                        onClick={() => setBillTemplate('standard')}
+                                        style={{ flex: 1, color: '#0f172a', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '8px', background: billTemplate === 'standard' ? '#e2e8f0' : '#fff' }}
+                                    >
+                                        <span className="sm-icon">🧾</span>
+                                        <div className="info" style={{ display: 'inline-block', marginLeft: '8px', textAlign: 'left' }}>
+                                            <div className="title" style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '13px' }}>Standard</div>
+                                            <div className="sub" style={{ color: '#475569', fontSize: '11px' }}>3-inch Thermal</div>
+                                        </div>
+                                    </button>
+                                    <button 
+                                        className={`sm-template-btn pharmacy ${billTemplate === 'pharmacy' ? 'active' : ''}`}
+                                        onClick={() => setBillTemplate('pharmacy')}
+                                        style={{ flex: 1, color: '#0f172a', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '8px', background: billTemplate === 'pharmacy' ? '#e2e8f0' : '#fff' }}
+                                    >
+                                        <span className="sm-icon">💊</span>
+                                        <div className="info" style={{ display: 'inline-block', marginLeft: '8px', textAlign: 'left' }}>
+                                            <div className="title" style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '13px' }}>Pharmacy</div>
+                                            <div className="sub" style={{ color: '#475569', fontSize: '11px' }}>A4 Tax Invoice</div>
+                                        </div>
+                                    </button>
+                                </div>
+
+                                {billTemplate === 'pharmacy' && (
+                                    <div className="sm-pharmacy-details fade-in-down" style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '10px', borderRadius: '8px' }}>
+                                        <div className="pharmacy-header" onClick={() => setIsPharmacyDetailsOpen(!isPharmacyDetailsOpen)} style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                <span className="sm-icon">📝</span>
+                                                <span style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '13px' }}>Prescription Details</span>
+                                            </div>
+                                            <span style={{ fontSize: '12px', color: '#0f172a', transition: 'transform 0.2s', transform: isPharmacyDetailsOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
+                                        </div>
+                                        {isPharmacyDetailsOpen && (
+                                            <div className="pharmacy-grid fade-in-down" style={{ marginTop: '10px', display: 'grid', gap: '10px' }}>
+                                                <div className="sm-cust-field">
+                                                    <label style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '12px' }}>Doctor Name</label>
+                                                    <input
+                                                        value={doctorName}
+                                                        onChange={e => setDoctorName(e.target.value)}
+                                                        placeholder="Dr. Name..."
+                                                        style={{ width: '100%', padding: '6px', color: '#0f172a', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '4px' }}
+                                                    />
+                                                </div>
+                                                <div className="sm-cust-field">
+                                                    <label style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '12px' }}>No. of Days</label>
+                                                    <input
+                                                        type="number"
+                                                        value={numberOfDays}
+                                                        onChange={e => setNumberOfDays(e.target.value)}
+                                                        placeholder="Days"
+                                                        min="1"
+                                                        style={{ width: '100%', padding: '6px', color: '#0f172a', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '4px' }}
+                                                    />
+                                                </div>
+                                                <div className="sm-cust-field full-width">
+                                                    <label style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '12px' }}>M/S (Customer Firm)</label>
+                                                    <input
+                                                        value={customerId}
+                                                        onChange={e => setCustomerId(e.target.value)}
+                                                        placeholder="Customer Firm Name"
+                                                        style={{ width: '100%', padding: '6px', color: '#0f172a', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '4px' }}
+                                                    />
+                                                </div>
+                                                <div className="sm-cust-field">
+                                                    <label style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '12px' }}>Customer Name</label>
+                                                    <input
+                                                        value={customerName}
+                                                        onChange={e => setCustomerName(e.target.value)}
+                                                        placeholder="Name"
+                                                        style={{ width: '100%', padding: '6px', color: '#0f172a', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '4px' }}
+                                                    />
+                                                </div>
+                                                <div className="sm-cust-field">
+                                                    <label style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '12px' }}>Mobile Number</label>
+                                                    <input
+                                                        value={customerMobile}
+                                                        onChange={e => setCustomerMobile(e.target.value)}
+                                                        placeholder="Mobile"
+                                                        style={{ width: '100%', padding: '6px', color: '#0f172a', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '4px' }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
 
                             <div className="tender-summary">
@@ -1186,13 +1488,55 @@ export default function SupermarketPOS({ printBill }) {
                 </div>
             )}
 
+            {/* ── Out of Stock Alert Modal ────────────────────────────── */}
+            {outOfStockAlert && (
+                <div className="sm-modal-overlay">
+                    <div className="sm-modal-content" style={{ width: '400px', borderTop: '4px solid #ef4444' }}>
+                        <div className="sm-modal-header">
+                            <h3 style={{ margin: 0, color: '#ef4444', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span>⚠️</span> Out of Stock!
+                            </h3>
+                            <button onClick={() => setOutOfStockAlert(null)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
+                        </div>
+                        <div style={{ padding: '20px', fontSize: '14px', lineHeight: '1.6' }}>
+                            <p style={{ margin: '0 0 10px 0' }}>
+                                You are trying to bill more than what is available in the inventory. The quantity has been automatically adjusted to the maximum available.
+                            </p>
+                            <div style={{ background: '#fef2f2', padding: '12px', borderRadius: '6px', border: '1px solid #fee2e2' }}>
+                                <div style={{ marginBottom: '8px' }}><strong>Product:</strong> <span style={{ color: '#991b1b' }}>{outOfStockAlert.name}</span></div>
+                                <div style={{ marginBottom: '8px' }}><strong>Available in Inventory:</strong> <span style={{ fontWeight: 'bold' }}>{outOfStockAlert.available}</span></div>
+                                <div><strong>You tried to bill:</strong> <span style={{ color: '#ef4444', fontWeight: 'bold' }}>{outOfStockAlert.requested}</span></div>
+                            </div>
+                        </div>
+                        <div style={{ padding: '15px', display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid var(--border)' }}>
+                            <button 
+                                onClick={() => setOutOfStockAlert(null)}
+                                style={{ background: '#ef4444', color: '#fff', padding: '8px 20px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}
+                            >
+                                Understood
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* ── History Search Modal (Find Bill) ───────────────── */}
             {showHistoryModal && (
                 <div className="sm-modal-overlay">
                     <div className="sm-modal-content" style={{ width: '650px' }}>
-                        <div className="sm-modal-header">
-                            <h3>🔍 Past Sales History</h3>
-                            <button onClick={() => setShowHistoryModal(false)}>×</button>
+                        <div className="sm-modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                <h3 style={{ margin: 0 }}>🔍 Past Sales History</h3>
+                                <button 
+                                    onClick={clearBillHistory}
+                                    style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '4px 12px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', transition: 'opacity 0.2s' }}
+                                    onMouseOver={e => e.target.style.opacity = '0.8'}
+                                    onMouseOut={e => e.target.style.opacity = '1'}
+                                >
+                                    🗑️ Clear All
+                                </button>
+                            </div>
+                            <button onClick={() => setShowHistoryModal(false)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
                         </div>
                         <div style={{ padding: '15px' }}>
                             {historyLoading ? (
@@ -1226,7 +1570,7 @@ export default function SupermarketPOS({ printBill }) {
                                                     </td>
                                                     <td>
                                                         <button 
-                                                            style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' }}
+                                                            style={{ background: 'var(--accent)', color: 'var(--accent-text)', border: 'none', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' }}
                                                             onClick={() => handleReprintRequest(o)}
                                                         >
                                                             🖨️ Reprint
@@ -1305,8 +1649,98 @@ export default function SupermarketPOS({ printBill }) {
                     </div>
                 </div>
             )}
+
         </div>
     )
+}
+
+export default function SupermarketPOS({ printBill }) {
+    const [tabs, setTabs] = useState([{ id: Date.now(), title: 'New Order' }]);
+    const [activeTabId, setActiveTabId] = useState(tabs[0].id);
+
+    const addTab = () => {
+        const id = Date.now();
+        setTabs([...tabs, { id, title: 'New Order' }]);
+        setActiveTabId(id);
+    };
+
+    const closeTab = (id, e) => {
+        e.stopPropagation();
+        if (tabs.length === 1) return; // Prevent closing the last tab
+        const newTabs = tabs.filter(t => t.id !== id);
+        setTabs(newTabs);
+        if (activeTabId === id) {
+            setActiveTabId(newTabs[0].id);
+        }
+    };
+
+    const handleBillNoChange = (id, billNo) => {
+        setTabs(prev => prev.map(t => t.id === id ? { ...t, title: billNo || 'New Order' } : t));
+    };
+
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.ctrlKey && e.key.toLowerCase() === 't') {
+                e.preventDefault();
+                addTab();
+            }
+            if (e.ctrlKey && e.key === 'Tab') {
+                e.preventDefault();
+                setTabs(prev => {
+                    const currentIdx = prev.findIndex(t => t.id === activeTabId);
+                    const nextIdx = (currentIdx + 1) % prev.length;
+                    setActiveTabId(prev[nextIdx].id);
+                    return prev;
+                });
+            }
+            if (e.ctrlKey && e.key.toLowerCase() === 'w') {
+                if (tabs.length > 1) {
+                    e.preventDefault();
+                    closeTab(activeTabId, e);
+                }
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [activeTabId, tabs.length]);
+
+    return (
+        <div className="sm-pos-tab-wrapper">
+            <div className="sm-pos-tab-bar">
+                {tabs.map(tab => (
+                    <div 
+                        key={tab.id} 
+                        className={`sm-pos-tab ${activeTabId === tab.id ? 'active' : ''}`}
+                        onClick={() => setActiveTabId(tab.id)}
+                    >
+                        <span className="sm-pos-tab-title">{tab.title}</span>
+                        {tabs.length > 1 && (
+                            <button className="sm-pos-tab-close" onClick={(e) => closeTab(tab.id, e)}>✕</button>
+                        )}
+                    </div>
+                ))}
+                <button className="sm-pos-tab-add" onClick={addTab} title="New Order Tab (Ctrl+T)">
+                    <span>+</span>
+                </button>
+            </div>
+            
+            <div className="sm-pos-tab-content-area">
+                {tabs.map(tab => (
+                    <div 
+                        key={tab.id} 
+                        className={`sm-pos-tab-content ${activeTabId === tab.id ? 'active-tab' : ''}`}
+                        style={{ display: activeTabId === tab.id ? 'block' : 'none' }}
+                    >
+                        <SupermarketPOSContent 
+                            printBill={printBill} 
+                            isActive={activeTabId === tab.id}
+                            onBillNoChange={(billNo) => handleBillNoChange(tab.id, billNo)}
+                        />
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
 }
 
 function LiveClock() {

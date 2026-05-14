@@ -24,6 +24,7 @@ export default function AnalyticsPage() {
     const reports = [
         { id: 'sales-summary', label: 'Sales Summary', icon: '📊' },
         { id: 'sales-report', label: 'Sales Report', icon: '📝' },
+        { id: 'payment-mode-sales', label: 'Payment Mode Wise Report', icon: '💳' },
         { id: 'monthly-day-wise', label: 'Monthly Day wise Report', icon: '📅' },
         { id: 'end-day-report', label: 'End Day Report', icon: '🏁' },
         { id: 'category-item-wise', label: 'Category & Item wise Report', icon: '📁' },
@@ -77,7 +78,7 @@ export default function AnalyticsPage() {
                 word: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                 json: 'application/json',
             }
-            const extMap = { pdf: 'pdf', word: 'docx', json: 'json' }
+            const extMap = { pdf: 'pdf', word: 'docx', excel: 'xlsx', json: 'json' }
             const res = await api.get(
                 `/analytics/download-report?type=${reportId}&format=${format}`,
                 { responseType: 'blob' }
@@ -113,33 +114,46 @@ export default function AnalyticsPage() {
             label: 'Total Revenue',
             value: `₹${data?.summary?.totalRevenue?.toLocaleString('en-IN') || 0}`,
             icon: '💰',
-            bg: 'rgba(198, 245, 61, 0.1)',
-            color: 'var(--accent)',
-            trend: '+12.5%'
+            bg: 'rgba(198,245,61,0.1)',
+            color: '#C6F53D',
+            trend: '+12.5%',
+            borderColor: 'rgba(198,245,61,0.5)'
         },
         {
             label: 'Net Profit',
             value: `₹${Math.round(data?.summary?.netProfit || 0).toLocaleString('en-IN')}`,
-            icon: '💵',
-            bg: 'rgba(0, 214, 143, 0.1)',
-            color: '#00D68F',
-            trend: `${data?.summary?.profitMargin?.toFixed(1) || 0}% Margin`
+            icon: '📈',
+            bg: 'rgba(45,212,121,0.1)',
+            color: '#2DD479',
+            trend: `${data?.summary?.profitMargin?.toFixed(1) || 0}% Margin`,
+            borderColor: 'rgba(45,212,121,0.5)'
         },
         {
             label: 'Total Expense',
             value: `₹${Math.round(data?.summary?.totalExpense || 0).toLocaleString('en-IN')}`,
             icon: '💸',
-            bg: 'rgba(231, 76, 60, 0.1)',
-            color: '#e74c3c',
-            trend: 'Expenditure'
+            bg: 'rgba(239,68,68,0.1)',
+            color: '#ef4444',
+            trend: 'Expenditure',
+            borderColor: 'rgba(239,68,68,0.5)'
+        },
+        {
+            label: 'Gross Profit',
+            value: `₹${Math.round(data?.summary?.grossProfit || 0).toLocaleString('en-IN')}`,
+            icon: '💎',
+            bg: 'rgba(139,92,246,0.1)',
+            color: '#a78bfa',
+            trend: 'After COGS',
+            borderColor: 'rgba(139,92,246,0.5)'
         },
         {
             label: 'Total Orders',
             value: data?.summary?.totalOrders || 0,
             icon: '🧾',
-            bg: 'rgba(76, 142, 255, 0.1)',
-            color: '#4C8EFF',
-            trend: '+8.2%'
+            bg: 'rgba(59,130,246,0.1)',
+            color: '#60a5fa',
+            trend: '+8.2%',
+            borderColor: 'rgba(59,130,246,0.5)'
         }
     ]
 
@@ -155,6 +169,9 @@ export default function AnalyticsPage() {
                 </button>
                 <button className="export-btn export-word" onClick={() => handleDownload(selectedReport.id, 'word')}>
                     <span className="export-icon">📝</span> Word
+                </button>
+                <button className="export-btn export-excel" onClick={() => handleDownload(selectedReport.id, 'excel')} style={{background: 'rgba(0, 214, 143, 0.1)', color: '#00D68F', border: '1px solid rgba(0, 214, 143, 0.3)'}}>
+                    <span className="export-icon">📊</span> Excel
                 </button>
                 <button className="export-btn export-json" onClick={() => handleDownload(selectedReport.id, 'json')}>
                     <span className="export-icon">{'{ }'}</span> JSON
@@ -216,6 +233,55 @@ export default function AnalyticsPage() {
                         </div>
                         <div className="report-footer-summary">
                             <span>Total Revenue: <b>₹{reportData?.totalRevenue?.toLocaleString()}</b></span>
+                        </div>
+                        {downloadBar}
+                    </div>
+                )
+            case 'payment-mode-sales':
+                return (
+                    <div className="report-content-view">
+                        <div className="report-summary-grid">
+                            <div className="summary-val-card">
+                                <span className="label">Grand Total</span>
+                                <span className="val">₹{reportData?.grandTotal?.toLocaleString() || 0}</span>
+                            </div>
+                            {Object.entries(reportData?.paymentTotals || {}).map(([mode, val]) => (
+                                <div key={mode} className="summary-val-card" style={{ background: 'rgba(37, 99, 235, 0.05)' }}>
+                                    <span className="label">{mode} Total</span>
+                                    <span className="val" style={{ color: 'var(--accent)' }}>₹{val.toLocaleString()}</span>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="report-table-wrapper" style={{ marginTop: '20px' }}>
+                            {['CASH', 'UPI', 'CARD', 'PENDING'].map(mode => {
+                                const modeData = reportData?.[`Mode_${mode}`];
+                                if (!modeData || modeData.length === 0) return null;
+                                return (
+                                    <div key={mode} style={{ marginBottom: '30px' }}>
+                                        <h4 style={{ color: 'var(--accent)', marginBottom: '10px', fontSize: '1.1rem' }}>💳 {mode} Transactions</h4>
+                                        <table className="premium-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Order #</th>
+                                                    <th>Date</th>
+                                                    <th>Customer</th>
+                                                    <th>Amount</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {modeData.map((o, i) => (
+                                                    <tr key={i}>
+                                                        <td>{o['Order Number']}</td>
+                                                        <td>{o['Date']}</td>
+                                                        <td>{o['Customer'] || '-'}</td>
+                                                        <td>₹{o['Amount']?.toLocaleString()}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )
+                            })}
                         </div>
                         {downloadBar}
                     </div>
@@ -450,21 +516,26 @@ export default function AnalyticsPage() {
 
     return (
         <div className="analytics-container">
-            <StakeholderRestaurantTabs />
-            <div className="analytics-header">
-                <div className="header-main">
-                    <h1>Restaurant Analytics</h1>
-                    <p>Track your business growth and popular dishes</p>
-                </div>
-                <div className="header-actions">
-                    <div className="report-selector-wrapper">
-                        <button 
-                            className={`report-selector-btn ${showSelector ? 'active' : ''}`}
-                            onClick={() => setShowSelector(!showSelector)}
-                        >
-                            📊 {selectedReport ? selectedReport.label : 'Select Report'}
-                            <span className={`chevron ${showSelector ? 'open' : ''}`}>▼</span>
-                        </button>
+            {/* ── PAGE HEADER ─────────────────────────────────────────── */}
+            <div className="an-page-header">
+                <div className="an-header-top">
+                    <div className="an-title-group">
+                        <div className="an-title-icon">📊</div>
+                        <div>
+                            <h1 className="an-title">Business Analytics</h1>
+                            <p className="an-subtitle">Track sales, expenses, profit &amp; stock in real-time</p>
+                        </div>
+                    </div>
+                    <div className="an-header-right">
+                        {/* Report Selector */}
+                        <div className="report-selector-wrapper">
+                            <button 
+                                className={`report-selector-btn ${showSelector ? 'active' : ''}`}
+                                onClick={() => setShowSelector(!showSelector)}
+                            >
+                                📋 {selectedReport ? selectedReport.label : 'Select Report'}
+                                <span className={`chevron ${showSelector ? 'open' : ''}`}>▼</span>
+                            </button>
                         {showSelector && (
                             <div className="report-dropdown-premium">
                                 {reports.map(r => (
@@ -485,30 +556,31 @@ export default function AnalyticsPage() {
                             </div>
                         )}
                     </div>
-                    <div className="period-switcher">
+
+                    {/* Period Switcher */}
+                    <div className="an-period-switcher">
                         {[
-                            { id: '1d', label: '1D' },
-                            { id: '7d', label: '1W' },
-                            { id: '30d', label: '1M' },
-                            { id: '90d', label: '3M' }
+                            { id: '1d', label: 'Today' },
+                            { id: '7d', label: '1 Week' },
+                            { id: '30d', label: '1 Month' },
+                            { id: '90d', label: '3 Months' }
                         ].map(p => (
                             <button
                                 key={p.id}
                                 onClick={() => setPeriod(p.id)}
-                                className={`period-btn ${period === p.id ? 'active' : ''}`}
+                                className={`an-period-btn ${period === p.id ? 'active' : ''}`}
                             >
                                 {p.label}
                             </button>
                         ))}
                         
-                        {/* Date Picker Button */}
                         <div className="period-btn-calendar">
                             <button
                                 onClick={() => document.getElementById('analytics-date-picker').showPicker()}
-                                className={`period-btn calendar-btn ${period === 'custom' ? 'active' : ''}`}
+                                className={`an-period-btn calendar-btn ${period === 'custom' ? 'active' : ''}`}
                                 title="Pick a specific date"
                             >
-                                📅 {period === 'custom' ? selectedDate : ''}
+                                📅 {period === 'custom' ? selectedDate : 'Custom'}
                             </button>
                             <input 
                                 type="date" 
@@ -524,6 +596,7 @@ export default function AnalyticsPage() {
                     </div>
                 </div>
             </div>
+        </div>
 
 
             {loading ? (
@@ -534,12 +607,27 @@ export default function AnalyticsPage() {
                 <>
                     <div className="kpi-grid">
                         {kpis.map((k, i) => (
-                            <div key={i} className="kpi-card">
+                            <div 
+                                key={i} 
+                                className="kpi-card"
+                                style={{ borderLeft: `4px solid ${k.borderColor}` }}
+                            >
                                 <div className="kpi-icon-row">
-                                    <div className="kpi-icon" style={{ background: k.bg }}>{k.icon}</div>
-                                    <div className="kpi-trend" style={{ color: k.color }}>{k.trend}</div>
+                                    <div className="kpi-icon" style={{ background: k.bg }}>
+                                        {k.icon}
+                                    </div>
+                                    <span 
+                                        className="kpi-trend"
+                                        style={{ 
+                                            color: k.color, 
+                                            background: k.bg,
+                                            border: `1px solid ${k.borderColor}`
+                                        }}
+                                    >
+                                        {k.trend}
+                                    </span>
                                 </div>
-                                <div>
+                                <div className="kpi-text-group">
                                     <div className="kpi-label">{k.label}</div>
                                     <div className="kpi-value">{k.value}</div>
                                 </div>
@@ -557,49 +645,55 @@ export default function AnalyticsPage() {
                                     <div className="legend-item"><span className="dot profit"></span> Profit</div>
                                 </div>
                             </div>
-                            <div style={{ width: '100%', height: 350 }}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <AreaChart data={data?.revenueByDay || []}>
-                                        <defs>
-                                            <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.3}/>
-                                                <stop offset="95%" stopColor="var(--accent)" stopOpacity={0}/>
-                                            </linearGradient>
-                                            <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor="#00D68F" stopOpacity={0.3}/>
-                                                <stop offset="95%" stopColor="#00D68F" stopOpacity={0}/>
-                                            </linearGradient>
-                                        </defs>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-                                        <XAxis 
-                                            dataKey="date" 
-                                            axisLine={false}
-                                            tickLine={false}
-                                            tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 10 }}
-                                            tickFormatter={(val) => val.includes('-') ? val.slice(5) : val}
-                                        />
-                                        <YAxis 
-                                            axisLine={false}
-                                            tickLine={false}
-                                            tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 10 }}
-                                            tickFormatter={(value) => `₹${value >= 1000 ? (value/1000).toFixed(1) + 'k' : value}`}
-                                        />
-                                        <Tooltip 
-                                            contentStyle={{ backgroundColor: '#1e1e2d', border: 'none', borderRadius: '8px', color: '#fff' }}
-                                            itemStyle={{ color: '#fff' }}
-                                        />
-                                        <Area type="monotone" dataKey="revenue" stroke="var(--accent)" fillOpacity={1} fill="url(#colorRev)" strokeWidth={3} />
-                                        <Area type="monotone" dataKey="profit" stroke="#00D68F" fillOpacity={1} fill="url(#colorProfit)" strokeWidth={3} />
-                                    </AreaChart>
-                                </ResponsiveContainer>
+                            <div className="chart-wrapper">
+                                {data?.revenueByDay?.length > 0 ? (
+                                    <ResponsiveContainer width="100%" height={350}>
+                                        <AreaChart data={data.revenueByDay}>
+                                            <defs>
+                                                <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.3}/>
+                                                    <stop offset="95%" stopColor="var(--accent)" stopOpacity={0}/>
+                                                </linearGradient>
+                                                <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="#00D68F" stopOpacity={0.3}/>
+                                                    <stop offset="95%" stopColor="#00D68F" stopOpacity={0}/>
+                                                </linearGradient>
+                                            </defs>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                                            <XAxis 
+                                                dataKey="date" 
+                                                axisLine={false}
+                                                tickLine={false}
+                                                tick={{ fill: 'var(--text-muted)', fontSize: 10 }}
+                                                tickFormatter={(val) => val.includes('-') ? val.slice(5) : val}
+                                            />
+                                            <YAxis 
+                                                axisLine={false}
+                                                tickLine={false}
+                                                tick={{ fill: 'var(--text-muted)', fontSize: 10 }}
+                                                tickFormatter={(value) => `₹${value >= 1000 ? (value/1000).toFixed(1) + 'k' : value}`}
+                                            />
+                                            <Tooltip 
+                                                contentStyle={{ backgroundColor: '#1e1e2d', border: 'none', borderRadius: '8px', color: '#fff' }}
+                                                itemStyle={{ color: '#fff' }}
+                                            />
+                                            <Area type="monotone" dataKey="revenue" stroke="var(--accent)" fillOpacity={1} fill="url(#colorRev)" strokeWidth={3} />
+                                            <Area type="monotone" dataKey="profit" stroke="#00D68F" fillOpacity={1} fill="url(#colorProfit)" strokeWidth={3} />
+                                        </AreaChart>
+                                    </ResponsiveContainer>
+                                ) : (
+                                    <div className="no-data-chart">
+                                        <span>No sales data found for this period</span>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
                         {/* Expense Breakdown Pie Chart */}
                         <div className="dashboard-card">
                             <h3 className="card-title">💸 Expenditure Breakdown</h3>
-                            <div style={{ width: '100%', height: 300 }}>
-                                <ResponsiveContainer width="100%" height="100%">
+                            <div className="chart-wrapper">
+                                <ResponsiveContainer width="100%" height={300}>
                                     <PieChart>
                                         <Pie
                                             data={data?.expenseBreakdown?.length > 0 ? data.expenseBreakdown : [{name: 'No Data', value: 1}]}
@@ -641,22 +735,29 @@ export default function AnalyticsPage() {
 
                         {/* P&L Analysis */}
                         <div className="dashboard-card">
-                            <h3 className="card-title">💡 Insight: Net Profit</h3>
+                            <h3 className="card-title">💡 Insight: Profitability</h3>
                             <div className="profit-analysis">
                                 <div className="profit-value-row">
-                                    <span className="big-profit">₹{Math.round(data?.summary?.netProfit || 0).toLocaleString('en-IN')}</span>
+                                    <div style={{ flex: 1 }}>
+                                        <div className="text-sm text-gray-400">Net Profit</div>
+                                        <span className="big-profit">₹{Math.round(data?.summary?.netProfit || 0).toLocaleString('en-IN')}</span>
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <div className="text-sm text-gray-400">Gross Profit</div>
+                                        <span className="big-profit" style={{ color: '#00D68F' }}>₹{Math.round(data?.summary?.grossProfit || 0).toLocaleString('en-IN')}</span>
+                                    </div>
                                     <span className={`profit-indicator ${data?.summary?.netProfit >= 0 ? 'pos' : 'neg'}`}>
                                         {data?.summary?.netProfit >= 0 ? '▲ Positive' : '▼ Negative'}
                                     </span>
                                 </div>
                                 <div className="margin-bar-container">
-                                    <div className="margin-label">Profit Margin: {data?.summary?.profitMargin?.toFixed(1) || 0}%</div>
+                                    <div className="margin-label">Gross Margin: {data?.summary?.profitMargin?.toFixed(1) || 0}%</div>
                                     <div className="margin-bar-bg">
                                         <div className="margin-bar-fill" style={{ width: `${Math.min(100, Math.max(0, data?.summary?.profitMargin || 0))}%` }}></div>
                                     </div>
                                 </div>
                                 <p className="profit-desc">
-                                    Calculated as total revenue minus expenditures across selected restaurants for this period.
+                                    Gross Profit = Revenue - Material Cost (COGS). Net Profit = Revenue - All Expenses.
                                 </p>
                             </div>
                         </div>

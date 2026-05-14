@@ -1,9 +1,7 @@
 import { io } from 'socket.io-client';
 
-// Connect via Vite Proxy (relative URL)
-// This ensures that if the frontend is HTTPS, the request goes to the secure Vite port first,
-// which then proxies it over HTTP to port 9092 internally, avoiding Mixed Content warnings.
-const socketUrl = '/';
+// Connect directly to the local backend port for Electron offline app
+const socketUrl = 'http://localhost:9092';
 
 const socket = io(socketUrl, {
     path: '/socket.io', // Expressed explicitly to match vite.config proxy

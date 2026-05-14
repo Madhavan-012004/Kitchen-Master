@@ -46,7 +46,7 @@ export default function AnalyticsScreen() {
             
             let url = `${baseUrl}/api/analytics/download-report?type=${selectedReportType}&format=${selectedReportFormat}`;
             
-            const ext = selectedReportFormat === 'word' ? 'docx' : selectedReportFormat;
+            const ext = selectedReportFormat === 'word' ? 'docx' : selectedReportFormat === 'excel' ? 'xlsx' : selectedReportFormat;
             const fileUri = FileSystem.documentDirectory + `${selectedReportType}-${new Date().toISOString().split('T')[0]}.${ext}`;
             
             const headers: any = { Authorization: `Bearer ${token}` };
@@ -104,6 +104,7 @@ export default function AnalyticsScreen() {
     const kpis = [
         { label: 'Revenue', value: `₹${summary.totalRevenue || 0}`, icon: 'cash-outline', grad: gradients.primary, shadow: Shadows.primary },
         { label: 'Net Profit', value: `₹${Math.round(summary.netProfit || 0)}`, icon: 'wallet-outline', grad: [colors.success || '#00D68F', colors.success || '#00B377'], shadow: Shadows.md },
+        { label: 'Gross Profit', value: `₹${Math.round(summary.grossProfit || 0)}`, icon: 'diamond-outline', grad: ['#9D50BB', '#6E48AA'], shadow: Shadows.md },
         { label: 'Expenses', value: `₹${Math.round(summary.totalExpense || 0)}`, icon: 'receipt-outline', grad: ['#C6F53D', '#E74C3C'], shadow: Shadows.md },
     ];
 
@@ -169,9 +170,9 @@ export default function AnalyticsScreen() {
                     </View>
 
                     {/* KPI Cards */}
-                    <View style={themedStyles.kpiRow}>
+                    <View style={[themedStyles.kpiRow, { flexWrap: 'wrap' }]}>
                         {kpis.map((k, i) => (
-                            <LinearGradient key={i} colors={k.grad as [string, string]} style={[themedStyles.kpiCard, k.shadow]}>
+                            <LinearGradient key={i} colors={k.grad as [string, string]} style={[themedStyles.kpiCard, k.shadow, { minWidth: '45%', marginBottom: 10 }]}>
                                 <View style={themedStyles.kpiIcon}>
                                     <Ionicons name={k.icon as any} size={20} color={colors.white} />
                                 </View>
@@ -331,7 +332,8 @@ export default function AnalyticsScreen() {
                             <View style={themedStyles.optionsGrid}>
                                 {[
                                     { id: 'pdf', label: 'PDF Document', icon: 'document-outline' },
-                                    { id: 'word', label: 'Word (.docx)', icon: 'document-text' }
+                                    { id: 'word', label: 'Word (.docx)', icon: 'document-text' },
+                                    { id: 'excel', label: 'Excel (.xlsx)', icon: 'grid-outline' }
                                 ].map((format) => (
                                     <TouchableOpacity 
                                         key={format.id} 
@@ -436,7 +438,7 @@ const createStyles = (colors: any, gradients: any, isDark: boolean) => StyleShee
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.md
     },
     modalTitle: { ...Typography.h3, color: colors.textPrimary },
-    modalSectionTitle: { ...Typography.subtitle2, color: colors.textSecondary, marginBottom: 8, marginTop: 12 },
+    modalSectionTitle: { ...Typography.body1, color: colors.textSecondary, marginBottom: 8, marginTop: 12 },
     optionsGrid: {
         flexDirection: 'row', gap: 12, marginBottom: Spacing.sm
     },
@@ -453,5 +455,5 @@ const createStyles = (colors: any, gradients: any, isDark: boolean) => StyleShee
         backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
         paddingVertical: 14, borderRadius: Radius.md, marginTop: Spacing.xl, gap: 8
     },
-    downloadBtnText: { ...Typography.subtitle1, color: colors.white, fontWeight: '700' }
+    downloadBtnText: { ...Typography.button, color: colors.white, fontWeight: '700' }
 });

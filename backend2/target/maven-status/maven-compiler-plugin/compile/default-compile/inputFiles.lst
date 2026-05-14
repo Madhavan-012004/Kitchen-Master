@@ -1,4 +1,5 @@
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\controller\AuthController.java
+C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\repository\ProjectTaskRepository.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\service\QueueService.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\model\entity\Attendance.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\service\CustomerService.java
@@ -8,9 +9,11 @@ C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\security\JwtUtil.jav
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\model\entity\Customer.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\service\QRService.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\controller\QueueManagementController.java
+C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\controller\ProductionController.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\config\CurrentUserResolver.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\controller\PublicQueueController.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\service\PrintService.java
+C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\model\entity\ProjectTask.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\repository\StockMovementRepository.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\service\InventoryService.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\model\entity\ItemIngredient.java
@@ -20,7 +23,10 @@ C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\service\AuthService.
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\repository\CustomerRepository.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\service\ReportService.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\controller\AnalyticsController.java
+C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\controller\ProjectTaskController.java
+C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\repository\ProductionBatchRepository.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\config\WebConfig.java
+C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\controller\CustomerController.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\repository\OrderItemRepository.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\controller\AttendanceController.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\repository\QueueEntryRepository.java
@@ -28,6 +34,7 @@ C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\controller\OrderCont
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\model\entity\Transaction.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\util\LicenseUtils.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\controller\AiController.java
+C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\service\LicenseService.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\service\OrderService.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\service\FileStorageService.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\config\ProBloomAdminSeeder.java
@@ -45,10 +52,12 @@ C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\service\StakeholderS
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\model\entity\StakeholderMapping.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\repository\OrdersRepository.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\ProBloomApplication.java
+C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\util\HardwareUtil.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\controller\PrinterController.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\model\entity\QueueEntry.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\service\MenuService.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\config\SocketIOConfig.java
+C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\service\EmailService.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\repository\TransactionRepository.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\repository\StakeholderMappingRepository.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\model\entity\ExtraCharge.java
@@ -64,12 +73,15 @@ C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\exception\ResourceNo
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\controller\StakeholderController.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\exception\GlobalExceptionHandler.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\controller\QRController.java
+C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\model\entity\ProductionBatch.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\service\MasterService.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\model\entity\InventoryItem.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\service\AiService.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\model\entity\User.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\config\SchemaCleanupConfig.java
+C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\controller\LicenseController.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\security\JwtAuthFilter.java
+C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\service\ProductionService.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\service\AttendanceService.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\model\entity\Test.java
 C:\FILES\KITCHEN MASTER\backend2\src\main\java\com\probloom\controller\StatusController.java

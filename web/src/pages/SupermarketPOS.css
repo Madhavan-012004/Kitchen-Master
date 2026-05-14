@@ -3,6 +3,149 @@
    Mirrors the reference image layout exactly
    ════════════════════════════════════════════════════ */
 
+/* ── MULTI-ORDER TAB BAR ───────────────────────────── */
+.sm-pos-tab-wrapper {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    background: #0f172a;
+}
+
+.sm-pos-tab-bar {
+    display: flex;
+    align-items: flex-end;
+    background: #0b0f19;
+    padding: 0 10px;
+    gap: 2px;
+    border-bottom: 1px solid #1e293b;
+    overflow-x: auto;
+    scrollbar-width: none;
+    height: 44px;
+    flex-shrink: 0;
+}
+.sm-pos-tab-bar::-webkit-scrollbar { display: none; }
+
+.sm-pos-tab {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 16px;
+    height: 36px;
+    background: #1a1f2e;
+    border-radius: 8px 8px 0 0;
+    cursor: pointer;
+    color: #64748b;
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+    min-width: 150px;
+    max-width: 200px;
+    border: 1px solid transparent;
+    border-bottom: none;
+    position: relative;
+    margin-bottom: 0;
+}
+
+.sm-pos-tab:hover {
+    background: #242b3d;
+    color: #94a3b8;
+}
+
+.sm-pos-tab.active {
+    background: #1a1a2e; /* Matches main UI bg */
+    color: #c6f53d; /* Neon Lime */
+    font-weight: 700;
+    border: 1px solid #1e293b;
+    border-bottom: 1px solid #1a1a2e;
+    z-index: 2;
+}
+
+.sm-pos-tab.active::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: #c6f53d;
+    border-radius: 8px 8px 0 0;
+    box-shadow: 0 1px 10px rgba(198, 245, 61, 0.4);
+}
+
+.sm-pos-tab-title {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 12px;
+}
+
+.sm-pos-tab-close {
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    font-size: 10px;
+    color: #475569;
+    transition: all 0.2s;
+    background: transparent;
+    border: none;
+    opacity: 0.6;
+}
+
+.sm-pos-tab:hover .sm-pos-tab-close {
+    opacity: 1;
+}
+
+.sm-pos-tab-close:hover {
+    background: #ef4444;
+    color: white !important;
+}
+
+.sm-pos-tab-add {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: #64748b;
+    cursor: pointer;
+    margin-bottom: 6px;
+    margin-left: 4px;
+    transition: all 0.2s;
+}
+
+.sm-pos-tab-add:hover {
+    background: #1e293b;
+    color: #c6f53d;
+}
+
+.sm-pos-tab-content-area {
+    flex: 1;
+    position: relative;
+    background: #1a1a2e;
+}
+
+.sm-pos-tab-content {
+    position: absolute;
+    inset: 0;
+    display: none;
+}
+
+.sm-pos-tab-content.active-tab {
+    display: flex;
+    flex-direction: column;
+}
+
+
+
 .sm-pos-root {
     display: flex;
     flex-direction: column;
@@ -289,6 +432,9 @@
 .col-name    { width: 170px; text-align: left !important; }
 .col-weight  { width: 90px; text-align: center; }
 .col-qty     { width: 60px; text-align: center; font-weight: 700; color: #4ade80 !important; }
+.col-batch   { width: 85px; text-align: center; }
+.col-date    { width: 75px; text-align: center; }
+.col-hsn     { width: 75px; text-align: center; }
 .col-mrp     { width: 75px; text-align: right; }
 .col-basic   { width: 75px; text-align: right; }
 .col-rate    { width: 75px; text-align: right; }
@@ -406,6 +552,9 @@
 .sm-main-table td.col-dis input,
 .sm-main-table td.col-disrs input,
 .sm-main-table td.col-tax input { text-align: right; }
+.sm-main-table td.col-batch input,
+.sm-main-table td.col-date input,
+.sm-main-table td.col-hsn input { text-align: center; }
 
 
 .sm-sno-del-btn {
@@ -753,7 +902,11 @@
 }
 .sm-modal-content {
     background: var(--bg-card);
-    width: 450px;
+    width: 600px;
+    max-width: 95vw;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
     border-radius: 12px;
     box-shadow: var(--shadow);
     overflow: hidden;
@@ -765,12 +918,13 @@
     to { opacity: 1; transform: scale(1); }
 }
 .sm-modal-header {
-    background: #1d68c1;
-    color: #fff;
-    padding: 12px 20px;
+    background: #f8fafc;
+    color: #0f172a;
+    padding: 16px 20px;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    border-bottom: 1px solid #e2e8f0;
 }
 .sm-modal-header h2 {
     margin: 0;
@@ -778,12 +932,15 @@
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.05em;
+    color: #0f172a;
 }
 .sm-modal-header button {
-    background: none; border: none; color: #fff; font-size: 20px; cursor: pointer;
+    background: none; border: none; color: #64748b; font-size: 20px; cursor: pointer;
 }
 .sm-tender-body {
     padding: 20px;
+    overflow-y: auto;
+    flex: 1;
 }
 .tender-row {
     display: flex;

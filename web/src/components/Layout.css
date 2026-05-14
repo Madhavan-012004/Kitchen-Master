@@ -422,10 +422,11 @@
 
 .main-content {
     flex: 1;
-    overflow: hidden;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
-    transition: padding-left 0.3s ease;
+    margin-left: 60px; /* Space for the mini sidebar */
+    transition: all 0.3s ease;
 }
 
 /* On Desktop, if we want sidebar to push content (standard), we can do: */
@@ -648,14 +649,6 @@
 }
 
 /* ── MAIN ─────────────────────────────────────────────────── */
-.main-content {
-    flex: 1;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    margin-left: 60px; /* Space for the mini sidebar */
-    transition: margin-left 0.3s ease;
-}
 
 /* ── MINI SIDE BAR ────────────────────────────────────────── */
 .mini-side-bar {
@@ -776,7 +769,7 @@
 }
 
 .lang-segment.active {
-    color: #fff;
+    color: var(--accent-text);
 }
 
 .lang-slider {
@@ -807,7 +800,7 @@
 }
 
 [data-theme='light'] .lang-segment.active {
-    color: #fff;
+    color: var(--accent-text);
 }
 
 [data-theme='dark'] .premium-lang-switcher {

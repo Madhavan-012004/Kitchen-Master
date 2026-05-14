@@ -60,6 +60,24 @@ public class OrderItem {
     @Column(name = "added_by_name")
     private String addedByName;
 
+    @Column(name = "batch_no")
+    private String batchNo;
+
+    @Column(name = "mfg_date")
+    private String mfgDate;
+
+    @Column(name = "exp_date")
+    private String expDate;
+
+    @Column(name = "hsn_code")
+    private String hsnCode;
+
+    @Column
+    private Double mrp;
+
+    @Column(name = "dis_pct")
+    private Double disPct = 0.0;
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public Orders getOrder() { return order; }
@@ -97,6 +115,19 @@ public class OrderItem {
     public String getAddedByName() { return addedByName; }
     public void setAddedByName(String addedByName) { this.addedByName = addedByName; }
 
+    public String getBatchNo() { return batchNo; }
+    public void setBatchNo(String batchNo) { this.batchNo = batchNo; }
+    public String getMfgDate() { return mfgDate; }
+    public void setMfgDate(String mfgDate) { this.mfgDate = mfgDate; }
+    public String getExpDate() { return expDate; }
+    public void setExpDate(String expDate) { this.expDate = expDate; }
+    public String getHsnCode() { return hsnCode; }
+    public void setHsnCode(String hsnCode) { this.hsnCode = hsnCode; }
+    public Double getMrp() { return mrp; }
+    public void setMrp(Double mrp) { this.mrp = mrp; }
+    public Double getDisPct() { return disPct; }
+    public void setDisPct(Double disPct) { this.disPct = disPct; }
+
     public enum ItemStatus {
         PENDING, PREPARING, READY, SERVED, CANCELLED
     }
@@ -118,6 +149,12 @@ public class OrderItem {
         public OrderItemBuilder completedQuantity(Integer cq) { item.setCompletedQuantity(cq); return this; }
         public OrderItemBuilder addedBy(User u) { item.setAddedBy(u); return this; }
         public OrderItemBuilder addedByName(String n) { item.setAddedByName(n); return this; }
+        public OrderItemBuilder batchNo(String b) { item.setBatchNo(b); return this; }
+        public OrderItemBuilder mfgDate(String d) { item.setMfgDate(d); return this; }
+        public OrderItemBuilder expDate(String d) { item.setExpDate(d); return this; }
+        public OrderItemBuilder hsnCode(String h) { item.setHsnCode(h); return this; }
+        public OrderItemBuilder mrp(Double m) { item.setMrp(m); return this; }
+        public OrderItemBuilder disPct(Double d) { item.setDisPct(d); return this; }
         public OrderItem build() { return item; }
     }
 }

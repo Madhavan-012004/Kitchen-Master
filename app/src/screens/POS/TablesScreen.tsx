@@ -30,6 +30,7 @@ export default function TablesScreen({ navigation }: any) {
     const [selectedTableForMerge, setSelectedTableForMerge] = useState('');
     const [combineTargetTable, setCombineTargetTable] = useState('');
     const [isCombining, setIsCombining] = useState(false);
+    const [selectedMyTable, setSelectedMyTable] = useState<string | null>(null);
 
     const fetchActiveOrders = async () => {
         try {
@@ -337,6 +338,42 @@ export default function TablesScreen({ navigation }: any) {
         return baseTables;
     };
 
+    // Returns { tableName, badge } array for My Tables view
+    const getMyTablesList = () => {
+        const rawAssigned = user?.assignedTables || [];
+        const assignedNames = rawAssigned.map((t: string) => t.startsWith('Table ') ? t : `Table ${t}`);
+        const allMergedTables = activeOrders.reduce((acc: string[], o: any) => {
+            if (o.mergedTables) return [...acc, ...o.mergedTables.split(',').map((t: string) => t.trim())];
+            return acc;
+        }, []);
+        const assignedFiltered = assignedNames.filter((t: string) => !allMergedTables.includes(t));
+        const tempTables = activeOrders
+            .filter((o: any) => (o.createdBy === user?._id || o.waiterName === user?.name) && !assignedNames.includes(o.tableNumber) && !allMergedTables.includes(o.tableNumber))
+            .map((o: any) => ({ tableName: o.tableNumber, badge: 'temp' as const }));
+        const all = [
+            ...assignedFiltered.map((t: string) => ({ tableName: t, badge: 'assigned' as const })),
+            ...tempTables,
+        ];
+        
+        // Remove duplicates to prevent React key warnings
+        const uniqueAll = Array.from(new Map(all.map(item => [item.tableName, item])).values());
+        
+        if (searchQuery.trim()) return uniqueAll.filter(t => t.tableName.toLowerCase().includes(searchQuery.toLowerCase()));
+        return uniqueAll;
+    };
+
+    // Auto-select first occupied table when switching to My Tables
+    React.useEffect(() => {
+        if (filterMode !== 'my') return;
+        const myTs = getMyTablesList();
+        if (myTs.length === 0) { setSelectedMyTable(null); return; }
+        setSelectedMyTable(prev => {
+            if (prev && myTs.some(t => t.tableName === prev)) return prev;
+            const firstOcc = myTs.find(t => activeOrders.some((o: any) => o.tableNumber === t.tableName));
+            return firstOcc?.tableName || myTs[0]?.tableName || null;
+        });
+    }, [filterMode, activeOrders]);
+
     return (
         <LinearGradient colors={gradients.background} style={styles.container}>
             <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
@@ -382,34 +419,199 @@ export default function TablesScreen({ navigation }: any) {
                             <Text style={[styles.tabText, filterMode === 'my' && styles.tabTextActive]}>My Tables</Text>
                         </TouchableOpacity>
                     </View>
-                {isLoading && activeOrders.length === 0 ? (
-                    <View style={styles.loadingContainer}>
-                        <ActivityIndicator size="large" color={colors.primary} />
-                    </View>
-                ) : (
-                    <FlatList
-                        data={getFilteredTables()}
-                        keyExtractor={(item) => item}
-                        renderItem={renderTable}
-                        contentContainerStyle={styles.listContentList}
-                        showsVerticalScrollIndicator={false}
-                        refreshing={isRefreshing}
-                        onRefresh={() => {
-                            setIsRefreshing(true);
-                            fetchActiveOrders();
-                        }}
-                        ListFooterComponent={
-                            (user?.role === 'owner' || user?.role === 'manager') ? (
-                                <TouchableOpacity
-                                    style={styles.historyBtn}
-                                    onPress={() => navigation.navigate('OrderHistory')}
-                                >
-                                    <Ionicons name="time-outline" size={20} color={colors.textMuted} />
-                                    <Text style={styles.historyBtnText}>View Order History</Text>
-                                </TouchableOpacity>
-                            ) : null
-                        }
-                    />
+                {filterMode === 'my' ? (() => {
+                    const myTables = getMyTablesList();
+                    const selOrder = selectedMyTable ? activeOrders.find((o: any) => o.tableNumber === selectedMyTable) : null;
+                    const isOcc = !!selOrder;
+                    const allItems: any[] = selOrder?.items || [];
+                    const readyCount = allItems.filter(i => i.status?.toUpperCase() === 'READY').length;
+                    const servedCount = allItems.filter(i => i.status?.toUpperCase() === 'SERVED').length;
+                    const allDone = allItems.length > 0 && (readyCount + servedCount) === allItems.length;
+                    const progressPct = allItems.length === 0 ? 0 : ((readyCount + servedCount) / allItems.length) * 100;
+                    const orderTotal = allItems.reduce((s, i) => s + (i.price * i.quantity), 0);
+                    const getTableMeta = (tNum: string) => {
+                        if (!user?.tableMetadata) return null;
+                        try {
+                            const data = typeof user.tableMetadata === 'string' ? JSON.parse(user.tableMetadata) : user.tableMetadata;
+                            return data[tNum.replace('Table ', '')] || null;
+                        } catch { return null; }
+                    };
+                    const meta = selectedMyTable ? getTableMeta(selectedMyTable) : null;
+
+                    return (
+                        <View style={styles.myTablesRoot}>
+                            {/* ── CHIP ROW ── */}
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScrollView} contentContainerStyle={styles.chipScrollContent}>
+                                {myTables.length === 0 ? (
+                                    <View style={styles.noTablesHintWrap}>
+                                        <Ionicons name="alert-circle-outline" size={16} color={colors.textMuted} />
+                                        <Text style={styles.noTablesHint}>No tables assigned. Contact manager.</Text>
+                                    </View>
+                                ) : myTables.map(({ tableName, badge }) => {
+                                    const isActive = selectedMyTable === tableName;
+                                    const chipOcc = activeOrders.some((o: any) => o.tableNumber === tableName);
+                                    return (
+                                        <TouchableOpacity
+                                            key={tableName}
+                                            style={[styles.tableChip, isActive && styles.tableChipActive, !isActive && chipOcc && styles.tableChipOccupied]}
+                                            onPress={() => setSelectedMyTable(tableName)}
+                                            activeOpacity={0.75}
+                                        >
+                                            {chipOcc && <View style={[styles.chipDot, isActive && { backgroundColor: '#000' }]} />}
+                                            <Text style={[styles.tableChipText, isActive && styles.tableChipTextActive]} numberOfLines={1}>
+                                                {tableName}
+                                            </Text>
+                                            {badge === 'temp' && (
+                                                <View style={styles.chipTempTag}><Text style={styles.chipTempText}>TEMP</Text></View>
+                                            )}
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </ScrollView>
+
+                            {/* ── DETAIL CARD ── */}
+                            {!selectedMyTable || myTables.length === 0 ? (
+                                <View style={styles.detailPlaceholder}>
+                                    <Ionicons name="restaurant-outline" size={52} color={colors.textMuted} style={{ opacity: 0.25 }} />
+                                    <Text style={styles.placeholderText}>Select a table above</Text>
+                                </View>
+                            ) : (
+                                <ScrollView style={styles.detailCard} contentContainerStyle={styles.detailCardContent} showsVerticalScrollIndicator={false}>
+                                    {/* Header row */}
+                                    <View style={styles.detailHeader}>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={styles.detailTableName}>{selectedMyTable}</Text>
+                                            {meta && <Text style={styles.detailMeta}>{meta.seats ? `${meta.seats} Seats` : '?'}{meta.location ? ` • ${meta.location}` : ''}</Text>}
+                                        </View>
+                                        {isOcc ? (
+                                            <View style={styles.activeStatusBadge}>
+                                                <View style={styles.activeDot} />
+                                                <Text style={styles.activeStatusText}>Active</Text>
+                                            </View>
+                                        ) : (
+                                            <View style={styles.availableStatusBadge}>
+                                                <Text style={styles.availableStatusText}>Available</Text>
+                                            </View>
+                                        )}
+                                    </View>
+
+                                    {/* Waiter + item count */}
+                                    {selOrder?.waiterName && (
+                                        <View style={styles.detailWaiterRow}>
+                                            <Ionicons name="person" size={13} color={colors.primary} />
+                                            <Text style={styles.detailWaiterText}>{selOrder.waiterName}</Text>
+                                            <Text style={styles.detailItemCount}>• {allItems.length} items</Text>
+                                        </View>
+                                    )}
+
+                                    {/* Progress bar */}
+                                    {isOcc && allItems.length > 0 && (
+                                        <View style={styles.detailProgressSection}>
+                                            <View style={styles.detailProgressLabelRow}>
+                                                <Text style={styles.detailProgressLabel}>Kitchen Status</Text>
+                                                <Text style={[styles.detailProgressLabel, { color: allDone ? colors.success : colors.warning || '#FFB300' }]}>
+                                                    {readyCount + servedCount}/{allItems.length} Done
+                                                </Text>
+                                            </View>
+                                            <View style={styles.detailProgressBg}>
+                                                <LinearGradient
+                                                    colors={allDone ? ['#00C853', '#009624'] : ['#FFD54F', '#FFB300']}
+                                                    style={[styles.detailProgressFill, { width: `${progressPct}%` as any }]}
+                                                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                                                />
+                                            </View>
+                                        </View>
+                                    )}
+
+                                    {/* Items list */}
+                                    {isOcc ? (
+                                        <View style={styles.itemsList}>
+                                            {allItems.map((item: any, idx: number) => {
+                                                const st = item.status?.toUpperCase() || 'PENDING';
+                                                const stColor = (st === 'READY' || st === 'SERVED') ? colors.success : colors.textMuted;
+                                                const stIcon: any = st === 'READY' ? 'checkmark-circle' : st === 'SERVED' ? 'checkmark-done-circle' : 'time-outline';
+                                                return (
+                                                    <View key={idx} style={styles.detailItemRow}>
+                                                        <Ionicons name={stIcon} size={15} color={stColor} />
+                                                        <Text style={styles.detailItemName} numberOfLines={1}>{item.name}</Text>
+                                                        <Text style={styles.detailItemQty}>×{item.quantity}</Text>
+                                                        <Text style={styles.detailItemPrice}>₹{(item.price * item.quantity).toFixed(0)}</Text>
+                                                    </View>
+                                                );
+                                            })}
+                                            <View style={styles.detailTotalRow}>
+                                                <Text style={styles.detailTotalLabel}>Order Total</Text>
+                                                <Text style={styles.detailTotalValue}>₹{orderTotal.toFixed(2)}</Text>
+                                            </View>
+                                        </View>
+                                    ) : (
+                                        <View style={styles.emptyTableInfo}>
+                                            <Ionicons name="cafe-outline" size={36} color={colors.textMuted} style={{ opacity: 0.3, marginBottom: 8 }} />
+                                            <Text style={styles.emptyTableText}>No active order on this table.</Text>
+                                            <Text style={styles.emptyTableSub}>Tap below to start a new order.</Text>
+                                        </View>
+                                    )}
+
+                                    {/* Edit Order */}
+                                    {isOcc && (
+                                        <TouchableOpacity
+                                            style={styles.editOrderBtn}
+                                            onPress={() => { if (selOrder) loadOrder(selOrder); navigation.navigate('Order'); }}
+                                        >
+                                            <Ionicons name="create-outline" size={16} color={colors.primary} />
+                                            <Text style={styles.editOrderText}>Edit / Add to Order</Text>
+                                        </TouchableOpacity>
+                                    )}
+                                </ScrollView>
+                            )}
+
+                            {/* ── BOTTOM ACTION BUTTON ── */}
+                            <View style={styles.bottomActionContainer}>
+                                {selectedMyTable && isOcc ? (
+                                    <TouchableOpacity
+                                        style={[styles.bottomActionBtn, { backgroundColor: allDone ? colors.success : colors.error }]}
+                                        onPress={() => { if (selOrder) loadOrder(selOrder); navigation.navigate('Checkout', { tableNumber: selectedMyTable, showPayment: allDone }); }}
+                                    >
+                                        <Ionicons name={allDone ? 'wallet-outline' : 'close-circle-outline'} size={20} color="#fff" />
+                                        <Text style={styles.bottomActionText}>{allDone ? 'SETTLE BILL' : 'CLOSE ORDER'}</Text>
+                                    </TouchableOpacity>
+                                ) : (
+                                    <TouchableOpacity
+                                        style={[styles.bottomActionBtn, { backgroundColor: colors.primary }]}
+                                        onPress={() => selectedMyTable && handleTablePress(selectedMyTable)}
+                                        disabled={!selectedMyTable}
+                                    >
+                                        <Ionicons name="add-circle-outline" size={20} color="#000" />
+                                        <Text style={[styles.bottomActionText, { color: '#000' }]}>START NEW ORDER</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        </View>
+                    );
+                })() : (
+                    isLoading && activeOrders.length === 0 ? (
+                        <View style={styles.loadingContainer}>
+                            <ActivityIndicator size="large" color={colors.primary} />
+                        </View>
+                    ) : (
+                        <FlatList
+                            data={getFilteredTables()}
+                            keyExtractor={(item) => item}
+                            renderItem={renderTable}
+                            contentContainerStyle={styles.listContentList}
+                            showsVerticalScrollIndicator={false}
+                            refreshing={isRefreshing}
+                            onRefresh={() => { setIsRefreshing(true); fetchActiveOrders(); }}
+                            ListFooterComponent={
+                                (user?.role === 'owner' || user?.role === 'manager') ? (
+                                    <TouchableOpacity style={styles.historyBtn} onPress={() => navigation.navigate('OrderHistory')}>
+                                        <Ionicons name="time-outline" size={20} color={colors.textMuted} />
+                                        <Text style={styles.historyBtnText}>View Order History</Text>
+                                    </TouchableOpacity>
+                                ) : null
+                            }
+                        />
+                    )
                 )}
 
             </SafeAreaView>
@@ -525,7 +727,7 @@ const createStyles = (colors: any, gradients: any) => StyleSheet.create({
     headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.md },
     headerTitle: { ...Typography.h2, color: colors.white, fontWeight: '800' },
     searchContainer: { 
-        flex: 1, flexDirection: 'row', alignItems: 'center', 
+        flexDirection: 'row', alignItems: 'center', marginTop: Spacing.md,
         backgroundColor: colors.isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', 
         borderRadius: Radius.round, paddingHorizontal: 12, height: 44, 
         borderWidth: 1, borderColor: colors.border 
@@ -540,7 +742,7 @@ const createStyles = (colors: any, gradients: any) => StyleSheet.create({
     tabBtn: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: Radius.round },
     tabBtnActive: { backgroundColor: colors.primary },
     tabText: { ...Typography.buttonSm, color: colors.textMuted },
-    tabTextActive: { color: colors.white, fontWeight: '700' },
+    tabTextActive: { color: '#000000', fontWeight: '700' },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
     // List Layout Cards
@@ -572,7 +774,7 @@ const createStyles = (colors: any, gradients: any) => StyleSheet.create({
     tableTotalTextList: { ...Typography.h4, color: colors.textPrimary, fontWeight: '700' },
     tableTimeTextList: { ...Typography.caption, color: colors.textMuted, marginTop: 2 },
     settleBtnMini: { backgroundColor: colors.primary, paddingHorizontal: 12, paddingVertical: 4, borderRadius: Radius.round },
-    settleBtnMiniText: { ...Typography.buttonSm, color: colors.white, fontSize: 12 },
+    settleBtnMiniText: { ...Typography.buttonSm, color: '#000000', fontSize: 12 },
 
     // Progress Bar
     progressContainer: { marginTop: Spacing.xs },
@@ -587,7 +789,7 @@ const createStyles = (colors: any, gradients: any) => StyleSheet.create({
         borderTopWidth: 1, borderTopColor: colors.border 
     },
     actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: Radius.md },
-    actionBtnText: { ...Typography.buttonSm, color: colors.white, fontWeight: '600' },
+    actionBtnText: { ...Typography.buttonSm, color: '#000000', fontWeight: '600' },
 
     // History Button
     historyBtn: {
@@ -631,7 +833,7 @@ const createStyles = (colors: any, gradients: any) => StyleSheet.create({
     occupiedDot: { position: 'absolute', top: 6, right: 6, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.success },
     modalActionBtn: { borderRadius: Radius.lg, overflow: 'hidden', marginTop: 20 },
     modalActionGradient: { paddingVertical: 16, alignItems: 'center', justifyContent: 'center' },
-    modalActionText: { ...Typography.h5, color: colors.white, fontWeight: '700' },
+    modalActionText: { ...Typography.h5, color: '#000000', fontWeight: '700' },
     currentMergesContainer: { marginBottom: Spacing.md },
     mergeSectionTitle: { ...Typography.caption, fontWeight: '800', color: colors.textSecondary, letterSpacing: 1, marginBottom: 10, textTransform: 'uppercase' },
     mergePillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 15 },
@@ -639,4 +841,66 @@ const createStyles = (colors: any, gradients: any) => StyleSheet.create({
     mergePillText: { ...Typography.buttonSm, color: colors.primary, fontWeight: '700' },
     unmergePillBtn: { padding: 2 },
     mergeDivider: { height: 1, backgroundColor: colors.border, marginVertical: 10, opacity: 0.5 },
+
+    // ── MY TABLES VIEW ──────────────────────────────────────────────────────
+    myTablesRoot: { flex: 1, flexDirection: 'column' },
+
+    // Chip scroll row
+    chipScrollView: { flexGrow: 0, flexShrink: 0, borderBottomWidth: 1, borderBottomColor: colors.border },
+    chipScrollContent: { paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, gap: 10, flexDirection: 'row', alignItems: 'center' },
+    noTablesHintWrap: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8 },
+    noTablesHint: { ...Typography.body2, color: colors.textMuted, fontStyle: 'italic' },
+    tableChip: {
+        flexDirection: 'row', alignItems: 'center', gap: 6,
+        paddingHorizontal: 14, paddingVertical: 10,
+        borderRadius: Radius.round, borderWidth: 1.5,
+        borderColor: colors.border, backgroundColor: colors.surface,
+    },
+    tableChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+    tableChipOccupied: { borderColor: colors.success + '80', backgroundColor: colors.success + '15' },
+    chipDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.success },
+    tableChipText: { ...Typography.buttonSm, color: colors.textSecondary, fontWeight: '700' },
+    tableChipTextActive: { color: '#000000' },
+    chipTempTag: { backgroundColor: '#FF980020', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4 },
+    chipTempText: { fontSize: 9, fontWeight: '800', color: '#FF9800', letterSpacing: 0.5 },
+
+    // Detail card
+    detailPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingBottom: 80 },
+    placeholderText: { ...Typography.body1, color: colors.textMuted, opacity: 0.5 },
+    detailCard: { flex: 1, marginHorizontal: Spacing.lg, marginTop: Spacing.md },
+    detailCardContent: { paddingBottom: Spacing.xl },
+    detailHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: Spacing.sm },
+    detailTableName: { ...Typography.h2, color: colors.textPrimary, fontWeight: '800' },
+    detailMeta: { ...Typography.caption, color: colors.textSecondary, marginTop: 3 },
+    activeStatusBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colors.success + '20', paddingHorizontal: 10, paddingVertical: 5, borderRadius: Radius.round },
+    activeDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.success },
+    activeStatusText: { ...Typography.caption, color: colors.success, fontWeight: '700' },
+    availableStatusBadge: { backgroundColor: colors.glass, paddingHorizontal: 10, paddingVertical: 5, borderRadius: Radius.round },
+    availableStatusText: { ...Typography.caption, color: colors.textMuted, fontWeight: '600' },
+    detailWaiterRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: Spacing.md },
+    detailWaiterText: { ...Typography.body2, color: colors.primary, fontWeight: '700' },
+    detailItemCount: { ...Typography.body2, color: colors.textMuted },
+    detailProgressSection: { marginBottom: Spacing.md },
+    detailProgressLabelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+    detailProgressLabel: { ...Typography.caption, color: colors.textSecondary },
+    detailProgressBg: { height: 6, backgroundColor: colors.glass, borderRadius: Radius.round, overflow: 'hidden' },
+    detailProgressFill: { height: '100%', borderRadius: Radius.round },
+    itemsList: { borderRadius: Radius.lg, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', marginBottom: Spacing.md },
+    detailItemRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: Spacing.md, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
+    detailItemName: { flex: 1, ...Typography.body2, color: colors.textPrimary, fontWeight: '600' },
+    detailItemQty: { ...Typography.body2, color: colors.textMuted, fontWeight: '700', minWidth: 28, textAlign: 'center' },
+    detailItemPrice: { ...Typography.body2, color: colors.textSecondary, fontWeight: '700', minWidth: 50, textAlign: 'right' },
+    detailTotalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Spacing.md, paddingVertical: 12, backgroundColor: colors.glass },
+    detailTotalLabel: { ...Typography.body2, color: colors.textSecondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+    detailTotalValue: { ...Typography.h4, color: colors.primary, fontWeight: '800' },
+    emptyTableInfo: { alignItems: 'center', paddingVertical: Spacing.xxl || 40, gap: 6 },
+    emptyTableText: { ...Typography.body1, color: colors.textSecondary, fontWeight: '600' },
+    emptyTableSub: { ...Typography.body2, color: colors.textMuted },
+    editOrderBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: Radius.lg, borderWidth: 1.5, borderColor: colors.primary + '60', backgroundColor: colors.primary + '10', marginBottom: Spacing.sm },
+    editOrderText: { ...Typography.button, color: colors.primary, fontWeight: '700' },
+
+    // Bottom action button
+    bottomActionContainer: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, paddingBottom: 110, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface + 'FA' },
+    bottomActionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 16, borderRadius: Radius.lg },
+    bottomActionText: { ...Typography.h5, color: '#fff', fontWeight: '800', letterSpacing: 0.5 },
 });

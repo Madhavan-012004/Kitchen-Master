@@ -45,3 +45,22 @@ app/npm_install_log.txt
 app/version_check.txt
 zexe/
 *.prn
+
+# License Files
+machine.req
+license.lic
+*.lic
+
+# Database and Data Files
+*.db
+*.sqlite
+*.sqlite3
+*.csv
+*.xlsx
+
+# Build Artifacts
+web/dist-electron/
+web/dist/
+app/dist/
+app/build/
+backend2/target/

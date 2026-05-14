@@ -3,6 +3,8 @@ import api from '../api/client.js';
 import StakeholderRestaurantTabs from '../components/StakeholderRestaurantTabs';
 import './Inventory.css';
 import BarcodeStickerModal from '../components/BarcodeStickerModal';
+import WeightLabelModal from '../components/WeightLabelModal';
+import InvoiceOcrModal from '../components/InvoiceOcrModal';
 
 const UNITS = ['KG', 'G', 'LITRE', 'ML', 'PIECE', 'DOZEN', 'PACK', 'BOTTLE'];
 
@@ -20,12 +22,14 @@ export default function Inventory() {
     // Modal states
     const [showItemModal, setShowItemModal] = useState(false);
     const [showAdjustModal, setShowAdjustModal] = useState(false);
+    const [showOcrModal, setShowOcrModal] = useState(false);
     const [selectedItem, setSelectedItem] = useState(null);
     const [isEditing, setIsEditing] = useState(false);
     
     // Sticker Modal states
     const [showStickerModal, setShowStickerModal] = useState(false);
     const [stickerItems, setStickerItems] = useState([]);
+    const [showWeightLabelModal, setShowWeightLabelModal] = useState(false);
 
     // Operation modes
     const [scannerMode, setScannerMode] = useState(false);
@@ -157,7 +161,7 @@ export default function Inventory() {
                             const match = line.match(/[-+]?\d*\.?\d+/);
                             if (match) {
                                 const val = parseFloat(match[0]);
-                                if (!isNaN(val)) setScaleData(val);
+                                if (!isNaN(val)) setScaleData(Math.abs(val));
                             }
                         }
                     }
@@ -255,14 +259,19 @@ export default function Inventory() {
             // Map 'remove' to 'DEDUCT' for backend enum
             const payload = {
                 ...adjustment,
-                type: adjustment.type === 'remove' ? 'DEDUCT' : 'ADD'
+                type: adjustment.type === 'remove' ? 'DEDUCT' : 'ADD',
+                // Ensure numeric fields are numbers
+                freeQuantity: parseFloat(adjustment.freeQuantity) || 0,
+                gstAmount: parseFloat(adjustment.gstAmount) || 0,
+                discountAmount: parseFloat(adjustment.discountAmount) || 0,
+                invoiceNumber: adjustment.invoiceNumber || null,
             };
             await api.post(`/inventory/${itemId}/adjust`, payload);
             setShowAdjustModal(false);
-            alert('Inventory updated & expense recorded!');
+            toast.success('Inventory updated & expense recorded!');
             fetchData();
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to adjust stock');
+            toast.error(err.response?.data?.message || 'Failed to adjust stock');
         }
     };
 
@@ -280,63 +289,26 @@ export default function Inventory() {
     const handleCsvImport = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-            const text = event.target.result;
-            const rows = text.split('\n').map(row => row.split(','));
-            if (rows.length < 2) {
-                alert('CSV is empty or invalid.');
-                return;
-            }
-            const headers = rows[0].map(h => h?.trim().toLowerCase());
-            
-            setLoading(true);
-            try {
-                let imported = 0;
-                const importedItems = [];
-                for (let i = 1; i < rows.length; i++) {
-                    const cols = rows[i];
-                    if (cols.length < 2) continue; // skip empty
-                    
-                    const payload = { unit: 'PIECE', category: 'Grocery', lowStockThreshold: 10, currentStock: 0 };
-                    headers.forEach((h, idx) => {
-                        const val = cols[idx]?.trim();
-                        if (h.includes('name')) payload.name = val;
-                        if (h.includes('category') && val) payload.category = val;
-                        if ((h.includes('price') || h.includes('mrp')) && val) payload.price = parseFloat(val) || 0;
-                        if (h.includes('barcode') && val) payload.barcode = val;
-                        if ((h.includes('stock') || h.includes('qty')) && val) payload.currentStock = parseFloat(val) || 0;
-                    });
-                    
-                    if (payload.name) {
-                        try {
-                            const res = await api.post('/inventory', payload);
-                            imported++;
-                            // Add the saved item (with its ID) to the print list
-                            if (res.data?.data) importedItems.push(res.data.data);
-                            else importedItems.push({ ...payload, _id: Date.now() + i });
-                        } catch (err) {
-                            console.error('Row failed:', payload, err);
-                        }
-                    }
-                }
-                
-                if (imported > 0) {
-                    if (window.confirm(`Successfully imported ${imported} items! Would you like to print barcode labels for them?`)) {
-                        setStickerItems(importedItems);
-                        setShowStickerModal(true);
-                    }
-                }
-                fetchData();
-            } catch (err) {
-                alert('Error processing CSV');
-            } finally {
-                setLoading(false);
-            }
-        };
-        reader.readAsText(file);
         e.target.value = ''; // reset input
+
+        setLoading(true);
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            const res = await api.post('/inventory/import-csv', formData);
+            if (res.data.success) {
+                const count = res.data.data?.count || 0;
+                toast.success(`Imported ${count} items! Expenditure recorded automatically.`);
+                fetchData();
+            } else {
+                toast.error(res.data.message || 'Import failed.');
+            }
+        } catch (err) {
+            console.error('CSV Import Error:', err);
+            toast.error(err.response?.data?.message || 'Error importing CSV. Check the file format.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleClearAllItems = async () => {
@@ -362,106 +334,140 @@ export default function Inventory() {
 
     return (
         <div className="inventory-page">
-            <header className="inventory-header">
-                <div className="header-title-section">
-                    <div className="title-row">
-                        <h1>Inventory Management</h1>
-                        <div className={`scale-status-indicator ${isScaleConnected ? 'active' : ''}`}>
-                            <div className="dot"></div>
-                            {isScaleConnected ? `Scale: ${scaleData} ${selectedItem?.unit || 'KG'}` : 'Scale Offline'}
-                        </div>
-                        <div className="scanner-status-indicator">
-                            <span className="scanner-icon">🔍</span>
-                            Scanner Ready
+            {/* ── PAGE HEADER ─────────────────────────────────────────────── */}
+            <div className="inv-page-header">
+                {/* Row 1: Title + Status Badges */}
+                <div className="inv-header-top">
+                    <div className="inv-title-group">
+                        <div className="inv-title-icon">📦</div>
+                        <div>
+                            <h1 className="inv-title">Inventory Management</h1>
+                            <p className="inv-subtitle">{items.length} items · Manage stock levels, batches &amp; pricing</p>
                         </div>
                     </div>
+                    <div className="inv-header-badges">
+                        <div className={`inv-badge ${isScaleConnected ? 'badge-green' : 'badge-gray'}`}>
+                            <span className="badge-dot"></span>
+                            {isScaleConnected ? `Scale: ${scaleData} ${selectedItem?.unit || 'KG'}` : 'Scale Offline'}
+                        </div>
+                        <div className="inv-badge badge-blue">
+                            <span>🔍</span> Scanner Ready
+                        </div>
+                        <StakeholderRestaurantTabs />
+                    </div>
                 </div>
-                
-                <StakeholderRestaurantTabs />
 
-                <div className="inventory-controls-row">
-                    <div className="section-tabs">
+                {/* Row 2: Tab Switcher + Action Toolbar */}
+                <div className="inv-toolbar">
+                    {/* Tab Switcher */}
+                    <div className="inv-tab-group">
                         <button 
-                            className={`tab-btn ${activeTab === 'stock' ? 'active' : ''}`}
+                            className={`inv-tab ${activeTab === 'stock' ? 'active' : ''}`}
                             onClick={() => setActiveTab('stock')}
                         >
                             📦 Stock Levels
                         </button>
                         <button 
-                            className={`tab-btn ${activeTab === 'activity' ? 'active' : ''}`}
+                            className={`inv-tab ${activeTab === 'activity' ? 'active' : ''}`}
                             onClick={() => setActiveTab('activity')}
                         >
                             🕒 Activity Log
                         </button>
                     </div>
 
-                    <div className="header-actions">
-                        <button 
-                            className="danger-btn" 
-                            onClick={handleClearAllItems}
-                            style={{background:'#fee2e2', color:'#ef4444', border:'1px solid #fca5a5', padding:'8px 16px', borderRadius:'6px', cursor:'pointer', fontWeight:'bold', display:'flex', alignItems:'center', gap:'8px', marginRight:'10px'}}
-                            disabled={loading || items.length === 0}
-                        >
-                            <span style={{fontSize:'16px'}}>🗑️</span> WIPE DATABASE
-                        </button>
-                        
-                        <div className="scale-controls-group" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {/* Spacer */}
+                    <div style={{flex: 1}} />
+
+                    {/* Right-side Action Buttons */}
+                    <div className="inv-action-group">
+                        {/* Scale Connect */}
+                        <div className="inv-scale-group">
                             {!isScaleConnected && (
                                 <select 
-                                    className="baud-rate-select" 
+                                    className="inv-baud-select"
                                     value={baudRate} 
                                     onChange={(e) => setBaudRate(parseInt(e.target.value))}
-                                    style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }}
                                 >
-                                    <option value={2400}>2400 Baud</option>
-                                    <option value={4800}>4800 Baud</option>
-                                    <option value={9600}>9600 Baud</option>
-                                    <option value={19200}>19200 Baud</option>
-                                    <option value={115200}>115200 Baud</option>
+                                    <option value={2400}>2400</option>
+                                    <option value={4800}>4800</option>
+                                    <option value={9600}>9600</option>
+                                    <option value={19200}>19200</option>
+                                    <option value={115200}>115200</option>
                                 </select>
                             )}
                             <button 
-                                className={`connect-scale-btn ${isScaleConnected ? 'connected' : ''}`}
+                                className={`inv-action-btn btn-scale ${isScaleConnected ? 'connected' : ''}`}
                                 onClick={isScaleConnected ? disconnectScale : connectScale}
                             >
-                                {isScaleConnected ? '⚖️ Disconnect Scale' : '⚖️ Connect Scale'}
+                                ⚖️ {isScaleConnected ? 'Disconnect' : 'Scale'}
                             </button>
                         </div>
-                        
-                        <input 
-                            type="file" 
-                            accept=".csv" 
-                            id="csv-upload" 
-                            style={{display: 'none'}} 
-                            onChange={handleCsvImport} 
-                        />
+
+                        {/* Divider */}
+                        <div className="inv-btn-divider" />
+
+                        {/* Mode Toggles */}
                         <button 
-                            className="add-item-btn" 
-                            style={{ background: '#0284c7', marginRight: '10px' }}
-                            onClick={() => document.getElementById('csv-upload').click()}
+                            className={`inv-action-btn btn-toggle ${scannerMode ? 'active' : ''}`}
+                            onClick={() => { setScannerMode(!scannerMode); setBulkEditMode(false); }}
+                            title="Scan barcodes to instantly adjust stock"
                         >
-                            <span>📂</span> Import CSV
+                            {scannerMode ? '🔴 Stop Scan' : '🔍 Scan Mode'}
+                        </button>
+                        <button 
+                            className={`inv-action-btn btn-toggle ${bulkEditMode ? 'active' : ''}`}
+                            onClick={() => { setBulkEditMode(!bulkEditMode); setScannerMode(false); }}
+                            title="Edit many items at once"
+                        >
+                            {bulkEditMode ? '🔴 Stop Bulk' : '✏️ Bulk Edit'}
                         </button>
 
-                        <div className="hq-mode-toggles">
-                            <button 
-                                className={`mode-btn ${scannerMode ? 'active' : ''}`}
-                                onClick={() => { setScannerMode(!scannerMode); setBulkEditMode(false); }}
-                                title="Active scanning: Increment quantities instantly by point-of-sale scanner"
-                            >
-                                {scannerMode ? '🔴 STOP SCAN' : '🔍 SCAN MODE'}
-                            </button>
-                            <button 
-                                className={`mode-btn ${bulkEditMode ? 'active' : ''}`}
-                                onClick={() => { setBulkEditMode(!bulkEditMode); setScannerMode(false); }}
-                                title="Rapid bulk quantity and price editing"
-                            >
-                                {bulkEditMode ? '🔴 STOP BULK' : '✏️ BULK EDIT'}
-                            </button>
-                        </div>
+                        {/* Divider */}
+                        <div className="inv-btn-divider" />
+
+                        {/* Primary Actions */}
+                        <button 
+                            className="inv-action-btn btn-label"
+                            onClick={() => { setSelectedItem(null); setShowWeightLabelModal(true); }}
+                            title="Print a quick label"
+                        >
+                            🏷️ Label
+                        </button>
+
+                        <input type="file" accept=".csv" id="csv-upload" style={{display:'none'}} onChange={handleCsvImport} />
+                        <button 
+                            className="inv-action-btn btn-csv"
+                            onClick={() => document.getElementById('csv-upload').click()}
+                        >
+                            📂 CSV
+                        </button>
+
+                        <button 
+                            className="inv-action-btn btn-ai"
+                            onClick={() => setShowOcrModal(true)}
+                        >
+                            📸 Scan Invoice
+                        </button>
+
+                        <button 
+                            className="inv-action-btn btn-add"
+                            onClick={() => { setSelectedItem(null); setIsEditing(false); setShowItemModal(true); }}
+                        >
+                            ➕ Add Item
+                        </button>
+
+                        {/* Danger */}
+                        <button 
+                            className="inv-action-btn btn-wipe"
+                            onClick={handleClearAllItems}
+                            disabled={loading || items.length === 0}
+                            title="Wipe all inventory items"
+                        >
+                            🗑️
+                        </button>
                     </div>
                 </div>
-            </header>
+            </div>
 
             {toastMsg && <div className="inventory-toast-notify animate-fade-in">{toastMsg}</div>}
 
@@ -491,7 +497,7 @@ export default function Inventory() {
                         <StatsCard 
                             icon="💰" 
                             label="Inv. Value" 
-                            value={`₹${items.reduce((acc, i) => acc + (i.currentStock * (i.costPerUnit || 0)), 0).toLocaleString()}`} 
+                            value={`₹${items.reduce((acc, i) => acc + (i.currentStock * (i.costPerUnit || 0)), 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
                             color="rgba(0, 200, 83, 0.1)" 
                             textStyle={{color: '#00C853'}} 
                         />
@@ -538,6 +544,7 @@ export default function Inventory() {
                                     onDelete={() => handleDeleteItem(item._id || item.id)}
                                     onAdjust={() => { setSelectedItem(item); setShowAdjustModal(true); }}
                                     onPrint={() => { setStickerItems([item]); setShowStickerModal(true); }}
+                                    onWeighPrint={() => { setSelectedItem(item); setShowWeightLabelModal(true); }}
                                 />
                             ))}
                         </div>
@@ -643,15 +650,33 @@ export default function Inventory() {
                 onClose={() => setShowStickerModal(false)} 
                 items={stickerItems}
             />
+
+            <WeightLabelModal 
+                show={showWeightLabelModal}
+                onClose={() => setShowWeightLabelModal(false)}
+                item={selectedItem}
+                scaleValue={scaleData}
+                inventoryItems={items}
+            />
+
+            {showOcrModal && (
+                <InvoiceOcrModal 
+                    onClose={() => setShowOcrModal(false)}
+                    toast={toast}
+                    onComplete={() => {
+                        setShowOcrModal(false);
+                        fetchData();
+                    }}
+                />
+            )}
         </div>
     );
 }
 
-function InventoryCard({ item, onEdit, onDelete, onAdjust, onPrint }) {
-    const isLow = item.currentStock <= item.lowStockThreshold;
+function InventoryCard({ item, onEdit, onDelete, onAdjust, onPrint, onWeighPrint }) {
+    const isLow = item.currentStock <= item.lowStockThreshold && item.currentStock > 0;
     const isCritical = item.currentStock === 0;
     
-    // Percentage for progress bar (cap at 100)
     const max = item.lowStockThreshold * 4 || 10;
     const pct = Math.min(100, (item.currentStock / max) * 100);
     
@@ -659,54 +684,94 @@ function InventoryCard({ item, onEdit, onDelete, onAdjust, onPrint }) {
     if (isCritical) statusClass = 'critical';
     else if (isLow) statusClass = 'low';
 
+    const accentColor = isCritical ? '#ef4444' : isLow ? '#f59e0b' : '#22c55e';
+
     return (
-        <div className="inventory-card">
-            <div className="card-accent" style={{background: isCritical ? '#F44336' : isLow ? '#FFB300' : '#00C853'}}></div>
-            <div className="card-content">
-                <div className="card-top">
-                    <div className="item-main">
-                        <h2>{item.name}</h2>
-                        <span className="item-cat">{item.category}</span>
+        <div className={`inv-card ${statusClass}`}>
+            {/* Status Strip */}
+            <div className="inv-card-strip" style={{ background: accentColor }} />
+
+            <div className="inv-card-body">
+                {/* Top: Name + Stock Number */}
+                <div className="inv-card-top">
+                    <div className="inv-card-name-group">
+                        <h2 className="inv-card-name">{item.name}</h2>
+                        <div className="inv-card-meta-row">
+                            <span className="inv-cat-badge">{item.category || 'General'}</span>
+                            {item.packSize && <span className="inv-pack-badge">Pack: {item.packSize}</span>}
+                            {item.manufacturer && <span className="inv-mfr-badge">{item.manufacturer}</span>}
+                            {item.batchNo && <span className="inv-batch-badge">Batch: {item.batchNo}</span>}
+                        </div>
                     </div>
-                    <div className="stock-value-wrapper">
-                        <div className="stock-number" style={{color: statusClass === 'critical' ? '#F44336' : statusClass === 'low' ? '#FFB300' : '#E0E0E0'}}>
+                    <div className="inv-stock-display">
+                        <div className="inv-stock-number" style={{ color: accentColor }}>
                             {item.currentStock}
                         </div>
-                        <div className="unit-price-stack">
-                            <span className="stock-unit">{item.unit}</span>
-                            <span className="item-price-tag">₹{item.price || 0}</span>
+                        <div className="inv-stock-unit">
+                            {item.unit || 'Units'}
+                            {item.packMultiplier > 1 && (
+                                <span style={{display:'block', fontSize:'11px', opacity:0.75, marginTop:'1px'}}>
+                                    {Math.floor(item.currentStock / item.packMultiplier)} Packs
+                                </span>
+                            )}
                         </div>
                     </div>
                 </div>
 
-                <div className="stock-progress-section">
-                    <div className="progress-labels">
-                        <span>Stock Level</span>
-                        <span>{Math.round(pct)}%</span>
+                {/* Progress Bar */}
+                <div className="inv-progress-wrap">
+                    <div className="inv-progress-bar">
+                        <div 
+                            className={`inv-progress-fill ${statusClass}`} 
+                            style={{ width: `${pct}%` }} 
+                        />
                     </div>
-                    <div className="stock-bar-container">
-                        <div className={`stock-bar-fill ${statusClass}`} style={{ width: `${pct}%` }}></div>
+                    <div className="inv-progress-labels">
+                        <span className={`inv-status-pill ${statusClass}`}>
+                            {isCritical ? '🔴 Out of Stock' : isLow ? '⚠️ Low Stock' : '✅ In Stock'}
+                        </span>
+                        <span className="inv-pct-label">{Math.round(pct)}%</span>
                     </div>
                 </div>
 
-                <div className="card-meta">
-                    <div className={`status-badge ${statusClass}`}>
-                        {isCritical ? 'Out of Stock' : isLow ? 'Low Stock' : 'Optimal'}
+                {/* Pricing Row */}
+                <div className="inv-card-pricing">
+                    <div className="inv-price-item">
+                        <span className="inv-price-label">MRP</span>
+                        <span className="inv-price-val">
+                            ₹{item.price?.toFixed(2) || 0}
+                            {item.packMultiplier > 1 && <small style={{fontSize: '10px', display: 'block', opacity: 0.7}}>₹{(item.price * item.packMultiplier).toFixed(2)}/Pack</small>}
+                        </span>
                     </div>
-                    <button className="quick-adjust-btn" onClick={onAdjust} title="Quick Adjust Stock">
+                    {item.costPerUnit > 0 && (
+                        <div className="inv-price-item">
+                            <span className="inv-price-label">Cost</span>
+                            <span className="inv-price-val muted">₹{Number(item.costPerUnit).toFixed(2)}</span>
+                        </div>
+                    )}
+                    {item.expDate && (
+                        <div className="inv-price-item">
+                            <span className="inv-price-label">Exp</span>
+                            <span className="inv-price-val exp">{item.expDate}</span>
+                        </div>
+                    )}
+                    <button className="inv-adjust-btn" onClick={onAdjust}>
                         ⚡ Adjust
                     </button>
                 </div>
             </div>
-            <div className="card-footer">
-                <div className="supplier-preview">
-                    <small>Supplier</small>
-                    <span>{item.supplierName || 'None'}</span>
+
+            {/* Footer */}
+            <div className="inv-card-footer">
+                <div className="inv-supplier-info">
+                    <span className="inv-supplier-label">Supplier</span>
+                    <span className="inv-supplier-name">{item.supplierName || '—'}</span>
                 </div>
-                <div className="card-actions" style={{display:'flex', gap:'8px'}}>
-                    <button className="print-label-btn" onClick={onPrint} title="Print Labels" style={{background:'#f0fdf4', color:'#16a34a', border:'1px solid #bbf7d0', padding:'4px 8px', borderRadius:'4px', cursor:'pointer', fontWeight:'bold', fontSize:'11px'}}>🖨️ Labels</button>
-                    <button className="edit-icon-btn" onClick={onEdit} title="Edit Item" style={{background:'#e0f2fe', color:'#0284c7', border:'1px solid #bae6fd', padding:'4px 8px', borderRadius:'4px', cursor:'pointer', fontWeight:'bold', fontSize:'11px'}}>📝 Edit</button>
-                    <button className="delete-icon-btn" onClick={onDelete} title="Remove Item" style={{background:'#fee2e2', color:'#ef4444', border:'1px solid #fca5a5', padding:'4px 8px', borderRadius:'4px', cursor:'pointer', fontWeight:'bold', fontSize:'11px'}}>🗑️ Delete</button>
+                <div className="inv-card-actions">
+                    <button className="inv-icon-btn btn-weigh" onClick={onWeighPrint} title="Weigh & Print">⚖️</button>
+                    <button className="inv-icon-btn btn-print" onClick={onPrint} title="Print Labels">🖨️</button>
+                    <button className="inv-icon-btn btn-edit" onClick={onEdit} title="Edit">✏️</button>
+                    <button className="inv-icon-btn btn-del" onClick={onDelete} title="Delete">🗑️</button>
                 </div>
             </div>
         </div>
@@ -725,7 +790,15 @@ function ItemModal({ onSubmit, onClose, initialData, isEditing, scaleValue }) {
         price: 0,
         isBilliable: true,
         supplierName: '',
-        supplierPhone: ''
+        supplierPhone: '',
+        batchNo: '',
+        mfgDate: '',
+        expDate: '',
+        hsnCode: '',
+        manufacturer: '',
+        packSize: '',
+        packMultiplier: 1,
+        gstPercent: 0
     });
 
     const handleSubmit = (e) => {
@@ -769,12 +842,17 @@ function ItemModal({ onSubmit, onClose, initialData, isEditing, scaleValue }) {
                         </div>
                         <div className="form-group">
                             <label>Category</label>
-                            <input 
+                            <select 
                                 className="inventory-input" 
-                                placeholder="Dairy, Grains, etc."
                                 value={formData.category}
                                 onChange={(e) => setFormData({...formData, category: e.target.value})}
-                            />
+                            >
+                                <option value="General">General</option>
+                                <option value="Grocery">Grocery</option>
+                                <option value="Clothing">Clothing</option>
+                                <option value="Pharmacy">Pharmacy</option>
+                                <option value="Others">Others</option>
+                            </select>
                         </div>
                         <div className="form-group">
                             <label>Unit</label>
@@ -840,10 +918,11 @@ function ItemModal({ onSubmit, onClose, initialData, isEditing, scaleValue }) {
                                 type="number" 
                                 className="inventory-input" 
                                 step="0.01"
-                                value={formData.currentStock || 0}
+                                min="0"
+                                value={formData.currentStock === 0 ? '' : formData.currentStock}
                                 onChange={(e) => {
                                     const val = parseFloat(e.target.value);
-                                    setFormData({...formData, currentStock: isNaN(val) ? 0 : val});
+                                    setFormData({...formData, currentStock: isNaN(val) ? 0 : Math.abs(val)});
                                 }}
                             />
                         </div>
@@ -880,7 +959,112 @@ function ItemModal({ onSubmit, onClose, initialData, isEditing, scaleValue }) {
                         </div>
                     </div>
 
-                    <div className="modal-footer">
+                    {(formData.category === 'Pharmacy' || formData.manufacturer || formData.batchNo) && (
+                        <div className="pharmacy-batch-section animate-fade-in" style={{
+                            background: 'var(--bg-secondary)', 
+                            border: '1px solid rgba(16, 185, 129, 0.3)', 
+                            padding: '16px', 
+                            borderRadius: '8px', 
+                            marginTop: '16px',
+                            borderLeft: '4px solid #10b981'
+                        }}>
+                            <h4 style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                💊 Professional / Pharma Details
+                            </h4>
+                            <div className="form-row">
+                                <div className="form-group">
+                                    <label>Manufacturer (MFR)</label>
+                                    <input 
+                                        className="inventory-input" 
+                                        placeholder="Manufacturer Name"
+                                        value={formData.manufacturer || ''}
+                                        onChange={(e) => setFormData({...formData, manufacturer: e.target.value})}
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label>Pack Size</label>
+                                    <input 
+                                        className="inventory-input" 
+                                        placeholder="e.g. 10*5, 15 tabs"
+                                        value={formData.packSize || ''}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            // Auto-calculate multiplier if user types 10*5
+                                            let mult = 1;
+                                            const parts = val.toLowerCase().replace(/[^0-9*x]/g, '').split(/[x*]/);
+                                            if (parts.length > 1) {
+                                                mult = parts.reduce((acc, p) => acc * (parseInt(p) || 1), 1);
+                                            } else {
+                                                mult = parseInt(val.replace(/[^0-9]/g, '')) || 1;
+                                            }
+                                            setFormData({...formData, packSize: val, packMultiplier: mult});
+                                        }}
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label>Multiplier (Pieces/Pack)</label>
+                                    <input 
+                                        type="number"
+                                        className="inventory-input" 
+                                        value={formData.packMultiplier || 1}
+                                        onChange={(e) => setFormData({...formData, packMultiplier: parseInt(e.target.value) || 1})}
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label>GST %</label>
+                                    <input 
+                                        type="number"
+                                        className="inventory-input" 
+                                        placeholder="GST %"
+                                        value={formData.gstPercent || 0}
+                                        onChange={(e) => setFormData({...formData, gstPercent: parseFloat(e.target.value) || 0})}
+                                    />
+                                </div>
+                            </div>
+                            <div className="form-row" style={{ marginTop: '12px' }}>
+                                <div className="form-group">
+                                    <label>Batch No.</label>
+                                    <input 
+                                        className="inventory-input" 
+                                        placeholder="Enter Batch"
+                                        value={formData.batchNo}
+                                        onChange={(e) => setFormData({...formData, batchNo: e.target.value})}
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label>HSN Code</label>
+                                    <input 
+                                        className="inventory-input" 
+                                        placeholder="HSN"
+                                        value={formData.hsnCode}
+                                        onChange={(e) => setFormData({...formData, hsnCode: e.target.value})}
+                                    />
+                                </div>
+                            </div>
+                            <div className="form-row" style={{ marginTop: '12px' }}>
+                                <div className="form-group">
+                                    <label>Mfg Date</label>
+                                    <input 
+                                        className="inventory-input" 
+                                        placeholder="MM/YYYY"
+                                        value={formData.mfgDate}
+                                        onChange={(e) => setFormData({...formData, mfgDate: e.target.value})}
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label>Exp Date</label>
+                                    <input 
+                                        className="inventory-input" 
+                                        placeholder="MM/YYYY"
+                                        value={formData.expDate}
+                                        onChange={(e) => setFormData({...formData, expDate: e.target.value})}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="modal-actions" style={{marginTop: '24px'}}>
                         <button type="button" className="cancel-btn" onClick={onClose}>Discard</button>
                         <button type="submit" className="save-btn">{isEditing ? 'Update Item' : 'Add to Inventory'}</button>
                     </div>
@@ -890,12 +1074,17 @@ function ItemModal({ onSubmit, onClose, initialData, isEditing, scaleValue }) {
     );
 }
 
+
 function AdjustModal({ item, onSubmit, onClose, scaleValue }) {
     const [adjustment, setAdjustment] = useState({
         type: 'add',
         quantity: 0,
+        freeQuantity: 0,
         reason: '',
         totalCost: 0,
+        gstAmount: 0,
+        discountAmount: 0,
+        invoiceNumber: '',
         recordAsExpense: false,
         paymentMethod: 'Cash'
     });
@@ -909,16 +1098,21 @@ function AdjustModal({ item, onSubmit, onClose, scaleValue }) {
         setAdjustment({ ...adjustment, quantity: scaleValue });
     };
 
+    const packMultiplier = item.packMultiplier || 1;
+
     return (
         <div className="inventory-modal-overlay animate-fade">
-            <div className="inventory-modal scale-in">
+            <div className="inventory-modal scale-in" style={{maxWidth: '560px'}}>
                 <div className="modal-header">
-                    <h2>⚖️ Stock Weight Adjustment</h2>
+                    <h2>⚡ Stock Adjustment</h2>
                     <button className="close-x" onClick={onClose}>✕</button>
                 </div>
                 <div className="adjust-item-info">
                     <span className="item-name">{item.name}</span>
-                    <span className="current-stock">Current: {item.currentStock} {item.unit}</span>
+                    <span className="current-stock">
+                        Current: <b>{item.currentStock}</b> {item.unit}
+                        {packMultiplier > 1 && <small style={{marginLeft:6,opacity:0.7}}>({Math.floor(item.currentStock/packMultiplier)} Packs)</small>}
+                    </span>
                 </div>
                 <form className="modal-form" onSubmit={handleSubmit}>
                     <div className="form-group">
@@ -929,14 +1123,14 @@ function AdjustModal({ item, onSubmit, onClose, scaleValue }) {
                                 className={`type-toggle-btn add ${adjustment.type === 'add' ? 'active' : ''}`}
                                 onClick={() => setAdjustment({...adjustment, type: 'add'})}
                             >
-                                ➕ Receive
+                                ➕ Receive Stock
                             </button>
                             <button 
                                 type="button"
                                 className={`type-toggle-btn remove ${adjustment.type === 'remove' ? 'active' : ''}`}
                                 onClick={() => setAdjustment({...adjustment, type: 'remove'})}
                             >
-                                ➖ Consume
+                                ➖ Consume / Remove
                             </button>
                         </div>
                     </div>
@@ -951,26 +1145,60 @@ function AdjustModal({ item, onSubmit, onClose, scaleValue }) {
                         </button>
                     </div>
 
-                    <div className="form-group">
-                        <label>Adjustment Quantity ({item.unit})</label>
-                        <input 
-                            type="number" 
-                            className="inventory-input" 
-                            step="0.01" 
-                            required
-                            value={adjustment.quantity || 0}
-                            onChange={(e) => {
-                                const val = parseFloat(e.target.value);
-                                setAdjustment({...adjustment, quantity: isNaN(val) ? 0 : val});
-                            }}
-                        />
+                    {/* Paid Qty + Free Qty row */}
+                    <div className="form-row" style={{marginTop:'8px'}}>
+                        <div className="form-group">
+                            <label>
+                                {adjustment.type === 'add' ? 'Paid Quantity' : 'Quantity'} ({item.unit})
+                                {packMultiplier > 1 && <span style={{fontWeight:'normal',opacity:0.65}}> — 1 Pack = {packMultiplier} {item.unit}</span>}
+                            </label>
+                            <input 
+                                type="number" 
+                                className="inventory-input" 
+                                step="0.01" 
+                                min="0"
+                                required
+                                placeholder="0"
+                                value={adjustment.quantity === 0 ? '' : adjustment.quantity}
+                                onChange={(e) => {
+                                    const val = parseFloat(e.target.value);
+                                    setAdjustment({...adjustment, quantity: isNaN(val) ? 0 : Math.abs(val)});
+                                }}
+                            />
+                        </div>
+                        {adjustment.type === 'add' && (
+                            <div className="form-group">
+                                <label style={{color:'#16a34a'}}>🎁 Free Quantity ({item.unit})
+                                    <span style={{fontWeight:'normal',opacity:0.7,fontSize:'11px'}}> (no cost)</span>
+                                </label>
+                                <input 
+                                    type="number" 
+                                    className="inventory-input" 
+                                    step="0.01" 
+                                    min="0"
+                                    placeholder="0"
+                                    value={adjustment.freeQuantity === 0 ? '' : adjustment.freeQuantity}
+                                    onChange={(e) => {
+                                        const val = parseFloat(e.target.value);
+                                        setAdjustment({...adjustment, freeQuantity: isNaN(val) ? 0 : Math.abs(val)});
+                                    }}
+                                />
+                            </div>
+                        )}
                     </div>
-                    
+
+                    {adjustment.type === 'add' && (adjustment.quantity > 0 || adjustment.freeQuantity > 0) && (
+                        <div style={{background:'rgba(34,197,94,0.07)',borderRadius:'8px',padding:'6px 12px',fontSize:'12px',color:'#15803d',marginBottom:'4px'}}>
+                            📦 Total Stock to Add: <b>{(adjustment.quantity || 0) + (adjustment.freeQuantity || 0)} {item.unit}</b>
+                            {packMultiplier > 1 && <span style={{opacity:0.75}}> ({Math.floor(((adjustment.quantity||0)+(adjustment.freeQuantity||0))/packMultiplier)} Packs)</span>}
+                        </div>
+                    )}
+
                     <div className="form-group">
                         <label>Reason / Note</label>
                         <textarea 
                             className="inventory-textarea" 
-                            placeholder="Why is this stock moving? (e.g. Spillage, Usage in Dish, Restock)"
+                            placeholder="Why is this stock moving? (e.g. Spillage, Usage in Dish, Restock from Supplier)"
                             required
                             value={adjustment.reason}
                             onChange={(e) => setAdjustment({...adjustment, reason: e.target.value})}
@@ -979,39 +1207,86 @@ function AdjustModal({ item, onSubmit, onClose, scaleValue }) {
 
                     {adjustment.type === 'add' && (
                         <div className="expense-recording-section" style={{ background: '#f8fafc', padding: '15px', borderRadius: '10px', border: '1px solid #e2e8f0', marginTop: '10px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
                                 <input 
                                     type="checkbox" 
                                     id="recordExpense" 
                                     checked={adjustment.recordAsExpense}
-                                    onChange={(e) => setAdjustment({...adjustment, recordAsExpense: e.target.checked, totalCost: e.target.checked ? (adjustment.quantity * (item.costPerUnit || 0)) : 0})}
+                                    onChange={(e) => setAdjustment({
+                                        ...adjustment, 
+                                        recordAsExpense: e.target.checked, 
+                                        totalCost: e.target.checked ? +(adjustment.quantity * (item.costPerUnit || 0)).toFixed(2) : 0
+                                    })}
                                 />
-                                <label htmlFor="recordExpense" style={{ fontWeight: 'bold', margin: 0, color: '#0f172a' }}>💰 Record as Expenditure</label>
+                                <label htmlFor="recordExpense" style={{ fontWeight: 'bold', margin: 0, color: '#0f172a' }}>💰 Record as Purchase Expenditure</label>
                             </div>
 
                             {adjustment.recordAsExpense && (
-                                <div className="expense-details animate-fade-in" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                                    <div className="form-group">
-                                        <label>Total Amount Paid (₹)</label>
-                                        <input 
-                                            type="number"
-                                            className="inventory-input"
-                                            value={adjustment.totalCost}
-                                            onChange={(e) => setAdjustment({...adjustment, totalCost: parseFloat(e.target.value) || 0})}
-                                        />
+                                <div className="animate-fade-in">
+                                    {/* Invoice No + Payment Method */}
+                                    <div className="form-row" style={{marginBottom:'8px'}}>
+                                        <div className="form-group">
+                                            <label>Invoice Number <span style={{opacity:0.6,fontWeight:'normal'}}>(groups in Expenditure)</span></label>
+                                            <input 
+                                                className="inventory-input"
+                                                placeholder="e.g. INV-2024-001"
+                                                value={adjustment.invoiceNumber}
+                                                onChange={(e) => setAdjustment({...adjustment, invoiceNumber: e.target.value})}
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Payment Method</label>
+                                            <select 
+                                                className="inventory-input"
+                                                value={adjustment.paymentMethod}
+                                                onChange={(e) => setAdjustment({...adjustment, paymentMethod: e.target.value})}
+                                            >
+                                                <option value="Cash">Cash</option>
+                                                <option value="UPI">UPI / Scanner</option>
+                                                <option value="Card">Credit/Debit Card</option>
+                                                <option value="Bank">Bank Transfer</option>
+                                            </select>
+                                        </div>
                                     </div>
-                                    <div className="form-group">
-                                        <label>Payment Method</label>
-                                        <select 
-                                            className="inventory-input"
-                                            value={adjustment.paymentMethod}
-                                            onChange={(e) => setAdjustment({...adjustment, paymentMethod: e.target.value})}
-                                        >
-                                            <option value="Cash">Cash</option>
-                                            <option value="UPI">UPI / Scanner</option>
-                                            <option value="Card">Credit/Debit Card</option>
-                                            <option value="Bank">Bank Transfer</option>
-                                        </select>
+
+                                    {/* Cost + GST + Discount */}
+                                    <div className="form-row">
+                                        <div className="form-group">
+                                            <label>Base Cost (₹) <span style={{opacity:0.6,fontWeight:'normal'}}>(paid qty only)</span></label>
+                                            <input 
+                                                type="number"
+                                                className="inventory-input"
+                                                placeholder="0.00"
+                                                value={adjustment.totalCost || ''}
+                                                onChange={(e) => setAdjustment({...adjustment, totalCost: parseFloat(e.target.value) || 0})}
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label>GST Amount (₹)</label>
+                                            <input 
+                                                type="number"
+                                                className="inventory-input"
+                                                placeholder="0.00"
+                                                value={adjustment.gstAmount || ''}
+                                                onChange={(e) => setAdjustment({...adjustment, gstAmount: parseFloat(e.target.value) || 0})}
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Discount (₹)</label>
+                                            <input 
+                                                type="number"
+                                                className="inventory-input"
+                                                placeholder="0.00"
+                                                value={adjustment.discountAmount || ''}
+                                                onChange={(e) => setAdjustment({...adjustment, discountAmount: parseFloat(e.target.value) || 0})}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Net total preview */}
+                                    <div style={{background:'rgba(99,102,241,0.07)',borderRadius:'8px',padding:'6px 12px',fontSize:'13px',color:'#4f46e5',fontWeight:'600'}}>
+                                        Net Total: ₹{((adjustment.totalCost||0) + (adjustment.gstAmount||0) - (adjustment.discountAmount||0)).toFixed(2)}
+                                        {adjustment.freeQuantity > 0 && <span style={{fontWeight:'normal',opacity:0.75,marginLeft:8}}>({adjustment.freeQuantity} {item.unit} free, not charged)</span>}
                                     </div>
                                 </div>
                             )}
@@ -1027,6 +1302,7 @@ function AdjustModal({ item, onSubmit, onClose, scaleValue }) {
         </div>
     );
 }
+
 
 function StatsCard({ icon, label, value, color, textStyle }) {
     return (

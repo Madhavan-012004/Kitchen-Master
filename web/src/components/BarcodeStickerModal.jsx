@@ -41,13 +41,97 @@ const BarcodeStickerModal = ({ show, onClose, items }) => {
             });
             
             if (res.data.success) {
-                alert("Labels sent to server-side print queue successfully!");
+                alert("Thermal print job sent to printer!");
             } else {
-                throw new Error(res.data.message);
+                alert(`Print Failed: ${res.data.message}`);
             }
         } catch (err) {
-            console.error('Server-side print failed:', err);
-            alert('Failed to print via server. Ensure the printer is Shared as "TSC" in Windows.');
+            console.error('Thermal print failed:', err);
+            alert('Failed to print to local printer. Please ensure the printer is shared and the Kitchen Master Local Print Service is running.');
+        } finally {
+            setIsPrinting(false);
+        }
+    };
+
+    const handleBluetoothPrint = async () => {
+        setIsPrinting(true);
+        try {
+            const shopName = user?.restaurantName || "Kitchen Master";
+            let tsplData = generateTSPL(printItems, shopName, { height: labelHeight, gap: gapHeight });
+            
+            if (!navigator.bluetooth) {
+                throw new Error("Web Bluetooth API is not supported in this browser. Please use Chrome/Edge on Android, Mac, or Windows.");
+            }
+
+            const device = await navigator.bluetooth.requestDevice({
+                acceptAllDevices: true,
+                optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb', '49535343-fe7d-4ae5-8fa9-9fafd205e455', 'e7810a71-73ae-499d-8c15-faa9aef0c3f2']
+            });
+
+            const server = await device.gatt.connect();
+            const services = await server.getPrimaryServices();
+            let writeCharacteristic = null;
+            
+            for (const service of services) {
+                const characteristics = await service.getCharacteristics();
+                for (const char of characteristics) {
+                    if (char.properties.write || char.properties.writeWithoutResponse) {
+                        writeCharacteristic = char;
+                        break;
+                    }
+                }
+                if (writeCharacteristic) break;
+            }
+
+            if (!writeCharacteristic) {
+                throw new Error("Could not find a writable characteristic on this device.");
+            }
+
+            const encoder = new TextEncoder();
+            const data = encoder.encode(tsplData);
+            const CHUNK_SIZE = 512;
+            
+            for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+                const chunk = data.slice(i, i + CHUNK_SIZE);
+                if (writeCharacteristic.properties.writeWithoutResponse) {
+                    await writeCharacteristic.writeValueWithoutResponse(chunk);
+                } else {
+                    await writeCharacteristic.writeValue(chunk);
+                }
+            }
+            
+            alert("Sent to Bluetooth printer successfully!");
+        } catch (err) {
+            console.error('Bluetooth print failed:', err);
+            alert('Bluetooth print failed: ' + err.message + '\n\nTry using the "Serial/USB" print button if your Bluetooth printer is paired to Windows.');
+        } finally {
+            setIsPrinting(false);
+        }
+    };
+
+    const handleSerialPrint = async () => {
+        setIsPrinting(true);
+        try {
+            const shopName = user?.restaurantName || "Kitchen Master";
+            let tsplData = generateTSPL(printItems, shopName, { height: labelHeight, gap: gapHeight });
+            
+            if (!("serial" in navigator)) {
+                throw new Error("Web Serial API not supported in this browser.");
+            }
+
+            const port = await navigator.serial.requestPort();
+            await port.open({ baudRate: 9600 });
+            
+            const encoder = new TextEncoder();
+            const writer = port.writable.getWriter();
+            await writer.write(encoder.encode(tsplData));
+            writer.releaseLock();
+            await port.close();
+            
+            alert("Sent to Serial/USB printer successfully!");
+        } catch (err) {
+            console.error('Serial print failed:', err);
+            alert('Serial print failed: ' + err.message);
         } finally {
             setIsPrinting(false);
         }
@@ -142,16 +226,22 @@ const BarcodeStickerModal = ({ show, onClose, items }) => {
                     </div>
                 </div>
 
-                <div className="modal-footer">
+                <div className="modal-footer" style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', justifyContent: 'center' }}>
                     <button className="cancel-btn" onClick={onClose}>Cancel</button>
-                    <button className="save-btn" onClick={handleDownloadPRN} style={{ background: '#10b981' }}>
-                        📥 Download .PRN
+                    <button className="save-btn" onClick={handleDownloadPRN} style={{ background: '#10b981', flex: 1, minWidth: '40px', padding: '10px 5px' }} title="Download .PRN">
+                        📥
                     </button>
-                    <button className="save-btn" onClick={handlePrint} disabled={printItems.length === 0} style={{ background: '#6366f1' }}>
-                        🌐 PDF Print
+                    <button className="save-btn" onClick={handlePrint} disabled={printItems.length === 0} style={{ background: '#6366f1', flex: 1, minWidth: '40px', padding: '10px 5px' }} title="Print via Web Browser PDF">
+                        🌐
                     </button>
-                    <button className="save-btn" onClick={handleThermalPrint} disabled={printItems.length === 0 || isPrinting}>
-                        {isPrinting ? '⏳ Printing...' : '🖨️ Thermal Print (TSPL)'}
+                    <button className="save-btn" onClick={handleBluetoothPrint} disabled={printItems.length === 0 || isPrinting} style={{ background: '#8b5cf6', flex: 1, minWidth: '40px', padding: '10px 5px' }} title="Print via Bluetooth">
+                        {isPrinting ? '⏳...' : '🛜 BT'}
+                    </button>
+                    <button className="save-btn" onClick={handleSerialPrint} disabled={printItems.length === 0 || isPrinting} style={{ background: '#f59e0b', flex: 1, minWidth: '50px', padding: '10px 5px' }} title="Print via Serial/USB">
+                        {isPrinting ? '⏳...' : '🔌 USB'}
+                    </button>
+                    <button className="save-btn" onClick={handleThermalPrint} disabled={printItems.length === 0 || isPrinting} style={{ flex: 2, padding: '10px 5px' }}>
+                        {isPrinting ? '⏳...' : '🖨️ Local'}
                     </button>
                 </div>
             </div>

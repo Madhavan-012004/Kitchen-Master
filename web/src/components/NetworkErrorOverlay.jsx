@@ -6,7 +6,7 @@ const ERROR_META = {
     no_internet: {
         label: 'Backend Server Unreachable',
         icon: '🔌',
-        tip: 'Cannot reach the Kitchen Master backend. Make sure the server is running on this machine.',
+        tip: 'Cannot reach the ProBloom backend. Make sure the server is running on this machine.',
     },
     timeout: {
         label: 'Backend Not Responding',
@@ -16,7 +16,7 @@ const ERROR_META = {
     server_down: {
         label: 'Backend Server Offline',
         icon: '🔧',
-        tip: 'The Kitchen Master backend is not running. Please start the backend server and retry.',
+        tip: 'The ProBloom backend is not running. Please start the backend server and retry.',
     },
     server_error: {
         label: 'Backend API Error',

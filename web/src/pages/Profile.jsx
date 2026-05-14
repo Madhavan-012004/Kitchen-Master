@@ -5,6 +5,7 @@ import { usePOSMode } from '../context/POSModeContext.jsx';
 import { useLanguage } from '../context/LanguageContext.jsx';
 import api from '../api/client.js';
 import './Profile.css';
+import './WaitlistMonitor.css';  // TV Monitor modal styles
 
 export default function ProfilePage() {
     const { user, updateUser } = useAuth();
@@ -20,6 +21,10 @@ export default function ProfilePage() {
     
     const canEdit = ['owner', 'manager', 'stakeholder'].includes(user?.role?.toLowerCase());
     
+    // Change Password States
+    const [changePasswordData, setChangePasswordData] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
+    const [passwordLoading, setPasswordLoading] = useState(false);
+
     // Form States
     const [formData, setFormData] = useState({
         name: user?.name || '',
@@ -77,6 +82,7 @@ export default function ProfilePage() {
     
     const [initialTableMeta, setInitialTableMeta] = useState({});
     const [activeAccordion, setActiveAccordion] = useState('profile');
+    const [showTVModal, setShowTVModal] = useState(false);
     
     const [csvFile, setCsvFile] = useState(null);
 
@@ -306,6 +312,30 @@ export default function ProfilePage() {
         }));
     };
 
+    const handleChangePassword = async (e) => {
+        e.preventDefault();
+        if (changePasswordData.newPassword !== changePasswordData.confirmPassword) {
+            return showToast('error', 'New passwords do not match');
+        }
+        if (changePasswordData.newPassword.length < 6) {
+            return showToast('error', 'New password must be at least 6 characters long');
+        }
+
+        setPasswordLoading(true);
+        try {
+            const res = await api.post('/auth/change-password', {
+                oldPassword: changePasswordData.oldPassword,
+                newPassword: changePasswordData.newPassword
+            });
+            showToast('success', res.data.message || 'Password changed successfully');
+            setChangePasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });
+        } catch (error) {
+            showToast('error', error.response?.data?.message || 'Failed to change password');
+        } finally {
+            setPasswordLoading(false);
+        }
+    };
+
     const mapRef = useRef(null);
     const markerRef = useRef(null);
     const fileInputRef = useRef(null);
@@ -329,9 +359,7 @@ export default function ProfilePage() {
         formDataUpload.append('file', file);
 
         try {
-            const res = await api.post('/auth/profile/logo', formDataUpload, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
+            const res = await api.post('/auth/profile/logo', formDataUpload);
             if (res.data.success) {
                 updateUser(res.data.data.user);
                 showToast('success', 'Logo updated successfully!');
@@ -583,6 +611,67 @@ export default function ProfilePage() {
 
     return (
         <div className="profile-container">
+
+            {/* ── TV Monitor Setup Modal ── */}
+            {showTVModal && (
+                <div className="tv-modal-backdrop" onClick={e => { if (e.target === e.currentTarget) setShowTVModal(false); }}>
+                    <div className="tv-modal">
+                        <div className="tv-modal-header">
+                            <div className="tv-modal-header-text">
+                                <h3>📺 TV Display Monitor</h3>
+                                <p>Opens a fullscreen queue display for your waiting area TV</p>
+                            </div>
+                            <button className="tv-modal-close" onClick={() => setShowTVModal(false)}>✕</button>
+                        </div>
+
+                        <div className="tv-modal-body">
+                            {/* Restaurant preview — auto-filled from DB */}
+                            <div className="tv-preview-card">
+                                {user?.logo ? (
+                                    <img src={user.logo} alt="logo" className="tv-preview-logo" />
+                                ) : (
+                                    <div className="tv-preview-logo-placeholder">🏨</div>
+                                )}
+                                <div className="tv-preview-info">
+                                    <span className="tv-preview-name">{user?.restaurantName || user?.name}</span>
+                                    {user?.address && (
+                                        <span className="tv-preview-addr">{user.address}</span>
+                                    )}
+                                    <span className="tv-preview-badge">✔ Details auto-filled from database</span>
+                                </div>
+                            </div>
+
+                            <div className="tv-modal-info-row">
+                                <span>🖥️</span>
+                                <span>The display will show live queue tokens and a QR code for customers to join the waitlist.</span>
+                            </div>
+                            <div className="tv-modal-info-row">
+                                <span>🔓</span>
+                                <span>No login required — the monitor URL is public and can be bookmarked on any TV browser.</span>
+                            </div>
+                            <div className="tv-modal-info-row">
+                                <span>📡</span>
+                                <span>Updates in real-time via WebSocket. Falls back to polling every 5 seconds automatically.</span>
+                            </div>
+                        </div>
+
+                        <div className="tv-modal-footer">
+                            <button
+                                className="tv-launch-btn"
+                                onClick={() => {
+                                    window.open(`/waitlist-monitor/${user._id}`, '_blank');
+                                    setShowTVModal(false);
+                                }}
+                            >
+                                🖥️ Launch Display in New Tab
+                            </button>
+                            <button className="tv-modal-cancel" onClick={() => setShowTVModal(false)}>
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             <div className="profile-header">
                 <input 
                     type="file" 
@@ -722,10 +811,14 @@ export default function ProfilePage() {
                                     <button className="btn-qr-premium" style={{ background: '#2563eb' }} onClick={handleDownloadWaitlistQR}>
                                         👥 Waitlist QR
                                     </button>
-                                    <button 
-                                        className="btn-qr-premium" 
-                                        style={{ background: '#0f172a' }} 
-                                        onClick={() => window.open(`/waitlist-monitor/${user._id}`, '_blank')}
+                                    <button
+                                        className="btn-qr-premium"
+                                        style={{ 
+                                            background: 'linear-gradient(135deg, #1e293b, #0f172a)', 
+                                            color: 'white',
+                                            border: '1px solid rgba(255,255,255,0.1)'
+                                        }}
+                                        onClick={() => setShowTVModal(true)}
                                     >
                                         📺 Open TV Monitor
                                     </button>
@@ -771,6 +864,59 @@ export default function ProfilePage() {
                                 <button className="profile-save-btn" onClick={handleSaveProfile} disabled={loading}>
                                     {loading ? 'Saving Changes...' : '💾 Save General Details'}
                                 </button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* SECTION: SECURITY & PASSWORDS */}
+                    <div className={`profile-card accordion-item ${activeAccordion === 'security' ? 'active' : ''}`} style={{ marginTop: '15px' }}>
+                        <div className="accordion-header" onClick={() => toggleAccordion('security')}>
+                            <h3 className="card-title">🔐 Security & Password</h3>
+                            <span className="accordion-icon">{activeAccordion === 'security' ? '🔼' : '🔽'}</span>
+                        </div>
+                        
+                        {activeAccordion === 'security' && (
+                            <div className="accordion-content">
+                                <form onSubmit={handleChangePassword}>
+                                    <div className="form-group-grid">
+                                        <div className="form-field full-width">
+                                            <label>Current Password</label>
+                                            <input 
+                                                type="password" 
+                                                className="form-input" 
+                                                placeholder="••••••••"
+                                                value={changePasswordData.oldPassword} 
+                                                onChange={e => setChangePasswordData({...changePasswordData, oldPassword: e.target.value})} 
+                                                required 
+                                            />
+                                        </div>
+                                        <div className="form-field">
+                                            <label>New Password</label>
+                                            <input 
+                                                type="password" 
+                                                className="form-input" 
+                                                placeholder="••••••••"
+                                                value={changePasswordData.newPassword} 
+                                                onChange={e => setChangePasswordData({...changePasswordData, newPassword: e.target.value})} 
+                                                required 
+                                            />
+                                        </div>
+                                        <div className="form-field">
+                                            <label>Confirm New Password</label>
+                                            <input 
+                                                type="password" 
+                                                className="form-input" 
+                                                placeholder="••••••••"
+                                                value={changePasswordData.confirmPassword} 
+                                                onChange={e => setChangePasswordData({...changePasswordData, confirmPassword: e.target.value})} 
+                                                required 
+                                            />
+                                        </div>
+                                    </div>
+                                    <button className="profile-save-btn" type="submit" disabled={passwordLoading} style={{marginTop: '15px', background: 'var(--text-primary)', color: 'var(--bg-primary)'}}>
+                                        {passwordLoading ? 'Updating...' : '🔒 Update Password'}
+                                    </button>
+                                </form>
                             </div>
                         )}
                     </div>

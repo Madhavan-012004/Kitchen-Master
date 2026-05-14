@@ -73,7 +73,7 @@ export const LightColors = {
     textPrimary: '#0B2221',
     textSecondary: '#2B4E4A',
     textMuted: '#507572',
-    textInverse: '#FFFFFF',
+    textInverse: '#0B2221',
 
     // ── Accent ──
     accent: '#C6F53D',
