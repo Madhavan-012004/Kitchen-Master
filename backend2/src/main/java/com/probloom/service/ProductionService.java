@@ -115,8 +115,7 @@ public class ProductionService {
                 .createdBy(creator)
                 .build();
 
-        ProductionBatch saved = productionBatchRepository.save(batch);
-        return saved;
+        return Objects.requireNonNull(productionBatchRepository.save(batch));
     }
     
     public List<ProductionBatch> getProductionHistory(User restaurant) {

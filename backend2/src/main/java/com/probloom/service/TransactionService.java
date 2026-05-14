@@ -120,7 +120,7 @@ public class TransactionService {
                     .paymentStatus("PAID")
                     .date(LocalDateTime.now())
                     .build();
-            return transactionRepository.save(t);
+            return java.util.Objects.requireNonNull(transactionRepository.save(t));
         }
     }
 
@@ -153,6 +153,6 @@ public class TransactionService {
     @Transactional
     public void wipe(@NonNull User restaurant) {
         List<Transaction> all = transactionRepository.findByRestaurantOrderByDateDesc(restaurant);
-        transactionRepository.deleteAll(all);
+        transactionRepository.deleteAll(java.util.Objects.requireNonNull(all));
     }
 }
