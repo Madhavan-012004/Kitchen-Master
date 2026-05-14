@@ -82,4 +82,19 @@ api.interceptors.response.use(
     }
 )
 
+/**
+ * Switches the backend database connection mode.
+ * @param {string} mode 'online' or 'offline'
+ */
+api.setConnectionMode = async (mode) => {
+    try {
+        const res = await api.post('/config/mode', { mode });
+        sessionStorage.setItem('km_mode', mode);
+        return res.data;
+    } catch (err) {
+        console.error('Failed to switch connection mode:', err);
+        throw err;
+    }
+}
+
 export default api

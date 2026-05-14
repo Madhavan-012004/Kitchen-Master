@@ -40,7 +40,27 @@ public class LicenseService {
         "6chMztKnzfO9AF9w2kgzbx08WUQdcZ+/8+1j5a/x72emgphI/7mW3bRsu0DMUiN8" +
         "PwIDAQAB";
 
-    private static final String LICENSE_FILE_PATH = "license.lic";
+    // ── License file path ──────────────────────────────────────────────────────
+    // In standalone (EXE) mode: %APPDATA%\ProBloom\license.lic
+    // In dev mode: ./license.lic (working directory)
+    private static String getLicenseFilePath() {
+        boolean isStandalone = "true".equalsIgnoreCase(System.getProperty("STANDALONE"))
+                || "true".equalsIgnoreCase(System.getenv("STANDALONE"));
+        if (isStandalone) {
+            String appData = System.getenv("APPDATA");
+            if (appData != null && !appData.isEmpty()) {
+                java.io.File dir = new java.io.File(appData, "ProBloom");
+                dir.mkdirs();
+                return new java.io.File(dir, "license.lic").getAbsolutePath();
+            }
+            // Fallback: ~/.probloom/license.lic
+            java.io.File dir = new java.io.File(System.getProperty("user.home"), ".probloom");
+            dir.mkdirs();
+            return new java.io.File(dir, "license.lic").getAbsolutePath();
+        }
+        return "license.lic"; // dev mode: working directory
+    }
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired
@@ -82,7 +102,7 @@ public class LicenseService {
         Map<String, Object> status = new HashMap<>();
         status.put("hardwareId", getMachineHardwareId());
 
-        File licFile = new File(LICENSE_FILE_PATH);
+        File licFile = new File(getLicenseFilePath());
         if (!licFile.exists()) {
             status.put("valid", false);
             status.put("status", "MISSING");
@@ -191,7 +211,7 @@ public class LicenseService {
             throw new IllegalArgumentException("Invalid file type. Only .lic files are accepted.");
         }
 
-        Path destination = Paths.get(LICENSE_FILE_PATH);
+        Path destination = Paths.get(getLicenseFilePath());
         Files.write(destination, file.getBytes());
 
         // Auto-provision user account if valid

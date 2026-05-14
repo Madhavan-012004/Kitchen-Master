@@ -63,7 +63,7 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/status", "/api/stakeholder/login", "/api/auth/register", "/api/auth/login", "/api/auth/direct-login", "/api/auth/otp/**", "/api/auth/firebase-login", "/actuator/health", "/api/menu/public/**", "/api/orders/public/**", "/api/auth/public/**", "/api/public/queue/**", "/uploads/**").permitAll()
+                .requestMatchers("/api/status", "/api/config/mode", "/api/license/**", "/api/stakeholder/login", "/api/auth/register", "/api/auth/login", "/api/auth/offline-login", "/api/auth/direct-login", "/api/auth/otp/**", "/api/auth/firebase-login", "/actuator/health", "/api/menu/public/**", "/api/orders/public/**", "/api/auth/public/**", "/api/public/queue/**", "/uploads/**").permitAll()
                 .anyRequest().authenticated()
             )
             .authenticationProvider(authenticationProvider())

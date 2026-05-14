@@ -108,6 +108,7 @@ export default function LoginPage() {
         setError('')
         setLoading(true)
         try {
+            await api.setConnectionMode('offline')
             const res = await api.post('/auth/offline-login')
             const { token, user } = res.data.data
             login(user, token)
@@ -181,6 +182,7 @@ export default function LoginPage() {
         setLoading(true)
         
         try {
+            await api.setConnectionMode('online')
             const isEmail = loginId.includes('@')
             
             if (isEmail) {
