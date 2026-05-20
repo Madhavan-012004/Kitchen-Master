@@ -11,8 +11,8 @@
     "electron:build": "vite build && electron-builder"
   },
   "build": {
-    "appId": "com.probloom.kitchenmaster",
-    "productName": "ProBloom Kitchen Master",
+    "appId": "com.probloom.ProBloom",
+    "productName": "ProBloom",
     "directories": {
       "output": "dist-electron"
     },
@@ -25,7 +25,9 @@
           ]
         }
       ],
-      "icon": "public/favicon.ico"
+      "icon": "public/favicon.ico",
+      "forceCodeSigning": false,
+      "signtoolOptions": null
     },
     "nsis": {
       "oneClick": false,
@@ -49,6 +51,10 @@
       {
         "from": "jre",
         "to": "jre"
+      },
+      {
+        "from": "pgsql",
+        "to": "pgsql"
       }
     ]
   },
@@ -65,7 +71,8 @@
     "react-is": "^19.2.5",
     "react-router-dom": "^6.23.1",
     "recharts": "^3.8.1",
-    "socket.io-client": "^4.7.5"
+    "socket.io-client": "^4.7.5",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.3",
@@ -74,6 +81,7 @@
     "concurrently": "^9.2.1",
     "electron": "^42.0.1",
     "electron-builder": "^26.8.1",
+    "electron-packager": "^17.1.2",
     "vite": "^5.3.1",
     "vite-plugin-mkcert": "^2.0.0",
     "wait-on": "^9.0.10"

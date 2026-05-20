@@ -1,4 +1,4 @@
-# ProBloom Kitchen Master — Production Build Script
+# ProBloom — Production Build Script
 # This script builds the full-stack app into a single Windows .exe installer.
 
 Write-Host "`n[1/5] Building Backend JAR..." -ForegroundColor Cyan
@@ -12,13 +12,18 @@ Set-Location "web"
 npm run build
 if ($LASTEXITCODE -ne 0) { Write-Error "Frontend build failed"; exit 1 }
 
-Write-Host "`n[3/5] Checking JRE..." -ForegroundColor Cyan
+Write-Host "`n[3/5] Checking Dependencies (JRE & PostgreSQL)..." -ForegroundColor Cyan
 if (-not (Test-Path "jre")) {
     Write-Host "WARNING: 'web/jre' folder not found." -ForegroundColor Yellow
-    Write-Host "Please ensure a Windows x64 JRE (Java 17) is located in 'web/jre/' for bundling." -ForegroundColor Yellow
-    Write-Host "You can download one from Adoptium (Temurin 17 JRE x64 MSI/ZIP)." -ForegroundColor Yellow
-    
+    Write-Host "Please ensure a Windows x64 JRE (Java 17) is located in 'web/jre/' for offline bundling." -ForegroundColor Yellow
     $choice = Read-Host "Proceed without bundling JRE? (y/n)"
+    if ($choice -ne "y") { exit 1 }
+}
+
+if (-not (Test-Path "pgsql")) {
+    Write-Host "WARNING: 'web/pgsql' folder not found." -ForegroundColor Yellow
+    Write-Host "Please ensure Portable PostgreSQL binaries are located in 'web/pgsql/' for offline database support." -ForegroundColor Yellow
+    $choice = Read-Host "Proceed without bundling PostgreSQL? (y/n)"
     if ($choice -ne "y") { exit 1 }
 }
 

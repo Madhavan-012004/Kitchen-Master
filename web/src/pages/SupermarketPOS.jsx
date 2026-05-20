@@ -5,7 +5,21 @@ import './SupermarketPOS.css'
 
 const TAX_RATES = { SGST: 9, CGST: 9, IGST: 0 }
 
-function calcRow(row, taxType) {
+function useStickyState(defaultValue, key) {
+    const [value, setValue] = useState(() => {
+        const stickyValue = window.localStorage.getItem(key);
+        return stickyValue !== null
+            ? JSON.parse(stickyValue)
+            : defaultValue;
+    });
+    useEffect(() => {
+        window.localStorage.setItem(key, JSON.stringify(value));
+    }, [key, value]);
+    return [value, setValue];
+}
+
+
+function calcRow(row, taxType, taxRate = 18) {
     const qty   = parseFloat(row.qty)   || 0
     const mrp   = parseFloat(row.mrp)   || 0
     const disPct= parseFloat(row.disPct)|| 0
@@ -13,15 +27,28 @@ function calcRow(row, taxType) {
     // Rate after discount on MRP
     const rate   = mrp * (1 - disPct / 100)
     const disRs  = (mrp - rate) * qty
-    const basic  = taxType === 'Inclusive'
-        ? rate / (1 + (TAX_RATES.SGST + TAX_RATES.CGST + TAX_RATES.IGST) / 100)
-        : rate
 
-    const sgstAmt = basic * qty * (TAX_RATES.SGST / 100)
-    const cgstAmt = basic * qty * (TAX_RATES.CGST / 100)
-    const igstAmt = basic * qty * (TAX_RATES.IGST / 100)
-    const tax     = sgstAmt + cgstAmt + igstAmt
-    const total   = rate * qty
+    const sgstPct = taxRate / 2
+    const cgstPct = taxRate / 2
+    const igstPct = 0
+
+    let basic, sgstAmt, cgstAmt, igstAmt, tax, total
+
+    if (taxType === 'Inclusive') {
+        sgstAmt = rate * qty * (sgstPct / 100)
+        cgstAmt = rate * qty * (cgstPct / 100)
+        igstAmt = rate * qty * (igstPct / 100)
+        tax     = sgstAmt + cgstAmt + igstAmt
+        basic   = rate * (1 - taxRate / 100)
+        total   = rate * qty
+    } else {
+        basic   = rate
+        sgstAmt = basic * qty * (sgstPct / 100)
+        cgstAmt = basic * qty * (cgstPct / 100)
+        igstAmt = basic * qty * (igstPct / 100)
+        tax     = sgstAmt + cgstAmt + igstAmt
+        total   = basic * qty + tax
+    }
 
     return {
         ...row,
@@ -40,30 +67,33 @@ function emptyRow() {
     return { id: Date.now(), productId: '', productName: '', qty: 1, mrp: 0, basic: 0, rate: 0, disPct: 0, disRs: 0, sgst: 0, cgst: 0, igst: 0, tax: 0, total: 0, remarks: '', inStock: 0, batchNo: '', mfgDate: '', expDate: '', hsnCode: '' }
 }
 
-function SupermarketPOSContent({ printBill, isActive, onBillNoChange }) {
+function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
     const { user } = useAuth()
+    const taxRate = typeof user?.taxRate === 'number' ? user.taxRate : 18;
     const today = new Date().toLocaleDateString('en-CA') // YYYY-MM-DD
 
     // ── Header state ─────────────────────────────────────────
-    const [billCategory, setBillCategory] = useState('SALES')
-    const [taxType, setTaxType]           = useState('Inclusive')
-    const [dealer, setDealer]             = useState('Unregistered')
-    const [category, setCategory]         = useState('')
-    const [payment, setPayment]           = useState('CASH')
-    const [billDate, setBillDate]         = useState(today)
+    const [billCategory, setBillCategory] = useStickyState('SALES', `sm_pos_billCategory_${tabId}`)
+    const [taxType, setTaxType]           = useStickyState('Inclusive', `sm_pos_taxType_${tabId}`)
+    const [dealer, setDealer]             = useStickyState('Unregistered', `sm_pos_dealer_${tabId}`)
+    const [category, setCategory]         = useStickyState('', `sm_pos_category_${tabId}`)
+    const [payment, setPayment]           = useStickyState('CASH', `sm_pos_payment_${tabId}`)
+    const [billDate, setBillDate]         = useStickyState(today, `sm_pos_billDate_${tabId}`)
     const [disPctHeader, setDisPctHeader] = useState(0)
-    const [billNo, setBillNo]             = useState('')
-    const [dueDate, setDueDate]           = useState('')
-    const [poDate, setPODate]             = useState('')
-    const [empCode, setEmpCode]           = useState('')
-    const [freightCharges, setFreightCharges] = useState(0)
-    const [vehicleNumber, setVehicleNumber]   = useState('')
-    const [billType, setBillType]             = useState('3 Inch')
-    const [noTax, setNoTax]                   = useState(false)
-    const [manualBillNo, setManualBillNo]     = useState(false)
-    const [netAmount, setNetAmount]           = useState(false)
-    const [updateMrp, setUpdateMrp]           = useState(false)
-    const [updateRate, setUpdateRate]         = useState(false)
+    const [billNo, setBillNo]             = useStickyState('', `sm_pos_billNo_${tabId}`)
+    const [dueDate, setDueDate]           = useStickyState('', `sm_pos_dueDate_${tabId}`)
+    const [poDate, setPODate]             = useStickyState('', `sm_pos_poDate_${tabId}`)
+    const [empCode, setEmpCode]           = useStickyState('', `sm_pos_empCode_${tabId}`)
+    const [freightCharges, setFreightCharges] = useStickyState(0, `sm_pos_freightCharges_${tabId}`)
+    const [vehicleNumber, setVehicleNumber]   = useStickyState('', `sm_pos_vehicleNumber_${tabId}`)
+    const billType = '3 Inch';
+
+    const [noTax, setNoTax]                   = useStickyState(false, `sm_pos_noTax_${tabId}`)
+    const [manualBillNo, setManualBillNo]     = useStickyState(false, `sm_pos_manualBillNo_${tabId}`)
+    const [netAmount, setNetAmount]           = useStickyState(false, `sm_pos_netAmount_${tabId}`)
+    const [updateMrp, setUpdateMrp]           = useStickyState(false, `sm_pos_updateMrp_${tabId}`)
+    const [updateRate, setUpdateRate]         = useStickyState(false, `sm_pos_updateRate_${tabId}`)
+    const [showAdvancedCols, setShowAdvancedCols] = useStickyState(false, `sm_pos_showAdvancedCols_${tabId}`)
 
     // ── Advanced Search Modal ────────────────────────────────
     const [showSearchModalForIdx, setShowSearchModalForIdx] = useState(null)
@@ -77,6 +107,7 @@ function SupermarketPOSContent({ printBill, isActive, onBillNoChange }) {
     const [tenderCash, setTenderCash]         = useState(0)
     const [tenderUPI, setTenderUPI]           = useState(0)
     const [tenderCard, setTenderCard]         = useState(0)
+    const [editableGrandTotal, setEditableGrandTotal] = useState(undefined)
 
     // ── History & Email Modals ───────────────────────────────
     const [showHistoryModal, setShowHistoryModal] = useState(false)
@@ -88,7 +119,7 @@ function SupermarketPOSContent({ printBill, isActive, onBillNoChange }) {
     const [showReprintLang, setShowReprintLang]   = useState(false)
 
     // ── Rows ─────────────────────────────────────────────────
-    const [rows, setRows] = useState([emptyRow()])
+    const [rows, setRows] = useStickyState([emptyRow()], `sm_pos_rows_${tabId}`)
     const [activeRowIdx, setActiveRowIdx] = useState(0)
     const [activeCol, setActiveCol] = useState('productId')
     const [rowWithDeleteBtn, setRowWithDeleteBtn] = useState(null)
@@ -128,7 +159,7 @@ function SupermarketPOSContent({ printBill, isActive, onBillNoChange }) {
         } else if (e.key === 'Enter' || e.key === 'Tab') {
             if (col === 'productId' || col === 'productName') {
                 e.preventDefault()
-                lookupProduct(idx, e.target.value)
+                lookupProduct(idx, e.target.value, e.key === 'Tab')
             } else if (e.key === 'Enter') {
                 e.preventDefault()
                 setActiveRowIdx(Math.min(rows.length - 1, idx + 1))
@@ -137,16 +168,27 @@ function SupermarketPOSContent({ printBill, isActive, onBillNoChange }) {
     }
 
     // ── Customer & Bill Details ──────────────────────────────
-    const [customerId, setCustomerId]       = useState('')
-    const [customerName, setCustomerName]   = useState('')
-    const [customerMobile, setCustomerMobile] = useState('')
-    const [prevBalance, setPrevBalance]       = useState(0)
+    const [customerId, setCustomerId]       = useStickyState('', `sm_pos_customerId_${tabId}`)
+    const [customerName, setCustomerName]   = useStickyState('', `sm_pos_customerName_${tabId}`)
+    const [customerMobile, setCustomerMobile] = useStickyState('', `sm_pos_customerMobile_${tabId}`)
+    const [prevBalance, setPrevBalance]       = useStickyState(0, `sm_pos_prevBalance_${tabId}`)
     const [customerTab, setCustomerTab]       = useState('customer') // 'customer' | 'receipt'
     
     // ── Pharmacy/Custom Bill Fields ──────────────────────────
-    const [billTemplate, setBillTemplate]     = useState('standard')
-    const [doctorName, setDoctorName]         = useState('')
-    const [numberOfDays, setNumberOfDays]     = useState('')
+    const billTemplate = user?.basicBillTemplate || 'standard';
+    const [printWithGst, setPrintWithGst]     = useStickyState(true, `sm_pos_printWithGst_${tabId}`);
+
+    // Automatically set printWithGst checkbox depending on taxType selection
+    useEffect(() => {
+        if (taxType === 'No Tax') {
+            setPrintWithGst(false);
+        } else {
+            setPrintWithGst(true);
+        }
+    }, [taxType, setPrintWithGst]);
+
+    const [doctorName, setDoctorName]         = useStickyState('', `sm_pos_doctorName_${tabId}`)
+    const [numberOfDays, setNumberOfDays]     = useStickyState('', `sm_pos_numberOfDays_${tabId}`)
     const [isPharmacyDetailsOpen, setIsPharmacyDetailsOpen] = useState(true)
     const [showTemplateModal, setShowTemplateModal] = useState(false)
 
@@ -197,8 +239,10 @@ function SupermarketPOSContent({ printBill, isActive, onBillNoChange }) {
 
     useEffect(() => {
         refreshInventory();
-        // Generate bill number
-        setBillNo('TRP' + String(Math.floor(1000 + Math.random() * 9000)));
+        // Generate bill number only if it's empty (prevents overwriting sticky state on load)
+        if (!billNo) {
+            setBillNo('TRP' + String(Math.floor(1000 + Math.random() * 9000)));
+        }
     }, [refreshInventory]);
 
     useEffect(() => {
@@ -295,14 +339,45 @@ function SupermarketPOSContent({ printBill, isActive, onBillNoChange }) {
     };
 
     // ── Computed totals ───────────────────────────────────────
-    const computed = rows.map(r => calcRow(r, taxType))
+    const computed = rows.map(r => calcRow(r, taxType, taxRate))
     const totalItems    = computed.reduce((s, r) => s + (parseFloat(r.qty) || 0), 0)
     const totalDiscount = computed.reduce((s, r) => s + r.disRs, 0)
     const subTotal      = computed.reduce((s, r) => s + r.total, 0)
-    const grandTotal    = subTotal + parseFloat(freightCharges || 0)
+    const grandTotal    = subTotal + parseFloat(freightCharges || 0) - (subTotal * (parseFloat(disPctHeader) || 0) / 100)
+
+    const handleEditableGrandTotalChange = (e) => {
+        const val = parseFloat(e.target.value);
+        if (isNaN(val) || val < 0) {
+            setEditableGrandTotal(e.target.value);
+            return;
+        }
+        setEditableGrandTotal(val);
+        
+        const baseSubtotal = subTotal;
+        const extraCharges = parseFloat(freightCharges || 0);
+        const discountAmt = Math.max(0, baseSubtotal + extraCharges - val);
+        
+        const newDisPct = baseSubtotal > 0 ? (discountAmt / baseSubtotal) * 100 : 0;
+        setDisPctHeader(Number(newDisPct.toFixed(2)));
+    };
+
+    const handleDiscountPctChange = (e) => {
+        const val = parseFloat(e.target.value) || 0;
+        setDisPctHeader(val);
+        setEditableGrandTotal(undefined);
+    };
+
+    const handleDiscountAmtChange = (e) => {
+        const val = parseFloat(e.target.value) || 0;
+        const newDisPct = subTotal > 0 ? (val / subTotal) * 100 : 0;
+        setDisPctHeader(Number(newDisPct.toFixed(2)));
+        setEditableGrandTotal(undefined);
+    };
 
     // ── When a row's MRP/qty/dis changes, recalc ─────────────
     function updateRow(idx, field, value) {
+        let triggerStockAlert = null;
+
         setRows(prev => {
             const next = [...prev]
             let finalValue = value;
@@ -319,22 +394,24 @@ function SupermarketPOSContent({ printBill, isActive, onBillNoChange }) {
                 const available = parseFloat(next[idx].inStock) || 0;
                 
                 if (totalRequested > available) {
-                    setTimeout(() => {
-                        setOutOfStockAlert({
-                            name: next[idx].productName,
-                            available: available,
-                            requested: totalRequested
-                        });
-                    }, 10);
+                    triggerStockAlert = {
+                        name: next[idx].productName,
+                        available: available,
+                        requested: totalRequested
+                    };
                     finalValue = available - otherQty;
                     if (finalValue < 0) finalValue = 0;
                 }
             }
 
             next[idx] = { ...next[idx], [field]: finalValue }
-            next[idx] = calcRow(next[idx], taxType)
+            next[idx] = calcRow(next[idx], taxType, taxRate)
             return next
         })
+
+        if (triggerStockAlert) {
+            setOutOfStockAlert(triggerStockAlert);
+        }
     }
 
     // ── Advanced Search Matches ───────────────────────────────
@@ -350,13 +427,26 @@ function SupermarketPOSContent({ printBill, isActive, onBillNoChange }) {
 
     function forceApplyProductToRow(idx, found) {
         const safeId = found.barcode || found.id || found._id || 'N/A';
+        const available = found.currentStock || 0;
+        let triggerStockAlert = null;
         
         // --- CHECK FOR DUPLICATES ---
         const existingIdx = rows.findIndex((r, i) => i !== idx && r.productId === safeId);
         if (existingIdx !== -1) {
             // Already in the bill, increment it
-            updateRow(existingIdx, 'qty', (parseFloat(rows[existingIdx].qty) || 0) + 1);
-            notify(`Quantity increased for ${rows[existingIdx].productName} [Row ${existingIdx + 1}]`);
+            const currentQty = parseFloat(rows[existingIdx].qty) || 0;
+            const newQty = currentQty + 1;
+            
+            if (newQty > available) {
+                setOutOfStockAlert({
+                    name: rows[existingIdx].productName,
+                    available: available,
+                    requested: newQty
+                });
+            } else {
+                updateRow(existingIdx, 'qty', newQty);
+                notify(`Quantity increased for ${rows[existingIdx].productName} [Row ${existingIdx + 1}]`);
+            }
             
             // Clear the current input row (idx) so it remains empty for the next scan
             setRows(prev => {
@@ -376,6 +466,16 @@ function SupermarketPOSContent({ printBill, isActive, onBillNoChange }) {
         }
 
         // --- Standard logic for new item ---
+        let initialQty = rows[idx]?.qty > 0 ? rows[idx].qty : 1;
+        if (initialQty > available) {
+            triggerStockAlert = {
+                name: found.name,
+                available: available,
+                requested: initialQty
+            };
+            initialQty = available > 0 ? available : 0;
+        }
+
         setRows(prev => {
             const next = [...prev]
             next[idx] = calcRow({
@@ -383,19 +483,23 @@ function SupermarketPOSContent({ printBill, isActive, onBillNoChange }) {
                 productId:   safeId,
                 productName: found.name,
                 mrp:         found.price ? Number(found.price).toFixed(2) : 0,
-                inStock:     found.currentStock || 0,
+                inStock:     available,
                 unit:        found.unit || 'PIECE',
-                qty:         next[idx].qty > 0 ? next[idx].qty : 1, // default qty to 1 if empty
+                qty:         initialQty,
                 batchNo:     found.batchNo || '',
                 mfgDate:     found.mfgDate || '',
                 expDate:     found.expDate || '',
                 hsnCode:     found.hsnCode || '',
                 barcode:     found.barcode || '',
                 inventoryItemId: found._id || found.id || ''
-            }, taxType)
+            }, taxType, taxRate)
             return next
         })
-        setInStock(found.currentStock || 0)
+        setInStock(available)
+        
+        if (triggerStockAlert) {
+            setOutOfStockAlert(triggerStockAlert);
+        }
         
         setRows(prev => {
             if (idx === prev.length - 1) return [...prev, emptyRow()]
@@ -407,16 +511,21 @@ function SupermarketPOSContent({ printBill, isActive, onBillNoChange }) {
     }
 
     // ── Product lookup by ID or barcode ──────────────────────
-    function lookupProduct(idx, query) {
+    function lookupProduct(idx, query, isTab = false) {
         query = query.trim()
         if (!query) {
-            // Force fetch
-            refreshInventory();
-            
-            setShowSearchModalForIdx(idx)
-            setSearchQuery('')
-            setSearchSelectedIdx(0)
-            setTimeout(() => document.getElementById('advanced-search-input')?.focus(), 10)
+            if (isTab) {
+                // Force fetch
+                refreshInventory();
+                
+                setShowSearchModalForIdx(idx)
+                setSearchQuery('')
+                setSearchSelectedIdx(0)
+                setTimeout(() => document.getElementById('advanced-search-input')?.focus(), 10)
+            } else {
+                // Enter pressed on empty field, just move to next row
+                setActiveRowIdx(Math.min(rows.length - 1, idx + 1))
+            }
             return
         }
         const found = inventory.find(i =>
@@ -438,14 +547,18 @@ function SupermarketPOSContent({ printBill, isActive, onBillNoChange }) {
                 );
                 if (foundAfterSync) {
                     forceApplyProductToRow(idx, foundAfterSync);
+                } else if (!isTab) {
+                    notify('❌ Product not found')
                 }
             });
 
-            // Not found exactly, pop open the search modal with this query
-            setShowSearchModalForIdx(idx)
-            setSearchQuery(query)
-            setSearchSelectedIdx(0)
-            setTimeout(() => document.getElementById('advanced-search-input')?.focus(), 10)
+            if (isTab) {
+                // Not found exactly, pop open the search modal with this query
+                setShowSearchModalForIdx(idx)
+                setSearchQuery(query)
+                setSearchSelectedIdx(0)
+                setTimeout(() => document.getElementById('advanced-search-input')?.focus(), 10)
+            }
         }
     }
 
@@ -541,8 +654,10 @@ function SupermarketPOSContent({ printBill, isActive, onBillNoChange }) {
         setActiveRowIdx(0)
         setActiveCol('productId')
         setCustomerId(''); setCustomerName(''); setCustomerMobile(''); setPrevBalance(0)
-        setDoctorName(''); setNumberOfDays(''); setBillTemplate('standard'); setIsPharmacyDetailsOpen(true)
+        setDoctorName(''); setNumberOfDays(''); setIsPharmacyDetailsOpen(true)
         setFreightCharges(0); setVehicleNumber(''); setEmpCode('')
+        setEditableGrandTotal(undefined)
+        setDisPctHeader(0)
         setBillNo('TRP' + String(Math.floor(1000 + Math.random() * 9000)))
         setBillDate(today)
         notify('🆕 New Bill started')
@@ -643,7 +758,7 @@ function SupermarketPOSContent({ printBill, isActive, onBillNoChange }) {
         setCustomerMobile(bill.customerMobile || '')
         setDoctorName(bill.doctorName || '')
         setNumberOfDays(bill.numberOfDays || '')
-        setBillTemplate(bill.billTemplate || 'standard')
+        // setBillTemplate(bill.billTemplate || 'standard')
         setDisPctHeader(bill.disPctHeader || 0)
         setFreightCharges(bill.freightCharges || 0)
         setTaxType(bill.taxType || 'Inclusive') // Default to Inclusive if not set
@@ -686,6 +801,7 @@ function SupermarketPOSContent({ printBill, isActive, onBillNoChange }) {
         setTenderCash(grandTotal)
         setTenderUPI(0)
         setTenderCard(0)
+        setEditableGrandTotal(undefined)
         setShowSettlement(true)
     }
 
@@ -730,6 +846,7 @@ function SupermarketPOSContent({ printBill, isActive, onBillNoChange }) {
                     hsnCode: r.hsnCode || '',
                     mrp: r.mrp,
                     disPct: r.disPct,
+                    taxRate: printWithGst ? (r.gstPercent !== undefined ? r.gstPercent : taxRate) : 0.0,
                 })),
                 billCategory,
                 taxType,
@@ -737,12 +854,16 @@ function SupermarketPOSContent({ printBill, isActive, onBillNoChange }) {
                 customerName,
                 customerPhone: customerMobile,
                 discountPct: parseFloat(disPctHeader) || 0,
+                discountType: 'PERCENTAGE',
+                discountValue: parseFloat(disPctHeader) || 0,
+                discountAmount: subTotal * (parseFloat(disPctHeader) / 100),
                 freightCharges: parseFloat(freightCharges) || 0,
                 billNo,
                 doctorName,
                 numberOfDays,
                 billTemplate,
                 customerFirm: customerId,
+                printWithGst: printWithGst,
             }
             const existing = null // for new bill always create
             const res = await api.post('/orders', payload)
@@ -775,21 +896,29 @@ function SupermarketPOSContent({ printBill, isActive, onBillNoChange }) {
                         mfgDate: r.mfgDate || '',
                         expDate: r.expDate || '',
                         hsnCode: r.hsnCode || '',
+                        taxRate: printWithGst ? (r.gstPercent !== undefined ? r.gstPercent : taxRate) : 0.0,
                     })),
                     customerName,
                     customerPhone: customerMobile,
                     customerFirm: customerId,
                     doctorName,
                     numberOfDays,
-                    billTemplate: (billTemplate === 'pharmacy' || billType === 'A4') ? 'pharmacy' : 'standard',
+                    billTemplate,
+                    printWithGst,
                     billNo,
                     taxType,
                     total: grandTotal,
+                    subtotal: subTotal,
+                    totalDiscount: totalDiscount,
+                    totalTax: printWithGst ? (taxType === 'Inclusive' ? (subTotal * (1 - (parseFloat(disPctHeader) || 0) / 100) - (subTotal * (1 - (parseFloat(disPctHeader) || 0) / 100) / (1 + taxRate / 100))) : (subTotal * (1 - (parseFloat(disPctHeader) || 0) / 100) * (taxRate / 100))) : 0.0,
+                    totalSgst: printWithGst ? ((taxType === 'Inclusive' ? (subTotal * (1 - (parseFloat(disPctHeader) || 0) / 100) - (subTotal * (1 - (parseFloat(disPctHeader) || 0) / 100) / (1 + taxRate / 100))) : (subTotal * (1 - (parseFloat(disPctHeader) || 0) / 100) * (taxRate / 100))) / 2) : 0.0,
+                    totalCgst: printWithGst ? ((taxType === 'Inclusive' ? (subTotal * (1 - (parseFloat(disPctHeader) || 0) / 100) - (subTotal * (1 - (parseFloat(disPctHeader) || 0) / 100) / (1 + taxRate / 100))) : (subTotal * (1 - (parseFloat(disPctHeader) || 0) / 100) * (taxRate / 100))) / 2) : 0.0,
                     discountPct: parseFloat(disPctHeader) || 0,
                     freightCharges: parseFloat(freightCharges) || 0,
                     createdAt: new Date(),
                     skipKOT: true,
-                    isPharmacy: (billTemplate === 'pharmacy' || billType === 'A4')
+                    isPharmacy: (billTemplate === 'pharmacy' || billType === 'A4'),
+                    source: 'supermarket'
                 }
                 printBill(printOrderObj, true, false, 'en')
                 setTimeout(() => handleNewBill(), 1200)
@@ -856,8 +985,16 @@ function SupermarketPOSContent({ printBill, isActive, onBillNoChange }) {
                         <input type="number" value={disPctHeader} onChange={e => setDisPctHeader(e.target.value)} min="0" max="100" />
                     </div>
                     <div className="sm-field-group">
-                        <label>Scale</label>
+                        <label>Options</label>
                         <div className="sm-scale-actions">
+                            <button 
+                                className={`sm-scale-toggle-btn ${showAdvancedCols ? 'connected' : ''}`}
+                                onClick={() => setShowAdvancedCols(prev => !prev)}
+                                title="Toggle Advanced Columns"
+                            >
+                                <span className="scale-icon">⚙️</span>
+                                <span className="scale-label">Advance</span>
+                            </button>
                             <button 
                                 className={`sm-scale-toggle-btn ${isScaleConnected ? 'connected' : ''}`}
                                 onClick={() => isScaleConnected ? disconnectScale() : connectScale()}
@@ -899,21 +1036,21 @@ function SupermarketPOSContent({ printBill, isActive, onBillNoChange }) {
                                     <th className="col-name">Product Name</th>
                                     <th className="col-weight">Weight</th>
                                     <th className="col-qty">Qty</th>
-                                    <th className="col-batch">Batch</th>
-                                    <th className="col-date">Mfg Date</th>
-                                    <th className="col-date">Exp Date</th>
+                                    {showAdvancedCols && <th className="col-batch">Batch</th>}
+                                    {showAdvancedCols && <th className="col-date">Mfg Date</th>}
+                                    {showAdvancedCols && <th className="col-date">Exp Date</th>}
                                     <th className="col-hsn">HSN</th>
-                                    <th className="col-mrp">MRP</th>
-                                    <th className="col-basic">Basic</th>
+                                    {showAdvancedCols && <th className="col-mrp">MRP</th>}
+                                    {showAdvancedCols && <th className="col-basic">Basic</th>}
                                     <th className="col-rate">Rate</th>
-                                    <th className="col-dis">Dis(%)</th>
-                                    <th className="col-disrs">DisRs</th>
-                                    <th className="col-tax">SGST</th>
-                                    <th className="col-tax">CGST</th>
-                                    <th className="col-tax">IGST</th>
+                                    {showAdvancedCols && <th className="col-dis">Dis(%)</th>}
+                                    {showAdvancedCols && <th className="col-disrs">DisRs</th>}
+                                    {showAdvancedCols && <th className="col-tax">SGST</th>}
+                                    {showAdvancedCols && <th className="col-tax">CGST</th>}
+                                    {showAdvancedCols && <th className="col-tax">IGST</th>}
                                     <th className="col-tax">Tax</th>
                                     <th className="col-total">Total</th>
-                                    <th className="col-remarks">Remarks</th>
+                                    {showAdvancedCols && <th className="col-remarks">Remarks</th>}
                                 </tr>
                             </thead>
                             <tbody>
@@ -977,39 +1114,45 @@ function SupermarketPOSContent({ printBill, isActive, onBillNoChange }) {
                                                 />
                                             </div>
                                         </td>
-                                        <td className="col-batch">
-                                            <input
-                                                id={`cell-${idx}-batchNo`}
-                                                className={activeRowIdx === idx && activeCol === 'batchNo' ? 'cell-active' : ''}
-                                                value={row.batchNo}
-                                                onChange={e => updateRow(idx, 'batchNo', e.target.value)}
-                                                onKeyDown={e => handleCellKeyDown(e, idx, 'batchNo')}
-                                                onFocus={() => { setActiveRowIdx(idx); setActiveCol('batchNo') }}
-                                                placeholder="BATCH"
-                                            />
-                                        </td>
-                                        <td className="col-date">
-                                            <input
-                                                id={`cell-${idx}-mfgDate`}
-                                                className={activeRowIdx === idx && activeCol === 'mfgDate' ? 'cell-active' : ''}
-                                                value={row.mfgDate}
-                                                onChange={e => updateRow(idx, 'mfgDate', e.target.value)}
-                                                onKeyDown={e => handleCellKeyDown(e, idx, 'mfgDate')}
-                                                onFocus={() => { setActiveRowIdx(idx); setActiveCol('mfgDate') }}
-                                                placeholder="MM/YY"
-                                            />
-                                        </td>
-                                        <td className="col-date">
-                                            <input
-                                                id={`cell-${idx}-expDate`}
-                                                className={activeRowIdx === idx && activeCol === 'expDate' ? 'cell-active' : ''}
-                                                value={row.expDate}
-                                                onChange={e => updateRow(idx, 'expDate', e.target.value)}
-                                                onKeyDown={e => handleCellKeyDown(e, idx, 'expDate')}
-                                                onFocus={() => { setActiveRowIdx(idx); setActiveCol('expDate') }}
-                                                placeholder="MM/YY"
-                                            />
-                                        </td>
+                                        {showAdvancedCols && (
+                                            <td className="col-batch">
+                                                <input
+                                                    id={`cell-${idx}-batchNo`}
+                                                    className={activeRowIdx === idx && activeCol === 'batchNo' ? 'cell-active' : ''}
+                                                    value={row.batchNo}
+                                                    onChange={e => updateRow(idx, 'batchNo', e.target.value)}
+                                                    onKeyDown={e => handleCellKeyDown(e, idx, 'batchNo')}
+                                                    onFocus={() => { setActiveRowIdx(idx); setActiveCol('batchNo') }}
+                                                    placeholder="BATCH"
+                                                />
+                                            </td>
+                                        )}
+                                        {showAdvancedCols && (
+                                            <td className="col-date">
+                                                <input
+                                                    id={`cell-${idx}-mfgDate`}
+                                                    className={activeRowIdx === idx && activeCol === 'mfgDate' ? 'cell-active' : ''}
+                                                    value={row.mfgDate}
+                                                    onChange={e => updateRow(idx, 'mfgDate', e.target.value)}
+                                                    onKeyDown={e => handleCellKeyDown(e, idx, 'mfgDate')}
+                                                    onFocus={() => { setActiveRowIdx(idx); setActiveCol('mfgDate') }}
+                                                    placeholder="MM/YY"
+                                                />
+                                            </td>
+                                        )}
+                                        {showAdvancedCols && (
+                                            <td className="col-date">
+                                                <input
+                                                    id={`cell-${idx}-expDate`}
+                                                    className={activeRowIdx === idx && activeCol === 'expDate' ? 'cell-active' : ''}
+                                                    value={row.expDate}
+                                                    onChange={e => updateRow(idx, 'expDate', e.target.value)}
+                                                    onKeyDown={e => handleCellKeyDown(e, idx, 'expDate')}
+                                                    onFocus={() => { setActiveRowIdx(idx); setActiveCol('expDate') }}
+                                                    placeholder="MM/YY"
+                                                />
+                                            </td>
+                                        )}
                                         <td className="col-hsn">
                                             <input
                                                 id={`cell-${idx}-hsnCode`}
@@ -1021,43 +1164,49 @@ function SupermarketPOSContent({ printBill, isActive, onBillNoChange }) {
                                                 placeholder="HSN"
                                             />
                                         </td>
-                                        <td className="col-mrp">
-                                            <input type="number" min="0" step="0.01"
-                                                id={`cell-${idx}-mrp`}
-                                                className={activeRowIdx === idx && activeCol === 'mrp' ? 'cell-active' : ''}
-                                                value={row.mrp}
-                                                onChange={e => updateRow(idx, 'mrp', e.target.value)}
-                                                onKeyDown={e => handleCellKeyDown(e, idx, 'mrp')}
-                                                onFocus={() => { setActiveRowIdx(idx); setActiveCol('mrp') }}
-                                            />
-                                        </td>
-                                        <td className="col-basic">{row.basic.toFixed(2)}</td>
+                                        {showAdvancedCols && (
+                                            <td className="col-mrp">
+                                                <input type="number" min="0" step="0.01"
+                                                    id={`cell-${idx}-mrp`}
+                                                    className={activeRowIdx === idx && activeCol === 'mrp' ? 'cell-active' : ''}
+                                                    value={row.mrp}
+                                                    onChange={e => updateRow(idx, 'mrp', e.target.value)}
+                                                    onKeyDown={e => handleCellKeyDown(e, idx, 'mrp')}
+                                                    onFocus={() => { setActiveRowIdx(idx); setActiveCol('mrp') }}
+                                                />
+                                            </td>
+                                        )}
+                                        {showAdvancedCols && <td className="col-basic">{row.basic.toFixed(2)}</td>}
                                         <td className="col-rate">{row.rate.toFixed(2)}</td>
-                                        <td className="col-dis">
-                                            <input type="number" min="0" max="100" step="0.01"
-                                                id={`cell-${idx}-disPct`}
-                                                className={activeRowIdx === idx && activeCol === 'disPct' ? 'cell-active' : ''}
-                                                value={row.disPct}
-                                                onChange={e => updateRow(idx, 'disPct', e.target.value)}
-                                                onKeyDown={e => handleCellKeyDown(e, idx, 'disPct')}
-                                                onFocus={() => { setActiveRowIdx(idx); setActiveCol('disPct') }}
-                                            />
-                                        </td>
-                                        <td className="col-disrs">{row.disRs.toFixed(2)}</td>
-                                        <td className="col-tax">{row.sgst.toFixed(2)}</td>
-                                        <td className="col-tax">{row.cgst.toFixed(2)}</td>
-                                        <td className="col-tax">{row.igst.toFixed(2)}</td>
+                                        {showAdvancedCols && (
+                                            <td className="col-dis">
+                                                <input type="number" min="0" max="100" step="0.01"
+                                                    id={`cell-${idx}-disPct`}
+                                                    className={activeRowIdx === idx && activeCol === 'disPct' ? 'cell-active' : ''}
+                                                    value={row.disPct}
+                                                    onChange={e => updateRow(idx, 'disPct', e.target.value)}
+                                                    onKeyDown={e => handleCellKeyDown(e, idx, 'disPct')}
+                                                    onFocus={() => { setActiveRowIdx(idx); setActiveCol('disPct') }}
+                                                />
+                                            </td>
+                                        )}
+                                        {showAdvancedCols && <td className="col-disrs">{row.disRs.toFixed(2)}</td>}
+                                        {showAdvancedCols && <td className="col-tax">{row.sgst.toFixed(2)}</td>}
+                                        {showAdvancedCols && <td className="col-tax">{row.cgst.toFixed(2)}</td>}
+                                        {showAdvancedCols && <td className="col-tax">{row.igst.toFixed(2)}</td>}
                                         <td className="col-tax">{row.tax.toFixed(2)}</td>
                                         <td className="col-total">{row.total.toFixed(2)}</td>
-                                        <td className="col-remarks">
-                                            <input 
-                                                id={`cell-${idx}-remarks`}
-                                                value={row.remarks} 
-                                                onChange={e => updateRow(idx, 'remarks', e.target.value)} 
-                                                onKeyDown={e => handleCellKeyDown(e, idx, 'remarks')}
-                                                onFocus={() => { setActiveRowIdx(idx); setActiveCol('remarks') }} 
-                                            />
-                                        </td>
+                                        {showAdvancedCols && (
+                                            <td className="col-remarks">
+                                                <input 
+                                                    id={`cell-${idx}-remarks`}
+                                                    value={row.remarks} 
+                                                    onChange={e => updateRow(idx, 'remarks', e.target.value)} 
+                                                    onKeyDown={e => handleCellKeyDown(e, idx, 'remarks')}
+                                                    onFocus={() => { setActiveRowIdx(idx); setActiveCol('remarks') }} 
+                                                />
+                                            </td>
+                                        )}
                                     </tr>
                                 ))}
                             </tbody>
@@ -1066,15 +1215,21 @@ function SupermarketPOSContent({ printBill, isActive, onBillNoChange }) {
                                     <td colSpan={3} className="totals-label">TOTALS</td>
                                     <td></td>
                                     <td>{totalItems.toFixed(2)}</td>
-                                    <td colSpan={4}></td>
-                                    <td></td><td></td><td></td><td></td>
-                                    <td>{totalDiscount.toFixed(2)}</td>
-                                    <td>{computed.reduce((s,r)=>s+r.sgst,0).toFixed(2)}</td>
-                                    <td>{computed.reduce((s,r)=>s+r.cgst,0).toFixed(2)}</td>
-                                    <td>{computed.reduce((s,r)=>s+r.igst,0).toFixed(2)}</td>
+                                    {showAdvancedCols && <td></td>}
+                                    {showAdvancedCols && <td></td>}
+                                    {showAdvancedCols && <td></td>}
+                                    <td></td>
+                                    {showAdvancedCols && <td></td>}
+                                    {showAdvancedCols && <td></td>}
+                                    <td></td>
+                                    {showAdvancedCols && <td></td>}
+                                    {showAdvancedCols && <td>{totalDiscount.toFixed(2)}</td>}
+                                    {showAdvancedCols && <td>{computed.reduce((s,r)=>s+r.sgst,0).toFixed(2)}</td>}
+                                    {showAdvancedCols && <td>{computed.reduce((s,r)=>s+r.cgst,0).toFixed(2)}</td>}
+                                    {showAdvancedCols && <td>{computed.reduce((s,r)=>s+r.igst,0).toFixed(2)}</td>}
                                     <td>{computed.reduce((s,r)=>s+r.tax,0).toFixed(2)}</td>
                                     <td className="grand-total-cell">{subTotal.toFixed(2)}</td>
-                                    <td></td>
+                                    {showAdvancedCols && <td></td>}
                                 </tr>
                             </tfoot>
                         </table>
@@ -1083,12 +1238,28 @@ function SupermarketPOSContent({ printBill, isActive, onBillNoChange }) {
 
                 {/* ── BILLING SUMMARY PANEL ── */}
                 <div className="sm-summary-panel">
+                    {/* Live Total Header (Fixed Visibility) */}
+                    <div style={{
+                        background: 'linear-gradient(180deg, #0277bd 0%, #01579b 100%)',
+                        color: '#fff',
+                        padding: '15px 10px',
+                        textAlign: 'center',
+                        flexShrink: 0,
+                        borderBottom: '3px solid #c6f53d',
+                        boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
+                        zIndex: 10
+                    }}>
+                        <div style={{ fontSize: '12px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', opacity: 0.9, marginBottom: '4px' }}>
+                            Net Amount
+                        </div>
+                        <div style={{ fontSize: '36px', fontWeight: 900, lineHeight: 1, textShadow: '1px 2px 4px rgba(0,0,0,0.5)' }}>
+                            ₹{grandTotal.toFixed(2)}
+                        </div>
+                    </div>
+                    
                     <div className="sm-summary-header">Billing Summary</div>
-                    <div className="sm-summary-field">
+                    <div className="sm-summary-field" style={{ display: 'none' }}>
                         <label>Bill Type</label>
-                        <select value={billType} onChange={e => setBillType(e.target.value)}>
-                            <option>3 Inch</option><option>2 Inch</option><option>A4</option><option>A5</option>
-                        </select>
                     </div>
                     <div className="sm-summary-field">
                         <label>Bill No</label>
@@ -1327,10 +1498,51 @@ function SupermarketPOSContent({ printBill, isActive, onBillNoChange }) {
                             <button onClick={() => setShowSettlement(false)}>✕</button>
                         </div>
                         <div className="sm-tender-body">
-                            <div className="tender-row total">
-                                <label>Net Amount payable</label>
-                                <br />
-                                <span>₹{grandTotal.toFixed(2)}</span>
+                            <div className="tender-row total" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                <label style={{ color: '#0f172a', fontWeight: 'bold' }}>Net Amount Payable (Editable)</label>
+                                <input 
+                                    type="number" 
+                                    min="0" 
+                                    step="0.01" 
+                                    value={editableGrandTotal !== undefined ? editableGrandTotal : grandTotal.toFixed(2)} 
+                                    onChange={handleEditableGrandTotalChange} 
+                                    style={{ 
+                                        fontSize: '24px', 
+                                        fontWeight: 'bold', 
+                                        color: '#22c55e', 
+                                        background: '#f8fafc', 
+                                        border: '2px solid #cbd5e1', 
+                                        borderRadius: '8px', 
+                                        padding: '5px 10px', 
+                                        width: '100%', 
+                                        textAlign: 'right' 
+                                    }} 
+                                />
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginTop: '10px', marginBottom: '15px', width: '100%' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                    <label style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '13px', marginBottom: '4px' }}>Discount (%)</label>
+                                    <input 
+                                        type="number" 
+                                        min="0" 
+                                        max="100" 
+                                        step="0.1" 
+                                        value={disPctHeader} 
+                                        onChange={handleDiscountPctChange} 
+                                        style={{ width: '100%', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '6px', color: '#0f172a', background: '#fff' }}
+                                    />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                    <label style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '13px', marginBottom: '4px' }}>Discount (₹)</label>
+                                    <input 
+                                        type="number" 
+                                        min="0" 
+                                        step="0.01" 
+                                        value={(subTotal * (parseFloat(disPctHeader) / 100)).toFixed(2)} 
+                                        onChange={handleDiscountAmtChange} 
+                                        style={{ width: '100%', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '6px', color: '#0f172a', background: '#fff' }}
+                                    />
+                                </div>
                             </div>
                             <div className="tender-row mt-3">
                                 <label>Cash</label>
@@ -1347,28 +1559,15 @@ function SupermarketPOSContent({ printBill, isActive, onBillNoChange }) {
 
                             <div className="sm-template-section" style={{ margin: '20px 0', background: 'none', border: 'none', boxShadow: 'none', padding: 0 }}>
                                 <div className="sm-template-toggle" style={{ marginBottom: '16px', display: 'flex', gap: '10px' }}>
-                                    <button 
-                                        className={`sm-template-btn ${billTemplate === 'standard' ? 'active' : ''}`}
-                                        onClick={() => setBillTemplate('standard')}
-                                        style={{ flex: 1, color: '#0f172a', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '8px', background: billTemplate === 'standard' ? '#e2e8f0' : '#fff' }}
-                                    >
-                                        <span className="sm-icon">🧾</span>
-                                        <div className="info" style={{ display: 'inline-block', marginLeft: '8px', textAlign: 'left' }}>
-                                            <div className="title" style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '13px' }}>Standard</div>
-                                            <div className="sub" style={{ color: '#475569', fontSize: '11px' }}>3-inch Thermal</div>
-                                        </div>
-                                    </button>
-                                    <button 
-                                        className={`sm-template-btn pharmacy ${billTemplate === 'pharmacy' ? 'active' : ''}`}
-                                        onClick={() => setBillTemplate('pharmacy')}
-                                        style={{ flex: 1, color: '#0f172a', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '8px', background: billTemplate === 'pharmacy' ? '#e2e8f0' : '#fff' }}
-                                    >
-                                        <span className="sm-icon">💊</span>
-                                        <div className="info" style={{ display: 'inline-block', marginLeft: '8px', textAlign: 'left' }}>
-                                            <div className="title" style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '13px' }}>Pharmacy</div>
-                                            <div className="sub" style={{ color: '#475569', fontSize: '11px' }}>A4 Tax Invoice</div>
-                                        </div>
-                                    </button>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', background: '#f8fafc', padding: '10px 15px', borderRadius: '8px', border: '1px solid #cbd5e1', flex: 1 }}>
+                                        <input 
+                                            type="checkbox" 
+                                            checked={printWithGst} 
+                                            onChange={(e) => setPrintWithGst(e.target.checked)} 
+                                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                                        />
+                                        <span style={{ fontWeight: 'bold', color: '#0f172a' }}>Print with GST</span>
+                                    </label>
                                 </div>
 
                                 {billTemplate === 'pharmacy' && (
@@ -1655,8 +1854,27 @@ function SupermarketPOSContent({ printBill, isActive, onBillNoChange }) {
 }
 
 export default function SupermarketPOS({ printBill }) {
-    const [tabs, setTabs] = useState([{ id: Date.now(), title: 'New Order' }]);
-    const [activeTabId, setActiveTabId] = useState(tabs[0].id);
+    const [tabs, setTabs] = useState(() => {
+        const saved = localStorage.getItem('sm_pos_tabs');
+        if (saved) {
+            try { return JSON.parse(saved); } catch (e) {}
+        }
+        return [{ id: Date.now(), title: 'New Order' }];
+    });
+    
+    const [activeTabId, setActiveTabId] = useState(() => {
+        const saved = localStorage.getItem('sm_pos_active_tab');
+        if (saved) return Number(saved);
+        return tabs[0].id;
+    });
+
+    useEffect(() => {
+        localStorage.setItem('sm_pos_tabs', JSON.stringify(tabs));
+    }, [tabs]);
+
+    useEffect(() => {
+        localStorage.setItem('sm_pos_active_tab', activeTabId);
+    }, [activeTabId]);
 
     const addTab = () => {
         const id = Date.now();
@@ -1669,6 +1887,14 @@ export default function SupermarketPOS({ printBill }) {
         if (tabs.length === 1) return; // Prevent closing the last tab
         const newTabs = tabs.filter(t => t.id !== id);
         setTabs(newTabs);
+        
+        // Cleanup local storage for this tab
+        Object.keys(localStorage).forEach(key => {
+            if (key.endsWith(`_${id}`)) {
+                localStorage.removeItem(key);
+            }
+        });
+
         if (activeTabId === id) {
             setActiveTabId(newTabs[0].id);
         }
@@ -1732,6 +1958,7 @@ export default function SupermarketPOS({ printBill }) {
                         style={{ display: activeTabId === tab.id ? 'block' : 'none' }}
                     >
                         <SupermarketPOSContent 
+                            tabId={tab.id}
                             printBill={printBill} 
                             isActive={activeTabId === tab.id}
                             onBillNoChange={(billNo) => handleBillNoChange(tab.id, billNo)}

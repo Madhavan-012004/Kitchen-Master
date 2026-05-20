@@ -144,13 +144,15 @@ public class PrintService {
             if (restaurant.getPhone() != null) {
                 write(out, "Ph: " + restaurant.getPhone() + "\n");
             }
-            if (restaurant.getGstNumber() != null && !restaurant.getGstNumber().isEmpty()) {
+            boolean printGst = Boolean.TRUE.equals(order.getPrintWithGst()) || (order.getPrintWithGst() == null && order.getTaxAmount() != null && order.getTaxAmount() > 0.0);
+
+            if (printGst && restaurant.getGstNumber() != null && !restaurant.getGstNumber().isEmpty()) {
                 write(out, "GSTIN: " + restaurant.getGstNumber() + "\n");
             }
             
             write(out, "--------------------------------\n");
             write(out, BOLD_ON);
-            write(out, "TAX INVOICE\n");
+            write(out, printGst ? "TAX INVOICE\n" : "RETAIL BILL\n");
             write(out, BOLD_OFF);
             write(out, "--------------------------------\n");
 
@@ -167,25 +169,38 @@ public class PrintService {
 
             // Items Table
             write(out, BOLD_ON);
-            // Example format: 20 chars name, 3 qty, 7 price
-            write(out, String.format("%-18s %3s %7s\n", "Item", "Qty", "Amt"));
+            write(out, String.format("%-6s %-12s %4s %8s\n", "Cat", "Item", "Qty", "Amt"));
             write(out, BOLD_OFF);
             write(out, "--------------------------------\n");
 
             if (order.getItems() != null) {
                 for (OrderItem item : order.getItems()) {
+                    String cat = item.getCategory() != null ? item.getCategory() : "-";
+                    if (cat.length() > 6) cat = cat.substring(0, 6);
                     String name = item.getName();
-                    if (name.length() > 18) name = name.substring(0, 18);
+                    if (name.length() > 12) name = name.substring(0, 12);
                     double tot = item.getPrice() * item.getQuantity();
                     
-                    write(out, String.format("%-18s %3d %7.2f\n", name, item.getQuantity(), tot));
+                    write(out, String.format("%-6s %-12s %4d %8.2f\n", cat, name, item.getQuantity(), tot));
                 }
             }
             write(out, "--------------------------------\n");
 
             // Totals
             write(out, ALIGN_RIGHT);
-            write(out, String.format("Subtotal:  %7.2f\n", order.getSubtotal() != null ? order.getSubtotal() : 0.0));
+            
+            double subtotal = order.getSubtotal() != null ? order.getSubtotal() : 0.0;
+            double extraTotal = 0.0;
+            if (order.getExtraCharges() != null && !order.getExtraCharges().isEmpty()) {
+                for (com.probloom.model.entity.ExtraCharge charge : order.getExtraCharges()) {
+                    extraTotal += charge.getAmount();
+                }
+            }
+            double discount = order.getDiscountAmount() != null ? order.getDiscountAmount() : 0.0;
+            double tax = printGst && order.getTaxAmount() != null ? order.getTaxAmount() : 0.0;
+            double finalTotal = subtotal + extraTotal + tax - discount;
+
+            write(out, String.format("Subtotal:  %7.2f\n", subtotal));
             
             if (order.getExtraCharges() != null && !order.getExtraCharges().isEmpty()) {
                 for (com.probloom.model.entity.ExtraCharge charge : order.getExtraCharges()) {
@@ -195,20 +210,20 @@ public class PrintService {
                 }
             }
             
-            if (order.getTaxAmount() != null && order.getTaxAmount() > 0) {
-                double halfTax = order.getTaxAmount() / 2.0;
+            if (printGst && tax > 0) {
+                double halfTax = tax / 2.0;
                 write(out, String.format("SGST:  %7.2f\n", halfTax));
                 write(out, String.format("CGST:  %7.2f\n", halfTax));
             }
 
-            if (order.getDiscountAmount() != null && order.getDiscountAmount() > 0) {
-                write(out, String.format("Discount: -%7.2f\n", order.getDiscountAmount()));
+            if (discount > 0) {
+                write(out, String.format("Discount: -%7.2f\n", discount));
             }
             
             write(out, "--------------------------------\n");
             write(out, BOLD_ON);
             write(out, SIZE_DOUBLE_H);
-            write(out, String.format("TOTAL: %7.2f\n", order.getTotal() != null ? order.getTotal() : 0.0));
+            write(out, String.format("TOTAL: %7.2f\n", finalTotal));
             write(out, SIZE_NORMAL);
             write(out, BOLD_OFF);
             write(out, "--------------------------------\n");

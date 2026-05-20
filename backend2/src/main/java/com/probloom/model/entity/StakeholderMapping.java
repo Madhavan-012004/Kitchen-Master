@@ -31,12 +31,14 @@ public class StakeholderMapping {
     /** The stakeholder (investor / silent partner) */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "stakeholder_id", nullable = false)
+    @org.hibernate.annotations.OnDelete(action = org.hibernate.annotations.OnDeleteAction.CASCADE)
     @JsonIgnore
     private User stakeholder;
 
     /** The restaurant owner (licence holder) whose data this stakeholder can view */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "restaurant_id", nullable = false)
+    @org.hibernate.annotations.OnDelete(action = org.hibernate.annotations.OnDeleteAction.CASCADE)
     @JsonIgnore
     private User restaurant;
 

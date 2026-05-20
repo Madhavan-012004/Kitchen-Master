@@ -2,19 +2,15 @@ package com.probloom.config;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
-import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Profile;
 
 import javax.sql.DataSource;
-import java.sql.Connection;
 import java.sql.Statement;
 import java.util.HashMap;
 import java.util.Map;
@@ -23,7 +19,7 @@ import java.util.Map;
  * Configures the dual routing datasource for standalone mode.
  *
  * Two datasources are wired:
- *  - "offline" → embedded PostgreSQL (port 5433, always available)
+ *  - "offline" → embedded PostgreSQL (port 5434, always available)
  *  - "online"  → cloud PostgreSQL   (from application.yml env vars)
  *
  * The DualRoutingDataSource delegates to the correct one based on
@@ -44,11 +40,9 @@ public class DataSourceConfig {
     @Value("${spring.datasource.password:root}")
     private String cloudPassword;
 
-    @Autowired
-    private EmbeddedPostgres embeddedPostgres;
-
     @Bean
     @Primary
+    @SuppressWarnings("null")
     public DataSource dataSource() {
         // ── Offline (embedded) datasource ────────────────────────────────
         DataSource offlineDs = buildOfflineDataSource();
@@ -109,7 +103,7 @@ public class DataSourceConfig {
     private void ensureLocalDatabase() {
         String dbName = "km_local";
         // Connect to the default "postgres" database to run CREATE DATABASE
-        String adminUrl = "jdbc:postgresql://localhost:5433/postgres";
+        String adminUrl = "jdbc:postgresql://localhost:5434/postgres";
         try (java.sql.Connection conn = java.sql.DriverManager.getConnection(adminUrl, "postgres", "postgres");
              Statement stmt = conn.createStatement()) {
             // Check if database exists
@@ -128,7 +122,7 @@ public class DataSourceConfig {
     private String resolveCloudUrl() {
         // If cloud URL is not set or points to embedded, use a placeholder that
         // will return connection errors gracefully until the user configures it.
-        if (cloudUrl == null || cloudUrl.contains("5433") || cloudUrl.contains("km_local")) {
+        if (cloudUrl == null || cloudUrl.contains("5434") || cloudUrl.contains("km_local")) {
             // Use the external PG from the environment (original config)
             String host = System.getenv("DB_HOST");
             String port = System.getenv("DB_PORT");

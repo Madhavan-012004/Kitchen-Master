@@ -147,8 +147,8 @@ export default function EmployeesPage() {
                             <div className="form-group">
                                 <label>Role</label>
                                 <select value={formData.role} onChange={e => setFormData({ ...formData, role: e.target.value })}>
-                                    <option value="waiter">Waiter</option>
-                                    <option value="kitchen">Kitchen</option>
+                                    <option value="waiter">CAPTAIN</option>
+                                    <option value="kot">KOT</option>
                                     <option value="manager">Manager</option>
                                     <option value="owner">Owner</option>
                                 </select>

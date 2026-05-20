@@ -4,6 +4,7 @@ import com.probloom.config.CurrentUserResolver;
 import com.probloom.model.entity.Orders;
 import com.probloom.model.entity.User;
 import com.probloom.service.OrderService;
+import com.probloom.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -38,7 +39,7 @@ public class OrderController {
 
             java.util.Optional<User> restaurantOpt = userRepository.findById(Objects.requireNonNull(restaurantId));
             if (restaurantOpt.isEmpty()) {
-                throw new com.probloom.exception.ResourceNotFoundException("Restaurant not found (ID: " + restaurantId + ")");
+                throw new ResourceNotFoundException("Restaurant not found (ID: " + restaurantId + ")");
             }
             User restaurant = Objects.requireNonNull(restaurantOpt.get());
             
@@ -67,7 +68,7 @@ public class OrderController {
         try {
             java.util.Optional<User> restaurantOpt = userRepository.findById(restaurantId);
             if (restaurantOpt.isEmpty()) {
-                throw new com.probloom.exception.ResourceNotFoundException("Restaurant not found");
+                throw new ResourceNotFoundException("Restaurant not found");
             }
             User restaurant = Objects.requireNonNull(restaurantOpt.get());
             
@@ -97,10 +98,11 @@ public class OrderController {
             @RequestParam(name = "date", required = false) String date,
             @RequestParam(name = "status", required = true, defaultValue = "All") String status,
             @RequestParam(name = "orderType", required = false) String orderType,
+            @RequestParam(name = "search", required = false) String search,
             @RequestParam(name = "limit", defaultValue = "50") int limit) {
         try {
             User restaurant = resolver.getRestaurantOwner();
-            List<Orders> orders = orderService.getFilteredHistory(restaurant, date, status, orderType, limit);
+            List<Orders> orders = orderService.getFilteredHistory(restaurant, date, status, orderType, search, limit);
             List<Orders> resultList = new java.util.ArrayList<>(orders != null ? orders : java.util.Collections.emptyList());
             
             Map<String, Object> data = new java.util.HashMap<>();
@@ -141,8 +143,14 @@ public class OrderController {
     @PatchMapping("/{id}/status")
     public ResponseEntity<?> updateStatus(@PathVariable("id") @NonNull Long id, @RequestBody @NonNull Map<String, Object> body) {
         User restaurant = resolver.getRestaurantOwner();
-        return ok("Order status updated", orderService.updateStatus(restaurant, id, (String) body.get("status")));
+        String status = (String) body.get("status");
+        String paymentStatus = (String) body.get("paymentStatus");
+        String paymentMethod = (String) body.get("paymentMethod");
+        Boolean printWithGst = body.containsKey("printWithGst") ? (Boolean) body.get("printWithGst") : null;
+        
+        return ok("Order status updated", orderService.updateStatus(restaurant, id, status, paymentStatus, paymentMethod, printWithGst));
     }
+
 
     @PatchMapping("/{id}/notes")
     public ResponseEntity<?> appendNotes(@PathVariable("id") @NonNull Long id, @RequestBody @NonNull Map<String, Object> body) {
@@ -259,6 +267,17 @@ public class OrderController {
         User creator = resolver.getCurrentUser();
         Orders order = orderService.create(restaurant, creator, body);
         return ok("Order synced", Map.of("order", order, "synced", true));
+    }
+
+    @DeleteMapping("/history/clear")
+    public ResponseEntity<?> clearHistory() {
+        try {
+            User restaurant = resolver.getRestaurantOwner();
+            orderService.clearHistory(restaurant);
+            return ok("Order history cleared", null);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("success", false, "message", e.getMessage()));
+        }
     }
 
     private ResponseEntity<Map<String, Object>> ok(String message, Object data) {

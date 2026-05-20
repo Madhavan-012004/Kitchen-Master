@@ -28,19 +28,29 @@ public class LicenseController {
     }
 
     /**
-     * GET /api/license/generate-request
+     * POST /api/license/generate-request
      * Generates the machine.req data that the customer needs to send to ProBloom HQ.
-     * The frontend will trigger a download of this JSON content as machine.req
+     * The frontend will trigger a download of this JSON content as machine.req.
+     * customerDetails is optional — can be an empty object {}.
      */
     @PostMapping("/generate-request")
-    public ResponseEntity<Map<String, Object>> generateRequest(@RequestBody Map<String, Object> customerDetails) {
-        Map<String, Object> requestData = licenseService.generateLicenseRequest(customerDetails);
+    public ResponseEntity<Map<String, Object>> generateRequest(
+            @RequestBody(required = false) Map<String, Object> customerDetails) {
+        try {
+            Map<String, Object> requestData = licenseService.generateLicenseRequest(customerDetails);
 
-        Map<String, Object> response = new HashMap<>();
-        response.put("success", true);
-        response.put("message", "License request generated. Download this file and email it to ProBloom HQ.");
-        response.put("requestData", requestData);
-        return ResponseEntity.ok(response);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "License request generated. Download this file and email it to ProBloom HQ.");
+            response.put("requestData", requestData);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> err = new HashMap<>();
+            err.put("success", false);
+            err.put("message", "Failed to generate license request: " + e.getMessage());
+            e.printStackTrace(); // This will go to our log file
+            return ResponseEntity.internalServerError().body(err);
+        }
     }
 
     /**

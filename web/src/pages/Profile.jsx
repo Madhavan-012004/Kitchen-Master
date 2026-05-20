@@ -34,6 +34,10 @@ export default function ProfilePage() {
         currency: user?.currency || 'INR',
         gstNumber: user?.gstNumber || '',
         taxRate: user?.taxRate || 5,
+        bankName: user?.bankName || '',
+        bankAccountName: user?.bankAccountName || '',
+        bankAccountNumber: user?.bankAccountNumber || '',
+        bankIfsc: user?.bankIfsc || '',
         geofenceRadius: user?.geofenceRadius || 500,
         totalTables: user?.totalTables || 10,
         acTables: user?.acTables || '',
@@ -42,6 +46,7 @@ export default function ProfilePage() {
         tableCategories: user?.tableCategories || [],
         
         // Printer Settings
+        basicBillTemplate: user?.basicBillTemplate || 'standard',
         billPrinterEnabled: user?.billPrinterEnabled ?? true,
         counterPrinterIp: user?.counterPrinterIp || '',
         kotPrinterEnabled: user?.kotPrinterEnabled ?? true,
@@ -55,6 +60,7 @@ export default function ProfilePage() {
         largeFontKOT: user?.largeFontKOT ?? false,
         itemWiseKOT: user?.itemWiseKOT ?? false,
         printCount: user?.printCount ?? 1,
+        printCategoryInBill: user?.printCategoryInBill ?? false,
         
         // Other Settings
         quickMode: user?.quickMode ?? false,
@@ -66,6 +72,7 @@ export default function ProfilePage() {
         lowStockAlert: user?.lowStockAlert ?? true,
         allowNoStockSale: user?.allowNoStockSale ?? true,
         trackCustomerDetail: user?.trackCustomerDetail ?? true,
+        stockCategories: user?.stockCategories || 'General,Grocery,Clothing,Pharmacy,Others',
 
         // Online Order Settings
         onlineAutoAccept: user?.onlineAutoAccept ?? false,
@@ -83,6 +90,7 @@ export default function ProfilePage() {
     const [initialTableMeta, setInitialTableMeta] = useState({});
     const [activeAccordion, setActiveAccordion] = useState('profile');
     const [showTVModal, setShowTVModal] = useState(false);
+    const [editingCategoryName, setEditingCategoryName] = useState(null);
     
     const [csvFile, setCsvFile] = useState(null);
 
@@ -168,7 +176,17 @@ export default function ProfilePage() {
                 address: user.address || '',
                 currency: user.currency || 'INR',
                 gstNumber: user.gstNumber || '',
-                taxRate: user.taxRate || 5,
+                dlNumber: user.dlNumber || '',
+                tinNumber: user.tinNumber || '',
+                cinNumber: user.cinNumber || '',
+                fssaiNumber: user.fssaiNumber || '',
+                panNumber: user.panNumber || '',
+                bankName: user.bankName || '',
+                bankAccountName: user.bankAccountName || '',
+                bankAccountNumber: user.bankAccountNumber || '',
+                bankIfsc: user.bankIfsc || '',
+                taxRate: user.taxRate !== undefined ? user.taxRate : 5,
+                pharmacyFontSize: user.pharmacyFontSize || 11,
                 geofenceRadius: user.geofenceRadius || 500,
                 totalTables: user.totalTables || 10,
                 acTables: user.acTables || '',
@@ -176,6 +194,8 @@ export default function ProfilePage() {
                 tableMetadata: tableMetaParsed,
                 tableCategories: (typeof user.tableCategories === 'string') ? JSON.parse(user.tableCategories) : (user.tableCategories || []),
                 
+                // Printer Settings
+                basicBillTemplate: user.basicBillTemplate || 'standard',
                 billPrinterEnabled: user.billPrinterEnabled ?? true,
                 counterPrinterIp: user.counterPrinterIp || '',
                 kotPrinterEnabled: user.kotPrinterEnabled ?? true,
@@ -189,6 +209,7 @@ export default function ProfilePage() {
                 largeFontKOT: user.largeFontKOT ?? false,
                 itemWiseKOT: user.itemWiseKOT ?? false,
                 printCount: user.printCount ?? 1,
+                printCategoryInBill: user.printCategoryInBill ?? false,
                 
                 quickMode: user.quickMode ?? false,
                 manualQuantity: user.manualQuantity ?? false,
@@ -199,6 +220,7 @@ export default function ProfilePage() {
                 lowStockAlert: user.lowStockAlert ?? true,
                 allowNoStockSale: user.allowNoStockSale ?? true,
                 trackCustomerDetail: user.trackCustomerDetail ?? true,
+                stockCategories: user.stockCategories || 'General,Grocery,Clothing,Pharmacy,Others',
 
                 onlineAutoAccept: user.onlineAutoAccept ?? false,
                 onlineAutoPrint: user.onlineAutoPrint ?? false,
@@ -296,6 +318,98 @@ export default function ProfilePage() {
             showToast('error', error.response?.data?.message || 'Update failed');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleAddCategorySubmit = async () => {
+        const input = document.getElementById('stock-categories-add-input');
+        const val = input ? input.value.trim() : '';
+        if (!val) return;
+
+        const current = formData.stockCategories ? formData.stockCategories.split(',').map(c => c.trim()) : [];
+        if (current.includes(val)) {
+            showToast('error', 'Category already exists');
+            return;
+        }
+
+        const updated = [...current, val].join(',');
+        setFormData(prev => ({ ...prev, stockCategories: updated }));
+        if (input) input.value = '';
+
+        // Auto-save the profile to backend
+        setLoading(true);
+        try {
+            const payload = { ...formData, stockCategories: updated, accentColor };
+            if (typeof payload.tableMetadata !== 'string') payload.tableMetadata = JSON.stringify(payload.tableMetadata);
+            if (typeof payload.tableCategories !== 'string') payload.tableCategories = JSON.stringify(payload.tableCategories);
+
+            const res = await api.put('/auth/profile', payload);
+            if (res.data.success) {
+                updateUser(res.data.data.user);
+                showToast('success', 'Category added successfully!');
+            }
+        } catch (error) {
+            showToast('error', error.response?.data?.message || 'Failed to add category');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleRenameCategorySubmit = async (oldName, newName) => {
+        if (!newName || oldName === newName) {
+            setEditingCategoryName(null);
+            return;
+        }
+
+        const current = formData.stockCategories ? formData.stockCategories.split(',').map(c => c.trim()) : [];
+        if (current.includes(newName)) {
+            showToast('error', 'New category name already exists');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            // 1. Rename on backend (which also updates user settings)
+            const resRename = await api.put('/api/inventory/categories/rename', { oldName, newName });
+            if (resRename.data.success) {
+                // 2. Fetch updated user profile
+                const resProfile = await api.get('/auth/me');
+                if (resProfile.data.success) {
+                    const u = resProfile.data.data;
+                    updateUser(u);
+                    setFormData(prev => ({ ...prev, stockCategories: u.stockCategories }));
+                    showToast('success', 'Category renamed successfully across all items!');
+                }
+            }
+        } catch (error) {
+            showToast('error', error.response?.data?.message || 'Rename failed');
+        } finally {
+            setEditingCategoryName(null);
+            setLoading(false);
+        }
+    };
+
+    const handleDeleteCategorySubmit = async (catName) => {
+        if (window.confirm(`Are you sure you want to delete "${catName}"? All items belonging to this category will automatically be reassigned to "General".`)) {
+            setLoading(true);
+            try {
+                // 1. Delete on backend (which sets items to General and updates user settings)
+                const resDel = await api.delete(`/api/inventory/categories?name=${encodeURIComponent(catName)}`);
+                if (resDel.data.success) {
+                    // 2. Fetch updated user profile
+                    const resProfile = await api.get('/auth/me');
+                    if (resProfile.data.success) {
+                        const u = resProfile.data.data;
+                        updateUser(u);
+                        setFormData(prev => ({ ...prev, stockCategories: u.stockCategories }));
+                        showToast('success', `Category "${catName}" deleted successfully!`);
+                    }
+                }
+            } catch (error) {
+                showToast('error', error.response?.data?.message || 'Delete failed');
+            } finally {
+                setLoading(false);
+            }
         }
     };
 
@@ -590,7 +704,7 @@ export default function ProfilePage() {
 
     const handleDownloadWaitlistQR = () => {
         if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-            alert("⚠️ WARNING: You are currently accessing Kitchen Master via 'localhost'. The generated QR code will point to localhost and will NOT work on other devices like phones. \n\nPlease access Kitchen Master using your computer's local Wi-Fi IP address (e.g. 192.168.x.x:5173) to generate a working QR code.");
+            alert("⚠️ WARNING: You are currently accessing ProBloom via 'localhost'. The generated QR code will point to localhost and will NOT work on other devices like phones. \n\nPlease access ProBloom using your computer's local Wi-Fi IP address (e.g. 192.168.x.x:5173) to generate a working QR code.");
             return;
         }
         
@@ -607,6 +721,22 @@ export default function ProfilePage() {
         
         a.remove();
         showToast('success', 'Waitlist QR opened. Right-click to save or print.');
+    };
+
+    const [backupLoading, setBackupLoading] = useState(false);
+    const handleManualBackup = async () => {
+        if (!window.confirm('Do you want to create a manual database backup now?')) return;
+        setBackupLoading(true);
+        try {
+            const res = await api.post('/admin/database/export');
+            if (res.data.success) {
+                showToast('success', `Database backup successful! File: ${res.data.data.fileName}`);
+            }
+        } catch (err) {
+            showToast('error', err.response?.data?.message || 'Backup failed');
+        } finally {
+            setBackupLoading(false);
+        }
     };
 
     return (
@@ -842,12 +972,24 @@ export default function ProfilePage() {
                                         <input name="gstNumber" className="form-input" value={formData.gstNumber} onChange={handleInputChange} placeholder="e.g. 22AAAAA0000A1Z5" />
                                     </div>
                                     <div className="form-field">
+                                        <label>DL Number (Pharmacy)</label>
+                                        <input name="dlNumber" className="form-input" value={formData.dlNumber || ''} onChange={handleInputChange} placeholder="e.g. TN-05-20-..." />
+                                    </div>
+                                    <div className="form-field">
+                                        <label>TIN Number</label>
+                                        <input name="tinNumber" className="form-input" value={formData.tinNumber || ''} onChange={handleInputChange} placeholder="TIN Number" />
+                                    </div>
+                                    <div className="form-field">
+                                        <label>CIN Number</label>
+                                        <input name="cinNumber" className="form-input" value={formData.cinNumber || ''} onChange={handleInputChange} placeholder="CIN Number" />
+                                    </div>
+                                    <div className="form-field">
                                         <label>Currency</label>
                                         <input name="currency" className="form-input" value={formData.currency} onChange={handleInputChange} placeholder="e.g. INR" />
                                     </div>
                                     <div className="form-field">
                                         <label>Global Tax Rate (%)</label>
-                                        <input name="taxRate" type="number" className="form-input" value={formData.taxRate} onChange={handleInputChange} />
+                                        <input name="taxRate" type="number" min="0" step="0.1" className="form-input" value={formData.taxRate} onChange={handleInputChange} />
                                     </div>
 
                                     <div className="form-field full-width">
@@ -861,9 +1003,32 @@ export default function ProfilePage() {
                                         />
                                     </div>
                                 </div>
+                                
+                                {/* BANK DETAILS SECTION IN GENERAL SETTINGS */}
+                                <h4 style={{ marginTop: '20px', marginBottom: '10px', color: 'var(--text-main)' }}>Bank Details</h4>
+                                <div className="form-group-grid">
+                                    <div className="form-field">
+                                        <label>Bank Name</label>
+                                        <input name="bankName" type="text" className="form-input" value={formData.bankName} onChange={handleInputChange} placeholder="e.g. State Bank of India" />
+                                    </div>
+                                    <div className="form-field">
+                                        <label>Account Name</label>
+                                        <input name="bankAccountName" type="text" className="form-input" value={formData.bankAccountName} onChange={handleInputChange} placeholder="e.g. Akash Enterprises" />
+                                    </div>
+                                    <div className="form-field">
+                                        <label>Account Number</label>
+                                        <input name="bankAccountNumber" type="text" className="form-input" value={formData.bankAccountNumber} onChange={handleInputChange} />
+                                    </div>
+                                    <div className="form-field">
+                                        <label>IFSC Code</label>
+                                        <input name="bankIfsc" type="text" className="form-input" value={formData.bankIfsc} onChange={handleInputChange} />
+                                    </div>
+                                </div>
+                                <div style={{ marginTop: '15px' }}>
                                 <button className="profile-save-btn" onClick={handleSaveProfile} disabled={loading}>
                                     {loading ? 'Saving Changes...' : '💾 Save General Details'}
                                 </button>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -1146,7 +1311,31 @@ export default function ProfilePage() {
                                         </label>
                                     </div>
 
+                                    <div className="setting-row">
+                                        <div className="setting-info">
+                                            <h4>Print Category in Bill</h4>
+                                            <p>Include the item category name column in the 3-inch thermal bill</p>
+                                        </div>
+                                        <label className="switch">
+                                            <input type="checkbox" name="printCategoryInBill" checked={formData.printCategoryInBill} onChange={handleInputChange} />
+                                            <span className="slider round"></span>
+                                        </label>
+                                    </div>
+
                                     <div className="form-group-grid" style={{ marginTop: '15px' }}>
+                                        <div className="form-field full-width" style={{ gridColumn: '1 / -1', marginBottom: '10px' }}>
+                                            <label style={{ display: 'block', fontWeight: 600, color: 'var(--text-main)', marginBottom: '5px' }}>Basic Printing Bill Type Template</label>
+                                            <select 
+                                                className="form-input"
+                                                name="basicBillTemplate"
+                                                value={formData.basicBillTemplate}
+                                                onChange={handleInputChange}
+                                            >
+                                                <option value="standard">Standard 3 inch bill</option>
+                                                <option value="pharmacy">Pharmacy</option>
+                                                <option value="gst">GST bill</option>
+                                            </select>
+                                        </div>
                                         <div className="form-field">
                                             <label>Minimum Price to Print</label>
                                             <input name="minPrintPrice" type="number" className="form-input" value={formData.minPrintPrice} onChange={handleInputChange} />
@@ -1154,6 +1343,10 @@ export default function ProfilePage() {
                                         <div className="form-field">
                                             <label>Print Copies Count</label>
                                             <input name="printCount" type="number" className="form-input" value={formData.printCount} onChange={handleInputChange} min="1" />
+                                        </div>
+                                        <div className="form-field">
+                                            <label>Pharmacy Bill Item Font Size (px)</label>
+                                            <input name="pharmacyFontSize" type="number" className="form-input" value={formData.pharmacyFontSize} onChange={handleInputChange} min="6" max="14" />
                                         </div>
                                     </div>
 
@@ -1282,6 +1475,140 @@ export default function ProfilePage() {
                                 <button className="profile-save-btn" onClick={handleSaveProfile} disabled={loading}>
                                     {loading ? 'Saving Changes...' : '💾 Save App Settings'}
                                 </button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* SECTION: STOCK CATEGORIES CONFIGURATION */}
+                    <div className={`profile-card accordion-item ${activeAccordion === 'stockCategories' ? 'active' : ''}`} style={{ marginTop: '15px' }}>
+                        <div className="accordion-header" onClick={() => toggleAccordion('stockCategories')}>
+                            <h3 className="card-title">📦 Stock Categories Manager</h3>
+                            <span className="accordion-icon">{activeAccordion === 'stockCategories' ? '🔼' : '🔽'}</span>
+                        </div>
+                        
+                        {activeAccordion === 'stockCategories' && (
+                            <div className="accordion-content">
+                                <section className="profile-section">
+                                    <div className="setting-section-header">Manage Stock Categories</div>
+                                    <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '20px', lineHeight: '1.6' }}>
+                                        Create, rename, or delete stock categories. Renaming a category automatically updates all associated inventory items. Deleting a category moves its items back to <strong>General</strong>.
+                                    </p>
+
+                                    {/* ADD NEW CATEGORY */}
+                                    <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+                                        <input 
+                                            id="stock-categories-add-input"
+                                            type="text" 
+                                            className="form-input" 
+                                            placeholder="Enter new category name..."
+                                            style={{ flex: 1 }}
+                                            onKeyDown={async (e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    handleAddCategorySubmit();
+                                                }
+                                            }}
+                                        />
+                                        <button 
+                                            type="button" 
+                                            className="btn-accent" 
+                                            style={{ padding: '0 20px', background: 'var(--inv-primary, #C6F53D)', color: '#000', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}
+                                            onClick={handleAddCategorySubmit}
+                                        >
+                                            ➕ Add
+                                        </button>
+                                    </div>
+
+                                    {/* CATEGORIES LIST TABLE */}
+                                    <div style={{ background: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.08)', overflow: 'hidden' }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                                            <thead>
+                                                <tr style={{ background: 'rgba(255, 255, 255, 0.05)', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                                                    <th style={{ textAlign: 'left', padding: '12px 16px', color: 'var(--text-muted)' }}>Category Name</th>
+                                                    <th style={{ textAlign: 'right', padding: '12px 16px', color: 'var(--text-muted)', width: '180px' }}>Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {(formData.stockCategories || 'General,Grocery,Clothing,Pharmacy,Others')
+                                                    .split(',')
+                                                    .map(c => c.trim())
+                                                    .filter(Boolean)
+                                                    .map(cat => {
+                                                        const isEditingThis = editingCategoryName === cat;
+                                                        return (
+                                                            <tr key={cat} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                                                                <td style={{ padding: '12px 16px' }}>
+                                                                    {isEditingThis ? (
+                                                                        <input 
+                                                                            type="text" 
+                                                                            className="form-input" 
+                                                                            defaultValue={cat} 
+                                                                            id={`edit-cat-input-${cat}`}
+                                                                            style={{ height: '32px', fontSize: '13px', width: '100%', padding: '0 8px' }}
+                                                                            onKeyDown={async (e) => {
+                                                                                if (e.key === 'Enter') {
+                                                                                    e.preventDefault();
+                                                                                    const inputVal = document.getElementById(`edit-cat-input-${cat}`).value.trim();
+                                                                                    handleRenameCategorySubmit(cat, inputVal);
+                                                                                }
+                                                                            }}
+                                                                        />
+                                                                    ) : (
+                                                                        <strong style={{ color: 'var(--text-primary)' }}>{cat}</strong>
+                                                                    )}
+                                                                </td>
+                                                                <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                                                                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                                                        {isEditingThis ? (
+                                                                            <>
+                                                                                <button 
+                                                                                    type="button" 
+                                                                                    style={{ background: 'var(--inv-primary, #C6F53D)', color: '#000', border: 'none', borderRadius: '4px', padding: '4px 10px', fontSize: '11px', cursor: 'pointer', fontWeight: 'bold' }}
+                                                                                    onClick={() => {
+                                                                                        const inputVal = document.getElementById(`edit-cat-input-${cat}`).value.trim();
+                                                                                        handleRenameCategorySubmit(cat, inputVal);
+                                                                                    }}
+                                                                                >
+                                                                                    Save
+                                                                                </button>
+                                                                                <button 
+                                                                                    type="button" 
+                                                                                    style={{ background: 'rgba(255, 255, 255, 0.1)', color: 'var(--text-primary)', border: 'none', borderRadius: '4px', padding: '4px 10px', fontSize: '11px', cursor: 'pointer' }}
+                                                                                    onClick={() => setEditingCategoryName(null)}
+                                                                                >
+                                                                                    Cancel
+                                                                                </button>
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                <button 
+                                                                                    type="button" 
+                                                                                    style={{ background: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-primary)', border: '1px solid rgba(255, 255, 255, 0.15)', borderRadius: '4px', padding: '4px 10px', fontSize: '11px', cursor: 'pointer' }}
+                                                                                    onClick={() => setEditingCategoryName(cat)}
+                                                                                >
+                                                                                    ✏️ Rename
+                                                                                </button>
+                                                                                {cat.toLowerCase() !== 'general' && (
+                                                                                    <button 
+                                                                                        type="button" 
+                                                                                        style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '4px', padding: '4px 10px', fontSize: '11px', cursor: 'pointer' }}
+                                                                                        onClick={() => handleDeleteCategorySubmit(cat)}
+                                                                                    >
+                                                                                        🗑️ Delete
+                                                                                    </button>
+                                                                                )}
+                                                                            </>
+                                                                        )}
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </section>
                             </div>
                         )}
                     </div>
@@ -1635,6 +1962,26 @@ export default function ProfilePage() {
                             Need help setting up your restaurant? Visit our documentation or contact our 24/7 success team for assistance.
                         </p>
                     </div>
+
+                    {user.role === 'owner' && (
+                        <div className="profile-card" style={{ marginTop: '25px', border: '1px solid var(--accent)', background: 'rgba(var(--accent-rgb), 0.05)' }}>
+                            <h3 className="card-title">💾 Database & Backups</h3>
+                            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '15px' }}>
+                                Your system performs an automatic backup every day at 1:00 AM. You can also trigger a manual backup anytime.
+                            </p>
+                            <button 
+                                className="profile-save-btn" 
+                                style={{ width: '100%' }}
+                                onClick={handleManualBackup}
+                                disabled={backupLoading}
+                            >
+                                {backupLoading ? '⚙️ Creating Backup...' : '📦 Create Backup Now'}
+                            </button>
+                            <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '10px', textAlign: 'center' }}>
+                                Backups are stored in the <code>database_dump/</code> folder.
+                            </p>
+                        </div>
+                    )}
                 </div>
                 </div>
             </fieldset>

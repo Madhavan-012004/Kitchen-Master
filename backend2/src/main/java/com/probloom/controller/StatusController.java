@@ -12,11 +12,29 @@ import java.util.Map;
 @RequestMapping("/api/status")
 public class StatusController {
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private javax.sql.DataSource dataSource;
+
     @GetMapping
     public ResponseEntity<?> getStatus() {
+        boolean dbOk = false;
+        try (java.sql.Connection conn = dataSource.getConnection()) {
+            dbOk = conn.isValid(2);
+        } catch (Exception e) {
+            dbOk = false;
+        }
+
+        if (!dbOk) {
+            return ResponseEntity.status(500).body(Map.of(
+                "status", "DOWN",
+                "message", "Database connection failed",
+                "timestamp", LocalDateTime.now().toString()
+            ));
+        }
+
         return ResponseEntity.ok(Map.of(
             "status", "UP",
-            "message", "Kitchen Master Backend is connected and running.",
+            "message", "ProBloom Backend is connected and running.",
             "timestamp", LocalDateTime.now().toString(),
             "environment", "Java Spring Boot"
         ));

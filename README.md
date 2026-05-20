@@ -1,6 +1,6 @@
-# 🍳 Kitchen Master - Full Stack Ecosystem
+# 🍳 ProBloom - Full Stack Ecosystem
 
-Welcome to the **Kitchen Master** project. This is a comprehensive restaurant management system featuring a Java Spring Boot backend, multiple web interfaces for administration and customers, and a mobile application for staff.
+Welcome to the **ProBloom** project. This is a comprehensive restaurant management system featuring a Java Spring Boot backend, multiple web interfaces for administration and customers, and a mobile application for staff.
 
 ---
 
@@ -27,7 +27,7 @@ The backend must be running for any of the interfaces to work.
 cd backend2
 mvn spring-boot:run
 ```
-*Wait until you see `Started KitchenMasterApplication` in the console.*
+*Wait until you see `Started ProBloomApplication` in the console.*
 
 ### 2. Admin Dashboard & POS (Web)
 Used by managers and staff at the counter.

@@ -208,11 +208,11 @@
     border: 1px solid var(--border);
     background-color: var(--bg-secondary) !important;
     color: var(--text-primary) !important;
-    padding: 4px 12px;
+    padding: 4px 10px;
     border-radius: 6px;
-    font-size: 11.5px;
+    font-size: 11px;
     height: 32px;
-    min-width: 120px;
+    min-width: 90px;
     outline: none;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -326,7 +326,7 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
-    min-width: 200px;
+    min-width: 180px;
 }
 .sm-customer-top label {
     font-size: 10px;
@@ -429,7 +429,7 @@
 /* Column widths and alignments */
 .col-sno     { width: 34px; text-align: center; font-weight: 700; color: #8888aa !important; }
 .col-pid     { width: 100px; text-align: center; }
-.col-name    { width: 170px; text-align: left !important; }
+.col-name    { width: auto; min-width: 170px; text-align: left !important; }
 .col-weight  { width: 90px; text-align: center; }
 .col-qty     { width: 60px; text-align: center; font-weight: 700; color: #4ade80 !important; }
 .col-batch   { width: 85px; text-align: center; }
@@ -442,7 +442,7 @@
 .col-disrs   { width: 65px; text-align: right; }
 .col-tax     { width: 55px; text-align: right; }
 .col-total   { width: 85px; text-align: right; font-weight: 800; color: #ff9800 !important; font-size: 12px; }
-.col-remarks { width: 120px; text-align: left; }
+.col-remarks { width: auto; min-width: 120px; text-align: left; }
 
 /* ── ADVANCED PRODUCT SEARCH MODAL ── */
 .sm-search-modal-overlay {
@@ -902,7 +902,7 @@
 }
 .sm-modal-content {
     background: var(--bg-card);
-    width: 600px;
+    width: 900px;
     max-width: 95vw;
     max-height: 90vh;
     display: flex;

@@ -3,7 +3,8 @@ import React, { createContext, useContext, useState, useCallback, useRef, useEff
 const NetworkContext = createContext(null)
 
 // The health endpoint to poll — uses the same base as all other requests
-const HEALTH_URL = '/api/status'
+const isElectron = window.location.protocol === 'file:';
+const HEALTH_URL = isElectron ? 'http://localhost:8080/api/status' : '/api/status';
 const POLL_INTERVAL_MS = 8000
 const RETRY_COUNTDOWN_SEC = 5
 

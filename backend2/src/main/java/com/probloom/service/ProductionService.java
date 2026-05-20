@@ -69,6 +69,7 @@ public class ProductionService {
     }
 
     @Transactional
+    @SuppressWarnings("null")
     public ProductionBatch startProduction(User restaurant, User creator, Long menuItemId, Double quantity) {
         Long safeItemId = Objects.requireNonNull(menuItemId, "Menu Item ID must not be null");
 
@@ -115,7 +116,7 @@ public class ProductionService {
                 .createdBy(creator)
                 .build();
 
-        return Objects.requireNonNull(productionBatchRepository.save(batch));
+        return productionBatchRepository.save(batch);
     }
     
     public List<ProductionBatch> getProductionHistory(User restaurant) {

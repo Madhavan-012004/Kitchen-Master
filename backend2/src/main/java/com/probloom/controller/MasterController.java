@@ -56,6 +56,14 @@ public class MasterController {
         return ok("License generated", masterService.generateLicense(getAdminId(auth), id));
     }
 
+    @PostMapping("/generate-and-email-license")
+    public ResponseEntity<?> generateAndEmailLicense(
+            Authentication auth,
+            @RequestParam("file") @NonNull org.springframework.web.multipart.MultipartFile file,
+            @RequestParam("expiryDate") String expiryDate) {
+        return ok("License generated successfully", masterService.generateAndEmailLicense(getAdminId(auth), file, expiryDate));
+    }
+
     @PutMapping("/{id}/toggle-status")
     public ResponseEntity<?> toggleStatus(Authentication auth, @PathVariable @NonNull Long id) {
         return ok("Status toggled", masterService.toggleStatus(getAdminId(auth), id));

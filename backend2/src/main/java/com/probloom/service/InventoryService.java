@@ -6,6 +6,7 @@ import com.probloom.model.entity.StockMovement;
 import com.probloom.model.entity.User;
 import com.probloom.repository.InventoryItemRepository;
 import com.probloom.repository.StockMovementRepository;
+import com.probloom.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +25,7 @@ public class InventoryService {
     private final InventoryItemRepository inventoryItemRepository;
     private final StockMovementRepository stockMovementRepository;
     private final TransactionService transactionService;
+    private final UserRepository userRepository;
 
     public List<InventoryItem> getAll(@NonNull User restaurant) {
         return inventoryItemRepository.findByRestaurantAndIsActiveTrueOrderByNameAsc(restaurant);
@@ -83,18 +85,27 @@ public class InventoryService {
         InventoryItem savedItem = inventoryItemRepository.save(java.util.Objects.requireNonNull(item));
 
         // Record Initial Expense if cost provided (only for paid quantity, not free packs)
-        if (data.containsKey("recordExpense") && (boolean) data.get("recordExpense") && savedItem.getCostPerUnit() > 0 && savedItem.getCurrentStock() > 0) {
+        boolean recordExpense = data.containsKey("recordExpense") ? (boolean) data.get("recordExpense") : true;
+        if (recordExpense && savedItem.getCostPerUnit() > 0 && savedItem.getCurrentStock() > 0) {
             // Paid packs only (exclude free packs from cost)
             double paidPieces = savedItem.getCurrentStock();
             if (data.containsKey("freePieces")) {
                 paidPieces -= Double.valueOf(data.get("freePieces").toString());
+            } else if (data.containsKey("freeStock")) {
+                paidPieces -= Double.valueOf(data.get("freeStock").toString());
             }
             if (paidPieces > 0) {
+                double baseCost = savedItem.getCostPerUnit() * paidPieces;
+                double gstAmt = 0.0;
+                if (savedItem.getGstPercent() != null && savedItem.getGstPercent() > 0) {
+                    gstAmt = baseCost * savedItem.getGstPercent() / 100.0;
+                }
                 transactionService.create(restaurant, Objects.requireNonNull(Map.of(
-                    "amount", savedItem.getCostPerUnit() * paidPieces,
+                    "amount", baseCost + gstAmt,
                     "category", "Inventory Purchase",
                     "description", "Initial purchase of " + savedItem.getName(),
-                    "paymentMethod", data.getOrDefault("paymentMethod", "Cash")
+                    "paymentMethod", data.getOrDefault("paymentMethod", "Cash"),
+                    "gstAmount", gstAmt
                 )));
             }
         }
@@ -126,6 +137,16 @@ public class InventoryService {
         if (data.containsKey("unit")) item.setUnit(InventoryItem.Unit.valueOf(data.get("unit").toString().toUpperCase()));
         if (data.containsKey("lowStockThreshold")) item.setLowStockThreshold(Double.valueOf(data.get("lowStockThreshold").toString()));
         if (data.containsKey("costPerUnit")) item.setCostPerUnit(Double.valueOf(data.get("costPerUnit").toString()));
+
+        if (data.containsKey("packSize")) item.setPackSize((String) data.get("packSize"));
+        if (data.containsKey("packMultiplier") && data.get("packMultiplier") != null) item.setPackMultiplier(Integer.valueOf(data.get("packMultiplier").toString()));
+        if (data.containsKey("batchNo")) item.setBatchNo((String) data.get("batchNo"));
+        if (data.containsKey("expDate")) item.setExpDate((String) data.get("expDate"));
+        if (data.containsKey("manufacturer")) item.setManufacturer((String) data.get("manufacturer"));
+        if (data.containsKey("supplierName")) item.setSupplierName((String) data.get("supplierName"));
+        if (data.containsKey("supplierPhone")) item.setSupplierPhone((String) data.get("supplierPhone"));
+        if (data.containsKey("gstPercent") && data.get("gstPercent") != null) item.setGstPercent(Double.valueOf(data.get("gstPercent").toString()));
+        if (data.containsKey("hsnCode")) item.setHsnCode((String) data.get("hsnCode"));
 
         InventoryItem saved = inventoryItemRepository.save(java.util.Objects.requireNonNull(item));
         return saved;
@@ -163,32 +184,43 @@ public class InventoryService {
                 break;
         }
 
-        // Record Expenditure if cost provided for ADD movement (only for PAID quantity, not free)
-        if (movementType == StockMovement.MovementType.ADD && data.containsKey("totalCost")) {
-            double totalCost = Double.valueOf(data.get("totalCost").toString());
-            double gstAmount = 0.0;
-            double discountAmount = 0.0;
-            if (data.containsKey("gstAmount")) gstAmount = Double.valueOf(data.get("gstAmount").toString());
-            if (data.containsKey("discountAmount")) discountAmount = Double.valueOf(data.get("discountAmount").toString());
+        // Record Expenditure if cost provided OR automatically calculate it for ADD movement
+        if (movementType == StockMovement.MovementType.ADD) {
+            Double totalCost = null;
+            if (data.containsKey("totalCost") && data.get("totalCost") != null) {
+                totalCost = Double.valueOf(data.get("totalCost").toString());
+            } else if (item.getCostPerUnit() > 0 && quantity > 0) {
+                // Automatically calculate based on buying price
+                totalCost = item.getCostPerUnit() * quantity;
+            }
 
-            String invoiceNumber = data.containsKey("invoiceNumber") ? (String) data.get("invoiceNumber") : null;
+            if (totalCost != null && totalCost > 0) {
+                double gstAmount = 0.0;
+                double discountAmount = 0.0;
+                if (data.containsKey("gstAmount")) gstAmount = Double.valueOf(data.get("gstAmount").toString());
+                if (data.containsKey("discountAmount")) discountAmount = Double.valueOf(data.get("discountAmount").toString());
 
-            if (invoiceNumber != null && !invoiceNumber.isBlank()) {
-                // Use invoice-grouped upsert
-                transactionService.createOrUpdateByInvoice(
-                    restaurant, invoiceNumber,
-                    totalCost, gstAmount, discountAmount,
-                    1,
-                    "Restock: " + item.getName() + " (" + quantity + " " + item.getUnit() + ")",
-                    (String) data.getOrDefault("paymentMethod", "Cash")
-                );
-            } else {
-                transactionService.create(restaurant, new java.util.HashMap<>(Map.of(
-                    "amount", totalCost + gstAmount - discountAmount,
-                    "category", "Inventory Purchase",
-                    "description", "Restock: " + item.getName() + " (" + quantity + " " + item.getUnit() + ")",
-                    "paymentMethod", data.getOrDefault("paymentMethod", "Cash")
-                )));
+                String invoiceNumber = data.containsKey("invoiceNumber") ? (String) data.get("invoiceNumber") : null;
+
+                if (invoiceNumber != null && !invoiceNumber.isBlank()) {
+                    // Use invoice-grouped upsert with total amount including GST
+                    transactionService.createOrUpdateByInvoice(
+                        restaurant, invoiceNumber,
+                        totalCost + gstAmount - discountAmount, gstAmount, discountAmount,
+                        1,
+                        "Restock: " + item.getName() + " (" + quantity + " " + item.getUnit() + ")",
+                        (String) data.getOrDefault("paymentMethod", "Cash")
+                    );
+                } else {
+                    transactionService.create(restaurant, new java.util.HashMap<>(Map.of(
+                        "amount", totalCost + gstAmount - discountAmount,
+                        "category", "Inventory Purchase",
+                        "description", "Restock: " + item.getName() + " (" + quantity + " " + item.getUnit() + ")",
+                        "paymentMethod", data.getOrDefault("paymentMethod", "Cash"),
+                        "gstAmount", gstAmount,
+                        "discountAmount", discountAmount
+                    )));
+                }
             }
         }
 
@@ -197,6 +229,8 @@ public class InventoryService {
                 .inventoryItem(item)
                 .type(movementType)
                 .quantity(quantity + freeQuantity)
+                .paidQuantity(quantity)
+                .freeQuantity(freeQuantity)
                 .reason(reason + (freeQuantity > 0 ? " (incl. " + freeQuantity + " free)" : ""))
                 .performedBy(performedBy)
                 .build();
@@ -546,6 +580,177 @@ public class InventoryService {
             }
         } catch (Exception e) {
             return 1;
+        }
+    }
+
+    @Transactional
+    public void renameCategory(@NonNull User restaurant, String oldName, String newName) {
+        if (oldName == null || newName == null || oldName.trim().isEmpty() || newName.trim().isEmpty()) {
+            return;
+        }
+        
+        // 1. Rename category of all items belonging to oldName
+        List<InventoryItem> items = inventoryItemRepository.findByRestaurantAndIsActiveTrueOrderByNameAsc(restaurant);
+        for (InventoryItem item : items) {
+            if (oldName.equalsIgnoreCase(item.getCategory())) {
+                item.setCategory(newName.trim());
+                inventoryItemRepository.save(item);
+            }
+        }
+
+        // 2. Update stockCategories of the user
+        User owner = (restaurant.getRole() == User.Role.OWNER) ? restaurant : restaurant.getParentOwner();
+        if (owner != null) {
+            String currentCats = owner.getStockCategories();
+            if (currentCats != null) {
+                List<String> list = new ArrayList<>(Arrays.asList(currentCats.split(",")));
+                for (int i = 0; i < list.size(); i++) {
+                    if (list.get(i).trim().equalsIgnoreCase(oldName.trim())) {
+                        list.set(i, newName.trim());
+                    }
+                }
+                owner.setStockCategories(String.join(",", list));
+                userRepository.save(owner);
+            }
+        }
+    }
+
+    @Transactional
+    public void deleteCategory(@NonNull User restaurant, String catName) {
+        if (catName == null || catName.trim().isEmpty()) return;
+        
+        // 1. Move items belonging to catName back to "General"
+        List<InventoryItem> items = inventoryItemRepository.findByRestaurantAndIsActiveTrueOrderByNameAsc(restaurant);
+        for (InventoryItem item : items) {
+            if (catName.equalsIgnoreCase(item.getCategory())) {
+                item.setCategory("General");
+                inventoryItemRepository.save(item);
+            }
+        }
+
+        // 2. Remove from user's stockCategories
+        User owner = (restaurant.getRole() == User.Role.OWNER) ? restaurant : restaurant.getParentOwner();
+        if (owner != null) {
+            String currentCats = owner.getStockCategories();
+            if (currentCats != null) {
+                List<String> list = new ArrayList<>(Arrays.asList(currentCats.split(",")));
+                list.removeIf(c -> c.trim().equalsIgnoreCase(catName.trim()));
+                owner.setStockCategories(String.join(",", list));
+                userRepository.save(owner);
+            }
+        }
+    }
+
+    @Transactional
+    @SuppressWarnings("unchecked")
+    public void bulkAdd(@NonNull User restaurant, @NonNull Map<String, Object> body) {
+        String invoiceNo = (String) body.getOrDefault("invoiceNo", "");
+        String supplierName = (String) body.getOrDefault("supplierName", "");
+        String paymentMethod = (String) body.getOrDefault("paymentMethod", "Cash");
+        List<Map<String, Object>> itemsList = (List<Map<String, Object>>) body.get("items");
+        if (itemsList == null || itemsList.isEmpty()) return;
+
+        double totalGst = 0;
+        double totalDiscount = 0;
+        double totalAmount = 0;
+        int itemCount = 0;
+
+        for (Map<String, Object> itemData : itemsList) {
+            String itemName = (String) itemData.get("name");
+            if (itemName == null || itemName.trim().isEmpty()) continue;
+
+            String batch = itemData.get("batchNo") != null ? itemData.get("batchNo").toString() : "";
+            double qty = safeParseDouble(itemData.getOrDefault("qty", "0").toString());
+            double free = safeParseDouble(itemData.getOrDefault("free", "0").toString());
+            double costPerUnit = safeParseDouble(itemData.getOrDefault("costPerUnit", "0").toString());
+            double price = safeParseDouble(itemData.getOrDefault("price", "0").toString());
+            double gstPct = safeParseDouble(itemData.getOrDefault("gstPercent", "0").toString());
+            double discountAmt = safeParseDouble(itemData.getOrDefault("discount", "0").toString());
+            String expDate = (String) itemData.getOrDefault("expDate", "");
+            String hsnCode = (String) itemData.getOrDefault("hsnCode", "");
+            String category = (String) itemData.getOrDefault("category", "General");
+            String unit = (String) itemData.getOrDefault("unit", "PIECE");
+
+            // Multiplier logic from packSize
+            String packSize = (String) itemData.getOrDefault("packSize", "1x1");
+            int multiplier = parsePackMultiplier(packSize);
+
+            double paidPieces = qty * multiplier;
+            double freePieces = free * multiplier;
+            double totalPieces = paidPieces + freePieces;
+
+            double ratePerPiece = multiplier > 0 ? costPerUnit / multiplier : costPerUnit;
+            double pricePerPiece = multiplier > 0 ? price / multiplier : price;
+
+            double lineBase = costPerUnit * qty;
+            double lineGst = lineBase * gstPct / 100.0;
+            double lineTotal = lineBase + lineGst - discountAmt;
+
+            totalGst += lineGst;
+            totalDiscount += discountAmt;
+            totalAmount += lineTotal;
+            itemCount++;
+
+            String reason = "Invoice Import";
+            if (!invoiceNo.isEmpty()) {
+                reason += " (Inv #" + invoiceNo + ")";
+            }
+
+            java.util.Optional<InventoryItem> existing = (!batch.isEmpty())
+                ? inventoryItemRepository.findByRestaurantAndNameIgnoreCaseAndBatchNoAndIsActiveTrue(restaurant, itemName, batch)
+                : inventoryItemRepository.findByRestaurantAndNameIgnoreCaseAndIsActiveTrue(restaurant, itemName);
+
+            if (existing.isPresent()) {
+                InventoryItem item = existing.get();
+                item.setCurrentStock(item.getCurrentStock() + totalPieces);
+                item.setLastRestockedAt(LocalDateTime.now());
+                item.setCostPerUnit(ratePerPiece);
+                item.setPrice(pricePerPiece);
+                if (!supplierName.isEmpty()) item.setSupplierName(supplierName);
+                if (!batch.isEmpty()) item.setBatchNo(batch);
+                if (!expDate.isEmpty()) item.setExpDate(expDate);
+                if (!hsnCode.isEmpty()) item.setHsnCode(hsnCode);
+                inventoryItemRepository.save(item);
+
+                StockMovement movement = StockMovement.builder()
+                        .restaurant(restaurant)
+                        .inventoryItem(item)
+                        .type(StockMovement.MovementType.ADD)
+                        .quantity(totalPieces)
+                        .reason(reason + (freePieces > 0 ? " (+" + (int) freePieces + " free)" : ""))
+                        .build();
+                stockMovementRepository.save(java.util.Objects.requireNonNull(movement));
+            } else {
+                Map<String, Object> createData = new java.util.HashMap<>();
+                createData.put("name", itemName);
+                createData.put("category", category);
+                createData.put("batchNo", batch);
+                createData.put("expDate", expDate);
+                createData.put("hsnCode", hsnCode);
+                createData.put("currentStock", totalPieces);
+                createData.put("costPerUnit", ratePerPiece);
+                createData.put("price", pricePerPiece);
+                createData.put("unit", unit.toUpperCase());
+                createData.put("isBilliable", true);
+                if (!supplierName.isEmpty()) createData.put("supplierName", supplierName);
+                createData.put("recordExpense", false); // recorded in bulk invoice transaction below
+
+                createWithReason(restaurant, createData, reason);
+            }
+        }
+
+        if (totalAmount > 0 && !invoiceNo.isEmpty()) {
+            String finalDesc = "Invoice Import - " + itemCount + " item(s)";
+            if (!supplierName.isEmpty()) finalDesc = supplierName + " - " + finalDesc;
+
+            transactionService.createOrUpdateByInvoice(
+                restaurant,
+                invoiceNo,
+                totalAmount, totalGst, totalDiscount,
+                itemCount,
+                finalDesc,
+                paymentMethod
+            );
         }
     }
 }

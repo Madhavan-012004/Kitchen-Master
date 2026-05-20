@@ -28,6 +28,7 @@ public class OrderService {
     private final SocketService socketService;
     private final PrintService printService;
     private final InventoryService inventoryService;
+    private final CustomerService customerService;
 
     public List<Orders> getActiveOrders(@NonNull User restaurant) {
         return orderRepository.findByRestaurantAndStatusNotInOrderByCreatedAtDesc(
@@ -60,7 +61,7 @@ public class OrderService {
         return orderRepository.findByRestaurantOrderByCreatedAtDesc(restaurant);
     }
 
-    public List<Orders> getFilteredHistory(@NonNull User restaurant, String date, String status, String orderType, int limit) {
+    public List<Orders> getFilteredHistory(@NonNull User restaurant, String date, String status, String orderType, String search, int limit) {
         List<Orders> all;
 
         // Fetch by date range or get all
@@ -99,6 +100,16 @@ public class OrderService {
             String normalized = orderType.toUpperCase().replace("-", "_");
             all = all.stream()
                     .filter(o -> o.getOrderType() != null && o.getOrderType().name().equalsIgnoreCase(normalized))
+                    .collect(java.util.stream.Collectors.toList());
+        }
+
+        // Apply Search (Filter by Customer Name, Customer Phone, or Order Number)
+        if (search != null && !search.trim().isEmpty()) {
+            String query = search.trim().toLowerCase();
+            all = all.stream()
+                    .filter(o -> (o.getCustomerPhone() != null && o.getCustomerPhone().toLowerCase().contains(query)) ||
+                                 (o.getCustomerName() != null && o.getCustomerName().toLowerCase().contains(query)) ||
+                                 (o.getOrderNumber() != null && o.getOrderNumber().toLowerCase().contains(query)))
                     .collect(java.util.stream.Collectors.toList());
         }
 
@@ -168,6 +179,7 @@ public class OrderService {
                     .doctorName(data.get("doctorName") != null ? data.get("doctorName").toString() : null)
                     .numberOfDays(data.get("numberOfDays") != null ? data.get("numberOfDays").toString() : null)
                     .customerFirm(data.get("customerFirm") != null ? data.get("customerFirm").toString() : null)
+                    .printWithGst(data.get("printWithGst") != null ? Boolean.valueOf(data.get("printWithGst").toString()) : true)
                     .build();
             // Default status for new order
             order.setStatus(Orders.OrderStatus.PENDING);
@@ -242,6 +254,9 @@ public class OrderService {
         recalculateTotals(order);
         
         Orders saved = orderRepository.save(order);
+
+        // Auto-save/update customer details to persistent database
+        saveCustomerProfile(restaurant, saved);
         
         // Broadcast
         try {
@@ -266,11 +281,19 @@ public class OrderService {
     private void recalculateTotals(@NonNull Orders order) {
         double subtotal = 0;
         double taxAmount = 0;
+        
+        boolean printGst = order.getPrintWithGst() != Boolean.FALSE;
+
         for (OrderItem item : order.getItems()) {
             if (item.getStatus() == OrderItem.ItemStatus.CANCELLED) continue;
             double itemTotal = item.getPrice() * item.getQuantity();
-            subtotal += itemTotal;
-            taxAmount += itemTotal * (item.getTaxRate() / 100.0);
+            double rate = printGst ? (item.getTaxRate() != null ? item.getTaxRate() : 0.0) : 0.0;
+            
+            double itemTax = (itemTotal * rate) / (100.0 + rate);
+            double itemBasic = itemTotal - itemTax;
+            
+            subtotal += itemBasic;
+            taxAmount += itemTax;
         }
         order.setSubtotal(subtotal);
         order.setTaxAmount(taxAmount);
@@ -283,13 +306,14 @@ public class OrderService {
         }
         
         double discount = 0;
+        double inclusiveSubtotal = subtotal + taxAmount;
         if (order.getDiscountType() == Orders.DiscountType.PERCENTAGE) {
-            discount = subtotal * (order.getDiscountValue() / 100.0);
+            discount = inclusiveSubtotal * (order.getDiscountValue() / 100.0);
         } else if (order.getDiscountType() == Orders.DiscountType.FLAT) {
             discount = order.getDiscountValue();
         }
         order.setDiscountAmount(discount);
-        order.setTotal(subtotal + taxAmount + extraTotal - discount);
+        order.setTotal(inclusiveSubtotal + extraTotal - discount);
     }
 
     @Transactional
@@ -309,6 +333,8 @@ public class OrderService {
         if (data.containsKey("doctorName")) order.setDoctorName(data.get("doctorName") != null ? data.get("doctorName").toString() : null);
         if (data.containsKey("numberOfDays")) order.setNumberOfDays(data.get("numberOfDays") != null ? data.get("numberOfDays").toString() : null);
         if (data.containsKey("customerFirm")) order.setCustomerFirm(data.get("customerFirm") != null ? data.get("customerFirm").toString() : null);
+        if (data.containsKey("customerPhone")) order.setCustomerPhone(data.get("customerPhone") != null ? data.get("customerPhone").toString() : null);
+        if (data.containsKey("customerName")) order.setCustomerName(data.get("customerName") != null ? data.get("customerName").toString() : null);
 
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> itemsData = (List<Map<String, Object>>) data.get("items");
@@ -394,6 +420,9 @@ public class OrderService {
         }
 
         Orders saved = orderRepository.save(order);
+
+        // Auto-save/update customer details to persistent database
+        saveCustomerProfile(restaurant, saved);
         
         // Broadcast full update via Socket so kitchen can see new items
         try {
@@ -430,10 +459,32 @@ public class OrderService {
     }
 
     @Transactional
-    public Orders updateStatus(@NonNull User restaurant, Long id, String status) {
+    public Orders updateStatus(@NonNull User restaurant, Long id, String status, String paymentStatus, String paymentMethod, Boolean printWithGst) {
         Orders order = getById(restaurant, id);
         order.setStatus(Orders.OrderStatus.valueOf(status.toUpperCase()));
+        
+        if (paymentStatus != null) {
+            order.setPaymentStatus(Orders.PaymentStatus.valueOf(paymentStatus.toUpperCase()));
+        }
+        if (paymentMethod != null) {
+            order.setPaymentMethod(Orders.PaymentMethod.valueOf(paymentMethod.toUpperCase()));
+        }
+        if (printWithGst != null) {
+            order.setPrintWithGst(printWithGst);
+        }
+        
+        if (Orders.PaymentStatus.PAID.equals(order.getPaymentStatus())) {
+            deductStockFromOrder(order);
+        }
+        
         Orders saved = orderRepository.save(order);
+        
+        // --- SILENT IP PRINTING (BILL) ---
+        if (!"pharmacy".equalsIgnoreCase(order.getBillTemplate()) && Orders.PaymentStatus.PAID.equals(order.getPaymentStatus()) && Boolean.TRUE.equals(restaurant.getBillPrinterEnabled()) && restaurant.getCounterPrinterIp() != null && !restaurant.getCounterPrinterIp().trim().isEmpty()) {
+            final Orders finalSaved = saved;
+            final User finalRestaurant = restaurant;
+            new Thread(() -> printService.printBill(finalSaved, finalRestaurant, finalRestaurant.getCounterPrinterIp())).start();
+        }
         
         // Broadcast status update to ALL associated tables
         try {
@@ -452,6 +503,7 @@ public class OrderService {
         
         return saved;
     }
+
 
     @Transactional
     public Orders appendNotes(@NonNull User restaurant, Long id, String notes) {
@@ -1013,6 +1065,28 @@ public class OrderService {
                 }
             } catch (Exception e) {
                 System.err.println("⚠️ Failed to deduct stock for item " + item.getName() + ": " + e.getMessage());
+            }
+        }
+    }
+
+    @Transactional
+    public void clearHistory(@NonNull User restaurant) {
+        List<Orders> all = orderRepository.findByRestaurantOrderByCreatedAtDesc(restaurant);
+        orderRepository.deleteAll(java.util.Objects.requireNonNull(all));
+    }
+
+    @SuppressWarnings("null")
+    private void saveCustomerProfile(User restaurant, Orders order) {
+        if (restaurant != null && restaurant.getId() != null && order.getCustomerPhone() != null && !order.getCustomerPhone().trim().isEmpty() && !order.getCustomerPhone().equalsIgnoreCase("null")) {
+            try {
+                customerService.createOrUpdateCustomer(
+                    restaurant.getId(),
+                    order.getCustomerPhone().trim(),
+                    order.getCustomerName() != null ? order.getCustomerName().trim() : "Walk-in Customer",
+                    null
+                );
+            } catch (Exception e) {
+                System.err.println("⚠️ Failed to auto-save customer profile: " + e.getMessage());
             }
         }
     }

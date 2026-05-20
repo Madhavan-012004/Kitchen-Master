@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
+import { HashRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext.jsx'
 import { StakeholderProvider } from './context/StakeholderContext.jsx'
 import LoginPage from './pages/Login.jsx'
@@ -69,16 +69,14 @@ function ThemeSync() {
 
 function POSModeSync() {
   const { user } = useAuth();
-  const { setSupermarketMode, supermarketMode } = usePOSMode();
+  const { setSupermarketMode } = usePOSMode();
 
   React.useEffect(() => {
     if (user && user.preferredPosMode) {
       const shouldBeMarket = user.preferredPosMode === 'supermarket';
-      if (shouldBeMarket !== supermarketMode) {
-        setSupermarketMode(shouldBeMarket);
-      }
+      setSupermarketMode(shouldBeMarket);
     }
-  }, [user?.preferredPosMode, supermarketMode, setSupermarketMode]);
+  }, [user?.preferredPosMode, setSupermarketMode]);
 
   return null;
 }
@@ -171,7 +169,7 @@ export default function App() {
         <POSModeProvider>
           <AuthProvider>
             <StakeholderProvider>
-              <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+              <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
                 <ThemeSync />
                 <POSModeSync />
                 <LicenseWarningBanner />
@@ -202,7 +200,7 @@ export default function App() {
                     }
                   />
 
-                  {/* ── Kitchen Master App (for restaurant clients) ── */}
+                  {/* ── ProBloom App (for restaurant clients) ── */}
                   <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
                     <Route index element={<Navigate to="/pos" replace />} />
                     <Route path="pos" element={<ProtectedRoute section="pos"><POSPage /></ProtectedRoute>} />
@@ -222,7 +220,7 @@ export default function App() {
 
                   <Route path="*" element={<Navigate to="/pos" replace />} />
                 </Routes>
-              </BrowserRouter>
+              </HashRouter>
             </StakeholderProvider>
           </AuthProvider>
         </POSModeProvider>

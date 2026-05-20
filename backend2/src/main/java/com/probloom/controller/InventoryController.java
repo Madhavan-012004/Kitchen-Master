@@ -124,6 +124,29 @@ public class InventoryController {
         return ok("Scanner intake successful", inventoryService.incrementStockByBarcode(restaurant, barcode, amount, performer));
     }
 
+    @PutMapping("/categories/rename")
+    public ResponseEntity<?> renameCategory(@RequestBody @NonNull Map<String, String> body) {
+        User restaurant = resolver.getRestaurantOwner();
+        String oldName = body.get("oldName");
+        String newName = body.get("newName");
+        inventoryService.renameCategory(restaurant, oldName, newName);
+        return ok("Category renamed successfully", null);
+    }
+
+    @DeleteMapping("/categories")
+    public ResponseEntity<?> deleteCategory(@RequestParam("name") @NonNull String name) {
+        User restaurant = resolver.getRestaurantOwner();
+        inventoryService.deleteCategory(restaurant, name);
+        return ok("Category deleted successfully", null);
+    }
+
+    @PostMapping("/bulk-add")
+    public ResponseEntity<?> bulkAdd(@RequestBody @NonNull Map<String, Object> body) {
+        User restaurant = resolver.getRestaurantOwner();
+        inventoryService.bulkAdd(restaurant, body);
+        return ok("Wholesale invoice imported successfully!", null);
+    }
+
 
     private Double dataToDouble(Object obj) {
         if (obj == null) return 0.0;

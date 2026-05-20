@@ -84,6 +84,7 @@ public class TransactionService {
      * Otherwise, create a new one.
      */
     @Transactional
+    @SuppressWarnings("null")
     public Transaction createOrUpdateByInvoice(
             @NonNull User restaurant,
             @NonNull String invoiceNumber,
@@ -98,11 +99,18 @@ public class TransactionService {
 
         if (existing.isPresent()) {
             Transaction t = existing.get();
-            t.setAmount(totalAmount);
-            t.setGstAmount(gstAmount);
-            t.setDiscountAmount(discountAmount);
-            t.setItemCount(itemCount);
-            t.setDescription(description);
+            t.setAmount(t.getAmount() + totalAmount);
+            t.setGstAmount((t.getGstAmount() != null ? t.getGstAmount() : 0.0) + gstAmount);
+            t.setDiscountAmount((t.getDiscountAmount() != null ? t.getDiscountAmount() : 0.0) + discountAmount);
+            t.setItemCount((t.getItemCount() != null ? t.getItemCount() : 0) + itemCount);
+            
+            // Append description instead of overwriting
+            String currentDesc = t.getDescription();
+            if (currentDesc == null) currentDesc = "";
+            if (description != null && !currentDesc.contains(description)) {
+                t.setDescription(currentDesc.isEmpty() ? description : currentDesc + " | " + description);
+            }
+            
             t.setPaymentMethod(paymentMethod);
             return transactionRepository.save(t);
         } else {
@@ -120,7 +128,7 @@ public class TransactionService {
                     .paymentStatus("PAID")
                     .date(LocalDateTime.now())
                     .build();
-            return java.util.Objects.requireNonNull(transactionRepository.save(t));
+            return transactionRepository.save(t);
         }
     }
 

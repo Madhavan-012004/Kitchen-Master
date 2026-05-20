@@ -65,7 +65,7 @@ function createLandingPage(lanIP, publicUrl) {
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Kitchen Master - Mobile Setup</title>
+        <title>ProBloom - Mobile Setup</title>
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
             body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #0A0C18; color: white; text-align: center; padding: 20px; }
@@ -78,7 +78,7 @@ function createLandingPage(lanIP, publicUrl) {
         </style>
     </head>
     <body>
-        <h1>🍳 Kitchen Master</h1>
+        <h1>🍳 ProBloom</h1>
         <p>Mobile Application Setup</p>
 
         <div class="card">
@@ -116,7 +116,7 @@ function createLandingPage(lanIP, publicUrl) {
 async function main() {
     const lanIP = getLanIP();
     console.log(`\n\x1b[1m\x1b[34m==================================================\x1b[0m`);
-    console.log(`\x1b[1m\x1b[34m      KITCHEN MASTER MOBILE DEPLOYMENT          \x1b[0m`);
+    console.log(`\x1b[1m\x1b[34m      ProBloom MOBILE DEPLOYMENT          \x1b[0m`);
     console.log(`\x1b[1m\x1b[34m==================================================\x1b[0m\n`);
 
     let publicUrl = null;

@@ -2,7 +2,7 @@ import axios from 'axios';
 import { globalTriggerOffline } from '../context/NetworkContext.jsx';
 
 const api = axios.create({
-    baseURL: `http://${window.location.hostname}:8080/api`,
+    baseURL: '/api',
     timeout: 15000,
 });
 

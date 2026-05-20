@@ -134,7 +134,7 @@ export default function ServerConfigScreen({ navigation }: any) {
 
                             <Text style={themedStyles.title}>Server Setup</Text>
                             <Text style={themedStyles.subtitle}>
-                                Connect to your Kitchen Master backend running on your Local Network.
+                                Connect to your ProBloom backend running on your Local Network.
                             </Text>
                         </Animated.View>
 

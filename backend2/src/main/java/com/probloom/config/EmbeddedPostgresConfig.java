@@ -23,7 +23,7 @@ import java.io.IOException;
 public class EmbeddedPostgresConfig implements DisposableBean {
 
     private static final Logger log = LoggerFactory.getLogger(EmbeddedPostgresConfig.class);
-    private static final int EMBEDDED_PG_PORT = 5433;
+    private static final int EMBEDDED_PG_PORT = 5434;
     private static final String DB_NAME = "km_local";
 
     private EmbeddedPostgres embeddedPostgres;
@@ -31,29 +31,35 @@ public class EmbeddedPostgresConfig implements DisposableBean {
     @Bean
     public EmbeddedPostgres embeddedPostgres() throws IOException {
         File dataDir = resolveDataDirectory();
-        log.info("[Standalone] Starting embedded PostgreSQL on port {} with data dir: {}", EMBEDDED_PG_PORT, dataDir);
+        log.info("[Standalone] Attempting to start embedded PostgreSQL on port {}...", EMBEDDED_PG_PORT);
+        log.info("[Standalone] Data Directory: {}", dataDir.getAbsolutePath());
 
-        embeddedPostgres = EmbeddedPostgres.builder()
-                .setPort(EMBEDDED_PG_PORT)
-                .setDataDirectory(dataDir)
-                .start();
+        try {
+            embeddedPostgres = EmbeddedPostgres.builder()
+                    .setPort(EMBEDDED_PG_PORT)
+                    .setDataDirectory(dataDir)
+                    .setCleanDataDirectory(false)
+                    .start();
+            log.info("[Standalone] Embedded PostgreSQL started successfully on port {}.", EMBEDDED_PG_PORT);
+        } catch (IOException e) {
+            log.error("[Standalone] CRITICAL: Failed to start Embedded PostgreSQL: {}", e.getMessage());
+            log.error("[Standalone] This often happens on Windows if the data directory is corrupt or permissions are restricted.");
+            throw e;
+        }
 
-        log.info("[Standalone] Embedded PostgreSQL started successfully. JDBC URL: {}", getJdbcUrl());
         return embeddedPostgres;
     }
 
     @Bean
     public String embeddedPgJdbcUrl(EmbeddedPostgres pg) {
-        return "jdbc:postgresql://localhost:" + EMBEDDED_PG_PORT + "/" + DB_NAME;
+        return "jdbc:postgresql://localhost:5434/" + DB_NAME;
     }
 
     public static String getOfflineJdbcUrl() {
-        return "jdbc:postgresql://localhost:" + EMBEDDED_PG_PORT + "/" + DB_NAME;
+        return "jdbc:postgresql://localhost:5434/" + DB_NAME;
     }
 
-    private String getJdbcUrl() {
-        return "jdbc:postgresql://localhost:" + EMBEDDED_PG_PORT + "/" + DB_NAME;
-    }
+
 
     private File resolveDataDirectory() {
         // Windows: %APPDATA%\ProBloom\pgdata

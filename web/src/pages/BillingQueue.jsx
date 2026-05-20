@@ -112,12 +112,26 @@ export default function BillingQueue() {
             const getBillBody = () => {
                 const items = order.items || [];
                 const totalItemsCount = items.reduce((acc, item) => acc + item.quantity, 0);
-                const subtotal = order.subtotal || 0;
+                const originalSubtotal = items.reduce((s, item) => s + (parseFloat(item.price || 0) * (parseFloat(item.quantity) || 0)), 0);
+                
+                const discountRate = order.discountPct !== undefined 
+                    ? (parseFloat(order.discountPct) || 0) 
+                    : (originalSubtotal > 0 ? (parseFloat(order.discountAmount || 0) / originalSubtotal) * 100 : 0);
+                
+                const taxRate = typeof user?.taxRate === 'number' ? user.taxRate : 18;
+                const sgstPct = taxRate / 2;
+                const cgstPct = taxRate / 2;
+
+                const discountAmount = originalSubtotal * (discountRate / 100);
+                const netSubtotal = originalSubtotal - discountAmount;
+                const totalGstAmount = netSubtotal * (taxRate / 100);
+                const sgstAmount = totalGstAmount / 2;
+                const cgstAmount = totalGstAmount / 2;
+                const taxableSubtotal = netSubtotal - totalGstAmount;
+                
+                const isPrintWithGst = order.taxAmount !== undefined ? order.taxAmount > 0 : true;
                 const extraChargesTotal = order.extraCharges ? order.extraCharges.reduce((s,c) => s + c.amount, 0) : 0;
-                const totalGst = order.taxAmount ? order.taxAmount.toFixed(2) : ((subtotal * 0.05).toFixed(2));
-                const sgst = (parseFloat(totalGst) / 2).toFixed(2);
-                const cgst = (parseFloat(totalGst) / 2).toFixed(2);
-                const grandTotal = order.total ? order.total.toFixed(2) : (subtotal + parseFloat(totalGst) + extraChargesTotal).toFixed(2);
+                const grandTotal = (netSubtotal + extraChargesTotal).toFixed(2);
 
                 return `
                 <div class="${isKot ? 'kot-section' : 'customer-section'}">
@@ -126,7 +140,7 @@ export default function BillingQueue() {
                         <br/>
                         ${logoImg}
                         <div class="bold" style="font-size: 20px; text-transform: uppercase; margin: 3px 0; font-weight: bold;">${restaurantName}</div>
-                        ${!isKot ? `<div style="font-size: 15px; margin-bottom: 3px; font-weight: normal;">GSTIN: ${user?.gstNumber || 'N/A'}</div>` : ''}
+                        ${(!isKot && isPrintWithGst) ? `<div style="font-size: 15px; margin-bottom: 3px; font-weight: normal;">GSTIN: ${user?.gstNumber || 'N/A'}</div>` : ''}
                         <div style="border-top: 1px solid #000; border-bottom: 1px solid #000; margin: 4px 0; padding: 3px 0;">
                             <div style="display: flex; justify-content: space-between; font-size: 15px; padding: 0 5px; font-weight: normal;">
                                 <span>Bill No: <span>${order.orderNumber || String(order._id).slice(-8).toUpperCase()}</span></span>
@@ -145,40 +159,58 @@ export default function BillingQueue() {
                             </tr>
                         </thead>
                         <tbody>
-                            ${items.map((c, index) => `
+                            ${items.map((c, index) => {
+                                let itemBaseRate, rowTotal;
+                                if (isPrintWithGst) {
+                                    const finalItemPrice = parseFloat(c.price || 0) * (1 - discountRate / 100);
+                                    itemBaseRate = finalItemPrice / (1 + taxRate / 100);
+                                    rowTotal = itemBaseRate * c.quantity;
+                                } else {
+                                    itemBaseRate = parseFloat(c.price || 0);
+                                    rowTotal = itemBaseRate * c.quantity;
+                                }
+
+                                return `
                                 <tr>
                                     <td style="padding: 2px 0; font-size: 16px; font-weight: bold;">${c.name}</td>
                                     <td style="padding: 2px 0; text-align: center; font-size: 15px; font-weight: normal;">${c.quantity}</td>
-                                    ${!isKot ? `<td style="padding: 2px 0; text-align: right; font-size: 15px; font-weight: normal;">${parseFloat(c.price).toFixed(2)}</td>` : ''}
-                                    ${!isKot ? `<td style="padding: 2px 0; text-align: right; font-size: 15px; font-weight: normal;">${(c.price * c.quantity).toFixed(2)}</td>` : ''}
+                                    ${!isKot ? `<td style="padding: 2px 0; text-align: right; font-size: 15px; font-weight: normal;">${itemBaseRate.toFixed(2)}</td>` : ''}
+                                    ${!isKot ? `<td style="padding: 2px 0; text-align: right; font-size: 15px; font-weight: normal;">${rowTotal.toFixed(2)}</td>` : ''}
                                 </tr>
-                            `).join('')}
+                                `;
+                            }).join('')}
                         </tbody>
                     </table>
                     ${!isKot ? `
                         <div class="total-section" style="font-size: 15px; font-weight: normal;">
                             <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
-                                <span>Subtotal:</span>
-                                <span>₹${subtotal.toFixed(2)}</span>
+                                <span>Gross Total:</span>
+                                <span>₹${originalSubtotal.toFixed(2)}</span>
                             </div>
+                            ${discountAmount > 0 ? `
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 2px; color: #555;">
+                                <span>Discount (${discountRate.toFixed(2)}%):</span>
+                                <span>-₹${discountAmount.toFixed(2)}</span>
+                            </div>
+                            ` : ''}
                             ${order.extraCharges?.length > 0 ? order.extraCharges.map(charge => `
                             <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
                                 <span>${charge.name}:</span>
                                 <span>₹${charge.amount.toFixed(2)}</span>
                             </div>
                             `).join('') : ''}
+                            ${isPrintWithGst ? `
                             <div style="display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 12px; border-top: 1px dotted #ccc; padding-top: 2px;">
-                                <span>SGST:</span>
-                                <span>₹${sgst}</span>
+                                <span>Taxable Value:</span>
+                                <span>₹${taxableSubtotal.toFixed(2)}</span>
                             </div>
                             <div style="display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 12px;">
-                                <span>CGST:</span>
-                                <span>₹${cgst}</span>
+                                <span>SGST (${sgstPct.toFixed(1)}%):</span>
+                                <span>₹${sgstAmount.toFixed(2)}</span>
                             </div>
-                            ${order.discountAmount > 0 ? `
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
-                                <span>Discount:</span>
-                                <span>-₹${order.discountAmount.toFixed(2)}</span>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 12px;">
+                                <span>CGST (${cgstPct.toFixed(1)}%):</span>
+                                <span>₹${cgstAmount.toFixed(2)}</span>
                             </div>
                             ` : ''}
                             <div style="display: flex; justify-content: space-between; font-size: 16px; font-weight: bold; margin-top: 5px; border-top: 1px solid #000; padding-top: 3px;">
@@ -189,7 +221,7 @@ export default function BillingQueue() {
                         <div style="margin-top: 8px; font-size: 12px; border-top: 1px dashed #ccc; padding-top: 5px;">
                             <div style="font-weight: bold; margin-bottom: 2px;">Total Items: ${totalItemsCount}</div>
                             <div>Payment: <span class="bold">${order.paymentMethod?.toUpperCase() || 'CASH'}</span></div>
-                            <div>Waiter: ${order.waiterName || 'Staff'}</div>
+                            <div>CAPTAIN: ${order.waiterName || 'Staff'}</div>
                         </div>
                         <div class="footer center">
                             <div class="bold" style="font-size: 14px; margin-bottom: 3px;">Thank You! Visit Again</div>
@@ -295,7 +327,7 @@ export default function BillingQueue() {
             <div className="billing-header">
                 <div className="billing-title">
                     <h1>Billing Queue 🧾</h1>
-                    <p>Select a waiter to see their pending bill requests</p>
+                    <p>Select a CAPTAIN to see their pending bill requests</p>
                 </div>
                 <div className="billing-stats">
                     <div className="stat-card">
@@ -305,7 +337,7 @@ export default function BillingQueue() {
                 </div>
             </div>
 
-            {/* Waiter Filter Tabs */}
+            {/* CAPTAIN Filter Tabs */}
             <div className="waiter-filters">
                 {waiters.map(w => (
                     <button
@@ -327,7 +359,7 @@ export default function BillingQueue() {
                 <div className="empty-queue">
                     <div className="empty-queue-icon">📄</div>
                     <h2>{filterWaiter === 'All' ? 'Queue is empty' : `No bills for ${filterWaiter}`}</h2>
-                    <p>New bill requests from waiters will appear here automatically</p>
+                    <p>New bill requests from CAPTAINs will appear here automatically</p>
                 </div>
             ) : (
                 <div className="billing-grid">
@@ -346,7 +378,7 @@ export default function BillingQueue() {
                                     <span className="info-value">{order.orderNumber}</span>
                                 </div>
                                 <div className="info-row">
-                                    <span className="info-label">Waiter</span>
+                                    <span className="info-label">CAPTAIN</span>
                                     <span className="info-value">{order.waiterName}</span>
                                 </div>
                                 <div className="info-row">

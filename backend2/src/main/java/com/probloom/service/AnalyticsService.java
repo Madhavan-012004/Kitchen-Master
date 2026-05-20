@@ -39,6 +39,7 @@ public class AnalyticsService {
                     m.put("date", o.getCreatedAt());
                     m.put("customer", o.getCustomerName());
                     m.put("total", o.getTotal());
+                    m.put("taxAmount", o.getTaxAmount());
                     m.put("status", o.getStatus());
                     m.put("payment", o.getPaymentMethod());
                     salesList.add(m);
@@ -46,6 +47,109 @@ public class AnalyticsService {
                 data.put("sales", salesList);
                 data.put("totalRevenue", orders.stream().filter(o -> o.getStatus() != Orders.OrderStatus.CANCELLED).mapToDouble(Orders::getTotal).sum());
                 break;
+
+            case "sales-gst-report": {
+                List<Orders> gstOrders = orders.stream()
+                        .filter(o -> o.getStatus() != Orders.OrderStatus.CANCELLED && o.getPrintWithGst() != Boolean.FALSE && o.getItems() != null && o.getItems().stream().anyMatch(item -> {
+                            if (item.getStatus() == OrderItem.ItemStatus.CANCELLED) return false;
+                            double rate = item.getTaxRate() != null ? item.getTaxRate() : 0.0;
+                            return rate > 0.0;
+                        }))
+                        .toList();
+
+                double totalGstRevenue = 0.0;
+                double totalTaxCollected = 0.0;
+                List<Map<String, Object>> gstSalesList = new ArrayList<>();
+
+                for (Orders o : gstOrders) {
+                    double orderBase = 0.0;
+                    double orderTax = 0.0;
+                    for (OrderItem item : o.getItems()) {
+                        if (item.getStatus() == OrderItem.ItemStatus.CANCELLED) continue;
+                        double rate = item.getTaxRate() != null ? item.getTaxRate() : 0.0;
+                        if (rate > 0.0) {
+                            double itemTotal = item.getPrice() * item.getQuantity();
+                            double itemBase = itemTotal / (1.0 + rate / 100.0);
+                            double itemTax = itemTotal - itemBase;
+                            orderBase += itemBase;
+                            orderTax += itemTax;
+                        }
+                    }
+                    double proportion = o.getSubtotal() != null && o.getSubtotal() > 0 ? (orderBase / o.getSubtotal()) : 0.0;
+                    double orderDiscount = o.getDiscountAmount() != null ? o.getDiscountAmount() * proportion : 0.0;
+                    double orderExtra = 0.0;
+                    if (o.getExtraCharges() != null) {
+                        orderExtra = o.getExtraCharges().stream().mapToDouble(com.probloom.model.entity.ExtraCharge::getAmount).sum() * proportion;
+                    }
+                    double orderTotal = orderBase + orderTax + orderExtra - orderDiscount;
+
+                    totalGstRevenue += orderTotal;
+                    totalTaxCollected += orderTax;
+
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("orderNumber", o.getOrderNumber());
+                    m.put("date", o.getCreatedAt());
+                    m.put("customer", o.getCustomerName());
+                    m.put("total", orderTotal);
+                    m.put("taxAmount", orderTax);
+                    m.put("baseAmount", orderBase + orderExtra - orderDiscount);
+                    m.put("payment", o.getPaymentMethod());
+                    gstSalesList.add(m);
+                }
+
+                data.put("sales", gstSalesList);
+                data.put("totalRevenue", totalGstRevenue);
+                data.put("totalTaxCollected", totalTaxCollected);
+                data.put("totalBaseRevenue", totalGstRevenue - totalTaxCollected);
+                break;
+            }
+
+            case "sales-non-gst-report": {
+                List<Orders> nonGstOrders = orders.stream()
+                        .filter(o -> o.getStatus() != Orders.OrderStatus.CANCELLED && o.getItems() != null && (o.getPrintWithGst() == Boolean.FALSE || o.getItems().stream().anyMatch(item -> {
+                            if (item.getStatus() == OrderItem.ItemStatus.CANCELLED) return false;
+                            double rate = item.getTaxRate() != null ? item.getTaxRate() : 0.0;
+                            return rate == 0.0;
+                        })))
+                        .toList();
+
+                double totalNonGstRevenue = 0.0;
+                List<Map<String, Object>> nonGstSalesList = new ArrayList<>();
+
+                for (Orders o : nonGstOrders) {
+                    double orderBase = 0.0;
+                    boolean treatAsNonGst = o.getPrintWithGst() == Boolean.FALSE;
+                    for (OrderItem item : o.getItems()) {
+                        if (item.getStatus() == OrderItem.ItemStatus.CANCELLED) continue;
+                        double rate = item.getTaxRate() != null ? item.getTaxRate() : 0.0;
+                        if (rate == 0.0 || treatAsNonGst) {
+                            double itemTotal = item.getPrice() * item.getQuantity();
+                            orderBase += itemTotal;
+                        }
+                    }
+                    double proportion = o.getSubtotal() != null && o.getSubtotal() > 0 ? (orderBase / o.getSubtotal()) : 0.0;
+                    double orderDiscount = o.getDiscountAmount() != null ? o.getDiscountAmount() * proportion : 0.0;
+                    double orderExtra = 0.0;
+                    if (o.getExtraCharges() != null) {
+                        orderExtra = o.getExtraCharges().stream().mapToDouble(com.probloom.model.entity.ExtraCharge::getAmount).sum() * proportion;
+                    }
+                    double orderTotal = orderBase + orderExtra - orderDiscount;
+
+                    totalNonGstRevenue += orderTotal;
+
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("orderNumber", o.getOrderNumber());
+                    m.put("date", o.getCreatedAt());
+                    m.put("customer", o.getCustomerName());
+                    m.put("total", orderTotal);
+                    m.put("payment", o.getPaymentMethod());
+                    nonGstSalesList.add(m);
+                }
+
+                data.put("sales", nonGstSalesList);
+                data.put("totalRevenue", totalNonGstRevenue);
+                break;
+            }
 
             case "monthly-day-wise":
                 Map<String, Double> daily = new TreeMap<>();
@@ -114,6 +218,42 @@ public class AnalyticsService {
                 List<StockMovement> movements = stockMovementRepository.findByRestaurantAndTypeAndMovementTimestampBetweenOrderByMovementTimestampDesc(restaurant, StockMovement.MovementType.ADD, start, end);
                 data.put("purchases", movements);
                 break;
+
+            case "expenditure-report":
+                List<Transaction> expenses = transactionRepository.findByRestaurantAndDateBetweenOrderByDateDesc(restaurant, start, end)
+                        .stream().filter(t -> t.getType() == Transaction.TransactionType.EXPENSE).toList();
+                data.put("expenses", expenses);
+                data.put("totalExpense", expenses.stream().mapToDouble(Transaction::getAmount).sum());
+                break;
+
+            case "purchase-gst-report": {
+                // Purchases that have a GST component recorded
+                List<Transaction> allExpGst = transactionRepository.findByRestaurantAndDateBetweenOrderByDateDesc(restaurant, start, end)
+                        .stream()
+                        .filter(t -> t.getType() == Transaction.TransactionType.EXPENSE
+                                  && t.getGstAmount() != null && t.getGstAmount() > 0)
+                        .toList();
+                double gstTotal      = allExpGst.stream().mapToDouble(Transaction::getAmount).sum();
+                double gstTaxTotal   = allExpGst.stream().mapToDouble(t -> t.getGstAmount() != null ? t.getGstAmount() : 0.0).sum();
+                double gstBaseTotal  = gstTotal - gstTaxTotal;
+                data.put("expenses", allExpGst);
+                data.put("totalExpense", gstTotal);
+                data.put("totalGstAmount", gstTaxTotal);
+                data.put("totalBaseAmount", gstBaseTotal);
+                break;
+            }
+
+            case "purchase-non-gst-report": {
+                // Purchases with no GST component
+                List<Transaction> allExpNonGst = transactionRepository.findByRestaurantAndDateBetweenOrderByDateDesc(restaurant, start, end)
+                        .stream()
+                        .filter(t -> t.getType() == Transaction.TransactionType.EXPENSE
+                                  && (t.getGstAmount() == null || t.getGstAmount() == 0.0))
+                        .toList();
+                data.put("expenses", allExpNonGst);
+                data.put("totalExpense", allExpNonGst.stream().mapToDouble(Transaction::getAmount).sum());
+                break;
+            }
 
             case "cashier-wise-sales":
                 Map<String, Double> cashierSales = new HashMap<>();

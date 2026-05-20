@@ -26,7 +26,7 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/nominatim/, ''),
         headers: {
-          'User-Agent': 'KitchenMasterApp/1.0 (contact@kitchenmaster.app)',
+          'User-Agent': 'ProBloomApp/1.0 (contact@ProBloom.app)',
         },
       }
     }

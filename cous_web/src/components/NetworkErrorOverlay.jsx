@@ -3,24 +3,24 @@ import './NetworkErrorOverlay.css';
 
 const ERROR_META = {
     no_internet: {
-        label: 'No Internet Detected',
+        label: 'No Internet Connection',
         emoji: '📵',
-        tip: 'Trying to connect… Please check your Wi-Fi or mobile data.',
+        tip: 'Please check your Wi-Fi or mobile data. We can\'t reach the Kitchen API.',
     },
     timeout: {
         label: 'Connection Timed Out',
         emoji: '⏱️',
-        tip: 'Fetching the PROBLOOM kitchen… Taking longer than usual. Retrying…',
+        tip: 'The Kitchen API is taking too long to respond. Retrying…',
     },
     server_down: {
-        label: 'Connecting to PROBLOOM…',
+        label: 'Kitchen API Offline',
         emoji: '🔧',
-        tip: 'Attempting to reach the PROBLOOM backend API. Hang tight, retrying automatically!',
+        tip: 'Attempting to reach the PROBLOOM backend. It might be restarting.',
     },
     server_error: {
-        label: 'API Error — Retrying',
+        label: 'Kitchen API Error',
         emoji: '⚠️',
-        tip: 'The PROBLOOM server responded with an error. Trying to reconnect…',
+        tip: 'The server is up but returned an error. We are trying to reconnect…',
     },
 };
 
@@ -107,7 +107,7 @@ export default function NetworkErrorOverlay({ isOffline, errorType, statusCode, 
                 </div>
 
                 {/* Text */}
-                <h2 className="cw-title">Connecting to Kitchen API…</h2>
+                <h2 className="cw-title">{meta.label}</h2>
                 <p className="cw-tip">{meta.tip}</p>
 
                 {/* Retry */}

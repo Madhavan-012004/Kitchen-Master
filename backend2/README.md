@@ -1,6 +1,6 @@
-# Kitchen Master — Java Backend (backend2)
+# ProBloom — Java Backend (backend2)
 
-A full Java 17 + Spring Boot 3.2 backend for Kitchen Master, using **PostgreSQL 15/16** as the database and **Google Gemini 1.5 Flash** for AI features.
+A full Java 17 + Spring Boot 3.2 backend for ProBloom, using **PostgreSQL 15/16** as the database and **Google Gemini 1.5 Flash** for AI features.
 
 ---
 
@@ -43,7 +43,7 @@ $env:GEMINI_API_KEY="your_gemini_api_key"
 
 ### 4. Run the Application
 ```powershell
-cd "c:\FILES\KITCHEN MASTER\backend2"
+cd "c:\FILES\ProBloom\backend2"
 mvn spring-boot:run
 ```
 

@@ -3,11 +3,13 @@ import api from '../api/client.js'
 import socket from '../api/socket.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import logo from '../assets/LOGO.jpeg'
+import { useTranslation } from 'react-i18next'
 import './Simple.css'
 
 const STATUS_COLORS = { open: '#f59e0b', preparing: '#f59e0b', ready: '#3b82f6', served: '#8b5cf6', paid: '#22c55e', completed: '#22c55e', cancelled: '#ef4444' }
 
 export default function OrdersPage() {
+    const { t } = useTranslation()
     const { user } = useAuth()
     const [orders, setOrders] = useState([])
     const [menuItems, setMenuItems] = useState([])
@@ -25,6 +27,7 @@ export default function OrdersPage() {
     const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0]) 
     const [filterType, setFilterType] = useState('All') 
     const [filterStatus, setFilterStatus] = useState('All')
+    const [searchTerm, setSearchTerm] = useState('')
 
     const loadOrders = useCallback(() => {
         setLoading(true)
@@ -33,11 +36,12 @@ export default function OrdersPage() {
         if (filterDate) params.append('date', filterDate)
         if (filterType !== 'All') params.append('orderType', filterType)
         if (filterStatus !== 'All') params.append('status', filterStatus)
+        if (searchTerm) params.append('search', searchTerm)
 
         api.get(`/orders/history?${params.toString()}`).then(r => {
             setOrders(r.data.data?.orders || [])
         }).catch(() => { }).finally(() => setLoading(false))
-    }, [filterDate, filterType, filterStatus])
+    }, [filterDate, filterType, filterStatus, searchTerm])
 
     useEffect(() => {
         loadOrders()
@@ -126,12 +130,26 @@ export default function OrdersPage() {
             const getBillBody = () => {
                 const items = order.items || [];
                 const totalItemsCount = items.reduce((acc, item) => acc + item.quantity, 0);
-                const subtotal = order.subtotal || 0;
+                const originalSubtotal = items.reduce((s, item) => s + (parseFloat(item.price || 0) * (parseFloat(item.quantity) || 0)), 0);
+                
+                const discountRate = order.discountPct !== undefined 
+                    ? (parseFloat(order.discountPct) || 0) 
+                    : (originalSubtotal > 0 ? (parseFloat(order.discountAmount || 0) / originalSubtotal) * 100 : 0);
+                
+                const taxRate = typeof user?.taxRate === 'number' ? user.taxRate : 18;
+                const sgstPct = taxRate / 2;
+                const cgstPct = taxRate / 2;
+
+                const discountAmount = originalSubtotal * (discountRate / 100);
+                const netSubtotal = originalSubtotal - discountAmount;
+                const totalGstAmount = netSubtotal * (taxRate / 100);
+                const sgstAmount = totalGstAmount / 2;
+                const cgstAmount = totalGstAmount / 2;
+                const taxableSubtotal = netSubtotal - totalGstAmount;
+                
+                const isPrintWithGst = order.taxAmount !== undefined ? order.taxAmount > 0 : true;
                 const extraChargesTotal = order.extraCharges ? order.extraCharges.reduce((s,c) => s + c.amount, 0) : 0;
-                const totalGst = order.taxAmount ? order.taxAmount.toFixed(2) : ((subtotal * 0.05).toFixed(2));
-                const sgst = (parseFloat(totalGst) / 2).toFixed(2);
-                const cgst = (parseFloat(totalGst) / 2).toFixed(2);
-                const grandTotal = order.total ? order.total.toFixed(2) : (subtotal + parseFloat(totalGst) + extraChargesTotal).toFixed(2);
+                const grandTotal = (netSubtotal + extraChargesTotal).toFixed(2);
 
                 return `
                 <div class="${isKot ? 'kot-section' : 'customer-section'}">
@@ -140,7 +158,7 @@ export default function OrdersPage() {
                         <br/>
                         ${logoImg}
                         <div class="bold" style="font-size: 20px; text-transform: uppercase; margin: 3px 0; font-weight: bold;">${restaurantName}</div>
-                        ${!isKot ? `<div style="font-size: 15px; margin-bottom: 3px; font-weight: normal;">GSTIN: ${user?.gstNumber || 'N/A'}</div>` : ''}
+                        ${(!isKot && isPrintWithGst) ? `<div style="font-size: 15px; margin-bottom: 3px; font-weight: normal;">GSTIN: ${user?.gstNumber || 'N/A'}</div>` : ''}
                         <div style="border-top: 1px solid #000; border-bottom: 1px solid #000; margin: 4px 0; padding: 3px 0;">
                             <div style="display: flex; justify-content: space-between; font-size: 15px; padding: 0 5px; font-weight: normal;">
                                 <span>Bill No: <span>${order.orderNumber || String(order._id).slice(-8).toUpperCase()}</span></span>
@@ -163,12 +181,23 @@ export default function OrdersPage() {
                                 const matchedMenu = menuItems.find(m => String(m._id) === String(c.menuItemId));
                                 const tName = c.tamilName || (matchedMenu ? matchedMenu.tamilName : null);
                                 const displayName = (printLang === 'ta' && tName) ? tName : c.name;
+                                
+                                let itemBaseRate, rowTotal;
+                                if (isPrintWithGst) {
+                                    const finalItemPrice = parseFloat(c.price || 0) * (1 - discountRate / 100);
+                                    itemBaseRate = finalItemPrice / (1 + taxRate / 100);
+                                    rowTotal = itemBaseRate * c.quantity;
+                                } else {
+                                    itemBaseRate = parseFloat(c.price || 0);
+                                    rowTotal = itemBaseRate * c.quantity;
+                                }
+
                                 return `
                                 <tr>
                                     <td style="padding: 2px 0; font-size: ${printLang === 'ta' ? '12px' : '14px'}; font-weight: bold; padding-right: 2px;">${displayName}</td>
                                     <td style="padding: 2px 0; text-align: center; font-size: ${printLang === 'ta' ? '12px' : '14px'}; font-weight: normal;">${c.quantity}</td>
-                                    ${!isKot ? `<td style="padding: 2px 0; text-align: right; font-size: ${printLang === 'ta' ? '12px' : '14px'}; font-weight: normal;">${c.price}</td>` : ''}
-                                    ${!isKot ? `<td style="padding: 2px 0; text-align: right; font-size: ${printLang === 'ta' ? '12px' : '14px'}; font-weight: normal;">${(c.price * c.quantity).toFixed(2)}</td>` : ''}
+                                    ${!isKot ? `<td style="padding: 2px 0; text-align: right; font-size: ${printLang === 'ta' ? '12px' : '14px'}; font-weight: normal;">${itemBaseRate.toFixed(2)}</td>` : ''}
+                                    ${!isKot ? `<td style="padding: 2px 0; text-align: right; font-size: ${printLang === 'ta' ? '12px' : '14px'}; font-weight: normal;">${rowTotal.toFixed(2)}</td>` : ''}
                                 </tr>
                                 `;
                             }).join('')}
@@ -177,27 +206,33 @@ export default function OrdersPage() {
                     ${!isKot ? `
                         <div class="total-section" style="font-size: 15px; font-weight: normal;">
                             <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
-                                <span>${printLang === 'ta' ? 'மொத்தம்' : 'Subtotal'}:</span>
-                                <span>&#8377;${subtotal.toFixed(2)}</span>
+                                <span>${printLang === 'ta' ? 'மொத்தம்' : 'Gross Total'}:</span>
+                                <span>&#8377;${originalSubtotal.toFixed(2)}</span>
                             </div>
+                            ${discountAmount > 0 ? `
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 2px; color: #555;">
+                                <span>Discount (${discountRate.toFixed(2)}%):</span>
+                                <span>-&#8377;${discountAmount.toFixed(2)}</span>
+                            </div>
+                            ` : ''}
                             ${order.extraCharges?.length > 0 ? order.extraCharges.map(charge => `
                             <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
                                 <span>${charge.name}:</span>
                                 <span>&#8377;${charge.amount.toFixed(2)}</span>
                             </div>
                             `).join('') : ''}
+                            ${isPrintWithGst ? `
                             <div style="display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 12px; border-top: 1px dotted #ccc; padding-top: 2px;">
-                                <span>SGST:</span>
-                                <span>&#8377;${sgst}</span>
+                                <span>Taxable Value:</span>
+                                <span>&#8377;${taxableSubtotal.toFixed(2)}</span>
                             </div>
                             <div style="display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 12px;">
-                                <span>CGST:</span>
-                                <span>&#8377;${cgst}</span>
+                                <span>SGST (${sgstPct.toFixed(1)}%):</span>
+                                <span>&#8377;${sgstAmount.toFixed(2)}</span>
                             </div>
-                            ${order.discountAmount > 0 ? `
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
-                                <span>${printLang === 'ta' ? 'தள்ளுபடி' : 'Discount'}:</span>
-                                <span>-&#8377;${order.discountAmount.toFixed(2)}</span>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 12px;">
+                                <span>CGST (${cgstPct.toFixed(1)}%):</span>
+                                <span>&#8377;${cgstAmount.toFixed(2)}</span>
                             </div>
                             ` : ''}
                             <div style="display: flex; justify-content: space-between; font-size: 16px; font-weight: bold; margin-top: 5px; border-top: 1px solid #000; padding-top: 3px;">
@@ -309,24 +344,57 @@ export default function OrdersPage() {
             <div className="orders-page-header">
                 <div className="header-top">
                     <div>
-                        <h1 className="page-title">Order History</h1>
-                        <p className="page-subtitle">Track and manage past orders across all channels</p>
+                        <h1 className="page-title">{t('orders.title')}</h1>
+                        <p className="page-subtitle">Track and manage past sales across all channels</p>
                     </div>
                     <div className="stats-pill">
                         <span className="stats-number">{orders.length}</span>
-                        <span className="stats-label">Orders Found</span>
+                        <span className="stats-label">Sales Found</span>
                     </div>
                 </div>
 
                 <div className="filters-container">
                     <div className="filter-group">
-                        <label>Date</label>
+                        <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>Date</span>
+                            {filterDate && (
+                                <button 
+                                    onClick={() => setFilterDate('')} 
+                                    style={{ 
+                                        border: 'none', 
+                                        background: 'none', 
+                                        color: '#ef4444', 
+                                        cursor: 'pointer', 
+                                        fontSize: '11px',
+                                        padding: '0 4px',
+                                        fontWeight: '600'
+                                    }}
+                                    title="Show all history without date filter"
+                                >
+                                    Clear
+                                </button>
+                            )}
+                        </label>
                         <div className="input-wrapper">
                             <span className="input-icon">📅</span>
                             <input
                                 type="date"
                                 value={filterDate}
                                 onChange={(e) => setFilterDate(e.target.value)}
+                                className="filter-input"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="filter-group" style={{ minWidth: '220px' }}>
+                        <label>Search Customer / Phone</label>
+                        <div className="input-wrapper">
+                            <span className="input-icon">🔍</span>
+                            <input
+                                type="text"
+                                placeholder="Enter name, phone, or bill #"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
                                 className="filter-input"
                             />
                         </div>

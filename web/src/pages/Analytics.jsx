@@ -24,12 +24,17 @@ export default function AnalyticsPage() {
     const reports = [
         { id: 'sales-summary', label: 'Sales Summary', icon: '📊' },
         { id: 'sales-report', label: 'Sales Report', icon: '📝' },
+        { id: 'sales-gst-report', label: 'Sales Report (With GST)', icon: '💰' },
+        { id: 'sales-non-gst-report', label: 'Sales Report (Without GST)', icon: '💳' },
         { id: 'payment-mode-sales', label: 'Payment Mode Wise Report', icon: '💳' },
         { id: 'monthly-day-wise', label: 'Monthly Day wise Report', icon: '📅' },
         { id: 'end-day-report', label: 'End Day Report', icon: '🏁' },
         { id: 'category-item-wise', label: 'Category & Item wise Report', icon: '📁' },
         { id: 'item-wise-sales', label: 'Item wise sales Report', icon: '🍔' },
         { id: 'income-expense', label: 'Income & Expense Report', icon: '💸' },
+        { id: 'expenditure-report', label: 'Detailed Expenditure Report', icon: '🧾' },
+        { id: 'purchase-gst-report', label: 'Purchase Report (With GST)', icon: '🧮' },
+        { id: 'purchase-non-gst-report', label: 'Purchase Report (Without GST)', icon: '🔖' },
         { id: 'stock-report', label: 'Stock Report', icon: '📦' },
         { id: 'recipe-stock', label: 'Recipe Stock Report', icon: '🥘' },
         { id: 'purchase-item-stock', label: 'Purchase Item Stock Report', icon: '📥' },
@@ -237,6 +242,102 @@ export default function AnalyticsPage() {
                         {downloadBar}
                     </div>
                 )
+            case 'sales-gst-report':
+                return (
+                    <div className="report-content-view">
+                        <div className="report-summary-grid mini">
+                            <div className="summary-val-card" style={{ background: 'rgba(37,99,235,0.07)' }}>
+                                <span className="label">Total Revenue (incl. GST)</span>
+                                <span className="val">₹{reportData?.totalRevenue?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="summary-val-card" style={{ background: 'rgba(45,212,121,0.07)' }}>
+                                <span className="label">Base Revenue (excl. GST)</span>
+                                <span className="val" style={{ color: '#2DD479' }}>₹{reportData?.totalBaseRevenue?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="summary-val-card" style={{ background: 'rgba(239,68,68,0.07)' }}>
+                                <span className="label">Total GST Collected</span>
+                                <span className="val" style={{ color: '#ef4444' }}>₹{reportData?.totalTaxCollected?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                        </div>
+                        <div className="report-table-wrapper">
+                            <table className="premium-table">
+                                <thead>
+                                    <tr>
+                                        <th>Order #</th>
+                                        <th>Date</th>
+                                        <th>Customer</th>
+                                        <th>Payment</th>
+                                        <th>Base Amt</th>
+                                        <th style={{ color: '#ef4444' }}>GST Amt</th>
+                                        <th>Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {reportData?.sales?.map((s, i) => {
+                                        const tax  = s.taxAmount || 0
+                                        const base = s.baseAmount ?? (s.total - tax)
+                                        return (
+                                            <tr key={i}>
+                                                <td>{s.orderNumber}</td>
+                                                <td>{new Date(s.date).toLocaleDateString()}</td>
+                                                <td>{s.customer || 'Walk-in'}</td>
+                                                <td>{String(s.payment || '-')}</td>
+                                                <td>₹{base.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                                <td style={{ color: '#ef4444' }}>₹{tax.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                                <td><b>₹{s.total?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></td>
+                                            </tr>
+                                        )
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div className="report-footer-summary">
+                            <span>CGST: <b>₹{((reportData?.totalTaxCollected || 0) / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></span>
+                            &nbsp;&nbsp;|
+                            <span> SGST: <b>₹{((reportData?.totalTaxCollected || 0) / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></span>
+                        </div>
+                        {downloadBar}
+                    </div>
+                )
+            case 'sales-non-gst-report':
+                return (
+                    <div className="report-content-view">
+                        <div className="report-summary-grid mini">
+                            <div className="summary-val-card" style={{ background: 'rgba(45,212,121,0.07)' }}>
+                                <span className="label">Total Revenue (No GST)</span>
+                                <span className="val" style={{ color: '#2DD479' }}>₹{reportData?.totalRevenue?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                        </div>
+                        <div className="report-table-wrapper">
+                            <table className="premium-table">
+                                <thead>
+                                    <tr>
+                                        <th>Order #</th>
+                                        <th>Date</th>
+                                        <th>Customer</th>
+                                        <th>Payment</th>
+                                        <th>Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {reportData?.sales?.map((s, i) => (
+                                        <tr key={i}>
+                                            <td>{s.orderNumber}</td>
+                                            <td>{new Date(s.date).toLocaleDateString()}</td>
+                                            <td>{s.customer || 'Walk-in'}</td>
+                                            <td>{String(s.payment || '-')}</td>
+                                            <td><b>₹{s.total?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div className="report-footer-summary">
+                            <span>Total: <b>₹{reportData?.totalRevenue?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></span>
+                        </div>
+                        {downloadBar}
+                    </div>
+                )
             case 'payment-mode-sales':
                 return (
                     <div className="report-content-view">
@@ -376,6 +477,124 @@ export default function AnalyticsPage() {
                         {downloadBar}
                     </div>
                 )
+            case 'expenditure-report':
+                return (
+                    <div className="report-content-view">
+                        <div className="report-summary-grid mini">
+                            <div className="summary-val-card expense">
+                                <span className="label">Total Expenditure</span>
+                                <span className="val">₹{reportData?.totalExpense?.toLocaleString()}</span>
+                            </div>
+                        </div>
+                        <div className="report-table-wrapper">
+                            <table className="premium-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Description</th>
+                                        <th>Category</th>
+                                        <th>Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {reportData?.expenses?.map((t, i) => (
+                                        <tr key={i}>
+                                            <td>{new Date(t.date).toLocaleDateString()}</td>
+                                            <td>{t.description}</td>
+                                            <td>{t.category || '-'}</td>
+                                            <td>₹{t.amount?.toLocaleString()}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        {downloadBar}
+                    </div>
+                )
+            case 'purchase-gst-report':
+                return (
+                    <div className="report-content-view">
+                        <div className="report-summary-grid mini">
+                            <div className="summary-val-card expense">
+                                <span className="label">Total Purchases (incl. GST)</span>
+                                <span className="val">₹{reportData?.totalExpense?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="summary-val-card" style={{ background: 'rgba(37,99,235,0.07)' }}>
+                                <span className="label">Base Amount (excl. GST)</span>
+                                <span className="val" style={{ color: 'var(--accent)' }}>₹{reportData?.totalBaseAmount?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="summary-val-card" style={{ background: 'rgba(239,68,68,0.07)' }}>
+                                <span className="label">Total GST Paid</span>
+                                <span className="val" style={{ color: '#ef4444' }}>₹{reportData?.totalGstAmount?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                        </div>
+                        <div className="report-table-wrapper">
+                            <table className="premium-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Description</th>
+                                        <th>Invoice #</th>
+                                        <th>Base Amount</th>
+                                        <th>GST Amount</th>
+                                        <th>Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {reportData?.expenses?.map((t, i) => {
+                                        const gst = t.gstAmount || 0
+                                        const base = t.amount - gst
+                                        return (
+                                            <tr key={i}>
+                                                <td>{new Date(t.date).toLocaleDateString()}</td>
+                                                <td>{t.description}</td>
+                                                <td>{t.invoiceNumber || '-'}</td>
+                                                <td>₹{base.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                                <td style={{ color: '#ef4444' }}>₹{gst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                                <td><b>₹{t.amount?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></td>
+                                            </tr>
+                                        )
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                        {downloadBar}
+                    </div>
+                )
+            case 'purchase-non-gst-report':
+                return (
+                    <div className="report-content-view">
+                        <div className="report-summary-grid mini">
+                            <div className="summary-val-card expense">
+                                <span className="label">Total Purchases (No GST)</span>
+                                <span className="val">₹{reportData?.totalExpense?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                        </div>
+                        <div className="report-table-wrapper">
+                            <table className="premium-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Description</th>
+                                        <th>Category</th>
+                                        <th>Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {reportData?.expenses?.map((t, i) => (
+                                        <tr key={i}>
+                                            <td>{new Date(t.date).toLocaleDateString()}</td>
+                                            <td>{t.description}</td>
+                                            <td>{t.category || '-'}</td>
+                                            <td>₹{t.amount?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        {downloadBar}
+                    </div>
+                )
             case 'stock-report':
             case 'recipe-stock':
             case 'total-inventory-valuation':
@@ -434,7 +653,10 @@ export default function AnalyticsPage() {
                                         <tr key={i}>
                                             <td>{new Date(p.createdAt).toLocaleString()}</td>
                                             <td>{p.inventoryItem?.name}</td>
-                                            <td>{p.quantity} {p.inventoryItem?.unit}</td>
+                                            <td>
+                                                {p.paidQuantity > 0 ? p.paidQuantity : p.quantity} {p.inventoryItem?.unit}
+                                                {p.freeQuantity > 0 && <span style={{color:'#16a34a',fontSize:'0.9em',display:'block'}}>+{p.freeQuantity} Free</span>}
+                                            </td>
                                             <td>{p.createdBy?.name || 'System'}</td>
                                         </tr>
                                     ))}

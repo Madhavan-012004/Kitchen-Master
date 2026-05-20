@@ -904,7 +904,7 @@ export default function ProfileScreen({ navigation }: any) {
                     </TouchableOpacity>
                 </View>
 
-                <Text style={[styles.version, { color: colors.textMuted }]}>Kitchen Master v1.0.0</Text>
+                <Text style={[styles.version, { color: colors.textMuted }]}>ProBloom v1.0.0</Text>
             </ScrollView>
 
             {/* ═══════ MAP MODAL ═══════ */}

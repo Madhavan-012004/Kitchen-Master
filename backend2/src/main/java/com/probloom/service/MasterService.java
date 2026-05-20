@@ -17,11 +17,50 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+import java.security.KeyFactory;
+import java.security.PrivateKey;
+import java.security.Signature;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.util.Base64;
+import java.time.Instant;
+import java.nio.charset.StandardCharsets;
+
 @Service
 public class MasterService {
 
+    private static final String PRIVATE_KEY_PEM =
+        "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDg2dCPiMkTo55+" +
+        "BzF5j6wXiwLYSe/5IFvEl0NchXWXZLiIuMkZTgjgC8J1wLjbkEQ7J5WfFJDOh+1r" +
+        "zg8olXkB1XDVJXox6j802BIo5ezzqJActL55wx+J/JvoirSg5I7//OnsSYxfcBgy" +
+        "ntscuxqRsuYfXP7V3MarbV1EzJQPUDXS2TRK1aLdk1/yNoLeuTMiW/O/vyj66GRT" +
+        "CfNEgSZEzF2TWqzZwuNdEy8LRmI+JrxHLL6p4N017/sP+br3kCsDue1XQ7knnqHZ" +
+        "TEMde0HpyEzO0qfN870AX3DaSDNvHTxZRB1xn7/z7WPlr/HvZ6aCmEj/uZbdtGy7" +
+        "QMxSI3w/AgMBAAECggEAEcKSmyvCOidj1u+JhGEJRkjIHj5k0ogwR2xtOSsfeShO" +
+        "/RmfZLzJraywHO3ujAUupn9/bXPJ5k5NPgUmJF3+E1uBEIznxHaMrIdek9VpbGuF" +
+        "iobqPqLfZF5MEEeYcdbrxqN69Jtwl386ohDzHKdYt2Zqj9KgHFNWa+b1BYClNzpI" +
+        "OXIE1nsHg2jITk5apJM2cRfzgIr0N58X0HdyMuM73h9cHyBakUykKB4QsBcJahVE" +
+        "QGvtExnfIcpKn2XswbCkgbhd9Up3304D9lRTI51+GVSx4tTdCPYxdfmfdB2JfORy" +
+        "S6iGxDEFkKqJJcyx+KHvfY64j6T3DO9aW5HgDR7lgQKBgQD9HPdF66/n8sOgivQ5" +
+        "JtpPCHsq3hOupRsoELrYuBwwXciVinYseDJO30bTpibRJYcSuSALbZn4k08U8RrV" +
+        "LVFPG6/q2BT1JYIRsFkTDLb9AYtEbYujzO65ymXf7zZ6lAAIc2c0VWCBAMpKFfWL" +
+        "4hgdntF40Q37zBN2dTaSqZdygQKBgQDjalRBYXQdjoo6o5XRmOtgnJ2e/nqnVbZR" +
+        "BuB3Yd32Z2+ts3Yo0JRKkbelMqTlL+6yyyQ9lRl1NPFXMDoPFCKcY6GtWn3CwiXl" +
+        "kzzZ9/V3L6kas5Tpp0xaqZHwLhrds+zAw2Cca7Sv5N1Ufz/Dbh88jrRvYdqtMuQ6" +
+        "5SwYbOIOvwKBgQDAjAtzblK3sU6uT2ZwH6VNIBeKSbxRTBp3hRqOiKgxBvbzA4zY" +
+        "UWt74pBfq3K2AcVaMeg1qV/K4Ez1kmCmML483sQZc92li64BxNROEIsXttf56xei" +
+        "OOCWB2kuTCx2XSYVR60H+7bZC//XEhNkIU/VIJ8bOHVZyio4H/yu30JtgQKBgAqU" +
+        "gtD74LQTUpkBzVGQBLtc7fRcsIYidbX1VPIY6oOxMj/pjoC9m3iQqPOVlJhZD4jf" +
+        "7JK04hdS3DuLMdhLvoR6GiZ/hERQVgUFQZp+b7wYyoxEeJQaRXIeW3zKGFPiMAyT" +
+        "ymXcmO5p/mYU+Xl1IRznIrvf2JWgPYAD83Y7cpTvAoGAR1F4dSd6u7L5lCEiAT2g" +
+        "Efp6FUlGAVI6SFwS5m2AT82TC40JnM41SHU9e0rqE+LG3cJ4lOnrwWk/CFl9LyOJ" +
+        "H5ybkd5XJPH0eleD79uatVV+R5IlXQuuLZ5Me0U9tHZqXTOQEMv34LEa+qP0NHUq" +
+        "qqrD5AdNDj9an/HwKiWHeDM=";
+
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private com.probloom.repository.StakeholderMappingRepository stakeholderMappingRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -104,6 +143,12 @@ public class MasterService {
                         if (!lt.equalsIgnoreCase(licenseType)) return false;
                     }
                     return true;
+                })
+                .filter(u -> !Boolean.TRUE.equals(u.getIsProBloomAdmin())) // Exclude Super Admins
+                .sorted((u1, u2) -> {
+                    LocalDateTime d1 = u1.getCreatedAt() != null ? u1.getCreatedAt() : LocalDateTime.MIN;
+                    LocalDateTime d2 = u2.getCreatedAt() != null ? u2.getCreatedAt() : LocalDateTime.MIN;
+                    return d2.compareTo(d1); // DESC
                 })
                 .map(u -> serializeClient(Objects.requireNonNull(u), Objects.requireNonNull(now)))
                 .collect(Collectors.toList());
@@ -233,6 +278,108 @@ public class MasterService {
         return res;
     }
 
+    public Map<String, Object> generateAndEmailLicense(@NonNull Long adminId, @NonNull org.springframework.web.multipart.MultipartFile file, String expiryDate) {
+        getAdmin(adminId);
+        
+        try {
+            String content = new String(file.getBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            @SuppressWarnings("unchecked")
+            Map<String, Object> reqData = mapper.readValue(content, Map.class);
+            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> customer = (Map<String, Object>) reqData.getOrDefault("customer", new HashMap<>());
+            String hwId = (String) reqData.getOrDefault("hardwareId", java.util.UUID.randomUUID().toString());
+            
+            String email = (String) customer.get("email");
+            if (email == null || email.trim().isEmpty()) {
+                email = "offline_" + hwId.toLowerCase() + "@local.probloom";
+            }
+            
+            User user = userRepository.findByEmail(email).orElse(null);
+            String generatedPassword = null;
+            
+            if (user == null) {
+                generatedPassword = java.util.UUID.randomUUID().toString().substring(0, 8);
+                user = User.builder()
+                        .name((String) customer.getOrDefault("name", "Offline Client"))
+                        .email(email)
+                        .password(passwordEncoder.encode(generatedPassword))
+                        .restaurantName((String) customer.getOrDefault("shopName", "Offline Restaurant"))
+                        .phone((String) customer.getOrDefault("phone", ""))
+                        .address((String) customer.getOrDefault("address", ""))
+                        .role(User.Role.OWNER)
+                        .isActive(true)
+                        .isApproved(true)
+                        .onboardingCompleted(true)
+                        .build();
+                        
+                user.setLicenseType("prime");
+                user.setSubscriptionPlan(User.SubscriptionPlan.ENTERPRISE);
+                user.setSubscriptionStartedAt(LocalDateTime.now());
+                user.setSubscriptionExpiresAt(LocalDateTime.parse(expiryDate + "T23:59:59"));
+                user = Objects.requireNonNull(userRepository.save(user));
+            } else {
+                user.setSubscriptionExpiresAt(LocalDateTime.parse(expiryDate + "T23:59:59"));
+            }
+            
+            // Generate RSA signed JSON license for standalone desktop app
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("hardwareId", hwId);
+            payload.put("issuedAt", Instant.now().toString());
+            
+            // Format expiry as Instant
+            String expiresAtStr;
+            try {
+                expiresAtStr = Instant.parse(expiryDate + "T23:59:59Z").toString();
+            } catch (Exception e) {
+                // If it fails to parse, maybe it's already an ISO string
+                expiresAtStr = Instant.parse(expiryDate).toString();
+            }
+            payload.put("expiresAt", expiresAtStr);
+            payload.put("features", null);
+            payload.put("customer", customer);
+            if (generatedPassword != null) {
+                payload.put("generatedPassword", generatedPassword);
+            }
+
+            // Generate Signature
+            String payloadJson = mapper.writeValueAsString(payload);
+            
+            PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(Base64.getDecoder().decode(PRIVATE_KEY_PEM));
+            KeyFactory kf = KeyFactory.getInstance("RSA");
+            PrivateKey privateKey = kf.generatePrivate(spec);
+            
+            Signature sig = Signature.getInstance("SHA256withRSA");
+            sig.initSign(privateKey);
+            sig.update(payloadJson.getBytes(StandardCharsets.UTF_8));
+            String rsaSignature = Base64.getEncoder().encodeToString(sig.sign());
+            
+            // Assemble full license data
+            Map<String, Object> fullLicense = new HashMap<>(payload);
+            fullLicense.put("signature", rsaSignature);
+            
+            String rawJson = mapper.writeValueAsString(fullLicense);
+            String licenseB64 = Base64.getEncoder().encodeToString(rawJson.getBytes(StandardCharsets.UTF_8));
+            
+            user.setLicenseKey(licenseB64);
+            Objects.requireNonNull(userRepository.save(user));
+            
+            // Dispatch Email via Backend to bypass EmailJS "non-browser" restriction
+            sendEmailViaEmailJS(email, user.getRestaurantName(), generatedPassword, licenseB64, expiryDate);
+            
+            Map<String, Object> res = new HashMap<>();
+            res.put("licenseB64", licenseB64);
+            res.put("email", email);
+            res.put("generatedPassword", generatedPassword != null ? generatedPassword : "(Existing Account)");
+            res.put("customerName", user.getRestaurantName());
+            return res;
+            
+        } catch (Exception e) {
+            throw new BadRequestException("Failed to process machine.req: " + e.getMessage());
+        }
+    }
+
     public Map<String, Object> toggleStatus(@NonNull Long adminId, @NonNull Long clientId) {
         getAdmin(adminId);
         User user = userRepository.findById(clientId)
@@ -260,6 +407,39 @@ public class MasterService {
         getAdmin(adminId);
         User user = userRepository.findById(clientId)
                 .orElseThrow(() -> new ResourceNotFoundException("Client not found"));
+        
+        // Clean up stakeholder mappings first to avoid foreign key constraints
+        stakeholderMappingRepository.deleteByUserId(clientId);
+        
         userRepository.delete(Objects.requireNonNull(user));
+    }
+
+    private void sendEmailViaEmailJS(String email, String customerName, String generatedPassword, String licenseB64, String expiryDate) {
+        try {
+            Map<String, Object> templateParams = new HashMap<>();
+            templateParams.put("to_email", email);
+            templateParams.put("customer_name", customerName);
+            templateParams.put("generated_password", generatedPassword != null ? generatedPassword : "(Existing Account)");
+            templateParams.put("license_file", licenseB64);
+            templateParams.put("expiry_date", expiryDate);
+
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("service_id", "service_oblwsjg");
+            payload.put("template_id", "template_aalh1yb");
+            payload.put("user_id", "Vjm57tVlA_OAiZ1H8");
+            payload.put("template_params", templateParams);
+
+            org.springframework.web.client.RestTemplate restTemplate = new org.springframework.web.client.RestTemplate();
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            headers.set("Origin", "http://localhost"); // Bypass EmailJS non-browser restriction
+
+            org.springframework.http.HttpEntity<Map<String, Object>> request = new org.springframework.http.HttpEntity<>(payload, headers);
+            
+            restTemplate.postForEntity("https://api.emailjs.com/api/v1.0/email/send", request, String.class);
+            System.out.println("EmailJS dispatch successful via backend.");
+        } catch (Exception e) {
+            System.err.println("EmailJS dispatch failed: " + e.getMessage());
+        }
     }
 }

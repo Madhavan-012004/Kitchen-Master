@@ -7,6 +7,7 @@ export default function Expenditures() {
     const [transactions, setTransactions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
+    const [selectedInvoice, setSelectedInvoice] = useState(null);
     const [filter, setFilter] = useState('All');
     const [viewMode, setViewMode] = useState('invoice'); // 'invoice' or 'all'
     const [formData, setFormData] = useState({
@@ -274,9 +275,18 @@ export default function Expenditures() {
                                             ₹{group.totalAmount.toLocaleString('en-IN', {maximumFractionDigits:2})}
                                         </td>
                                         <td>
-                                            {group.transactions.length === 1 && (
-                                                <button className="del-btn" onClick={() => handleDelete(group.transactions[0].id)}>🗑️</button>
-                                            )}
+                                            <div style={{display:'flex', gap:'8px'}}>
+                                                <button 
+                                                    className="icon-btn-small" 
+                                                    style={{background:'rgba(59,130,246,0.1)',color:'#3b82f6',border:'none',borderRadius:'6px',padding:'6px',cursor:'pointer',fontSize:'12px'}}
+                                                    onClick={() => setSelectedInvoice(group)}
+                                                >
+                                                    👁️ View Details
+                                                </button>
+                                                {group.transactions.length === 1 && (
+                                                    <button className="del-btn" onClick={() => handleDelete(group.transactions[0].id)}>🗑️</button>
+                                                )}
+                                            </div>
                                         </td>
                                     </tr>
                                 );
@@ -395,7 +405,7 @@ export default function Expenditures() {
                                     </select>
                                 </div>
                             </div>
-                            <div className="form-row">
+                            <div className="form-row-2">
                                 <div className="form-group">
                                     <label>Invoice Number <span style={{fontWeight:'normal',opacity:0.6}}>(optional)</span></label>
                                     <input
@@ -428,6 +438,50 @@ export default function Expenditures() {
                                 <button type="submit" className="primary-btn">Save Expenditure</button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {selectedInvoice && (
+                <div className="exp-modal-overlay">
+                    <div className="exp-modal" style={{ maxWidth: '800px', width: '90%' }}>
+                        <div className="modal-header">
+                            <h2>Invoice Details: {selectedInvoice.invoiceNumber || 'N/A'}</h2>
+                            <button className="close-btn" onClick={() => setSelectedInvoice(null)}>✕</button>
+                        </div>
+                        <div style={{ padding: '20px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', background: 'var(--bg-hover)', padding: '15px', borderRadius: '8px' }}>
+                                <div>
+                                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Supplier</div>
+                                    <div style={{ fontWeight: 'bold' }}>{selectedInvoice.transactions[0]?.description?.split(' - ')[0] || 'Unknown'}</div>
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Total Amount</div>
+                                    <div style={{ fontWeight: 'bold', color: 'var(--accent)', fontSize: '18px' }}>₹{selectedInvoice.totalAmount.toLocaleString('en-IN', {maximumFractionDigits:2})}</div>
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Status</div>
+                                    <div style={{ fontWeight: 'bold' }}>{selectedInvoice.paymentStatus === 'PAID' ? '✅ Paid' : '⏳ Unpaid'}</div>
+                                </div>
+                            </div>
+
+                            <table className="exp-table" style={{ marginTop: '0' }}>
+                                <thead>
+                                    <tr>
+                                        <th>Item Description</th>
+                                        <th style={{ textAlign: 'right' }}>Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {selectedInvoice.transactions.map(t => (
+                                        <tr key={t.id}>
+                                            <td>{t.description}</td>
+                                            <td style={{ textAlign: 'right', fontWeight: 'bold' }}>₹{t.amount.toLocaleString('en-IN', {maximumFractionDigits:2})}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             )}

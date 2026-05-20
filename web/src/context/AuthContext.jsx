@@ -98,10 +98,10 @@ export function AuthProvider({ children }) {
         }
         if (role === 'owner' || role === 'manager') return true
         if (section === 'attendance') return false 
-        if (section === 'kitchen') return ['owner', 'manager', 'kitchen'].includes(role)
+        if (section === 'kitchen') return ['owner', 'manager', 'kot'].includes(role)
         if (role === 'biller') return ['pos', 'orders', 'billing'].includes(section)
         if (role === 'waiter') return ['pos', 'orders', 'menu'].includes(section)
-        if (role === 'kitchen') return ['orders'].includes(section)
+        if (role === 'kot') return ['orders'].includes(section)
         if (role === 'inventory') return ['menu', 'orders', 'inventory'].includes(section)
         if (section === 'billing') return ['owner', 'manager', 'biller'].includes(role)
         return false

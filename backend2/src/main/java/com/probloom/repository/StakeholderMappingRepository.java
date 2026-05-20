@@ -29,4 +29,10 @@ public interface StakeholderMappingRepository extends JpaRepository<StakeholderM
     /** Verify a stakeholder has access to a specific restaurant */
     @Query("SELECT COUNT(sm) > 0 FROM StakeholderMapping sm WHERE sm.stakeholder.id = :stakeholderId AND sm.restaurant.id = :restaurantId AND sm.isActive = true")
     boolean existsActiveMapping(@Param("stakeholderId") Long stakeholderId, @Param("restaurantId") Long restaurantId);
+
+    /** Delete all mappings associated with a user (either as stakeholder or restaurant) */
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.transaction.annotation.Transactional
+    @Query("DELETE FROM StakeholderMapping sm WHERE sm.stakeholder.id = :userId OR sm.restaurant.id = :userId")
+    void deleteByUserId(@Param("userId") Long userId);
 }

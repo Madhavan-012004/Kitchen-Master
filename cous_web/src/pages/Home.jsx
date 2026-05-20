@@ -149,8 +149,12 @@ export default function Home() {
 
     /* ─── Socket & Fast Polling ─── */
     useEffect(() => {
-        const host = window.location.hostname;
-        const s = io(`https://${host}:9092`, { secure: true, rejectUnauthorized: false });
+        const s = io({
+            path: '/socket.io',
+            transports: ['websocket', 'polling'],
+            secure: window.location.protocol === 'https:',
+            rejectUnauthorized: false
+        });
         const normalizedTable = (tableNumber && !tableNumber.toLowerCase().startsWith('table ') && tableNumber.toLowerCase() !== 'takeaway')
             ? `Table ${tableNumber}` : tableNumber;
         s.on('connect', () => s.emit('join', `table-${restaurantId}-${normalizedTable}`));

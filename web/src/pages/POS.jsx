@@ -54,9 +54,10 @@ export default function POSPage() {
     };
 
     // Barcode Scanner & Scale States
-    const [barcodeBuffer, setBarcodeBuffer] = useState('')
+    const barcodeBufferRef = React.useRef('') // useRef instead of useState to avoid keydown listener accumulation
     const [lastScannedItem, setLastScannedItem] = useState(null)
     const [scanning, setScanning] = useState(false)
+    const [settleWithGst, setSettleWithGst] = useState(true)
     const [scaleWeight, setScaleWeight] = useState(0)
     const [scalePort, setScalePort] = useState(null)
     
@@ -81,6 +82,14 @@ export default function POSPage() {
     const queueRef = React.useRef([]);
     const isPrintingRef = React.useRef(false);
     const printedOrdersRef = React.useRef(new Set()); // To prevent duplicate prints
+
+    // Stable refs for values used inside socket/keydown handlers — avoids stale closures and
+    // prevents re-registering listeners on every state change.
+    const selectedTableRef = React.useRef(selectedTable);
+    useEffect(() => { selectedTableRef.current = selectedTable; }, [selectedTable]);
+
+    const showQueueModalRef = React.useRef(showQueueModal);
+    useEffect(() => { showQueueModalRef.current = showQueueModal; }, [showQueueModal]);
 
     // Load menu items
     useEffect(() => {
@@ -151,25 +160,20 @@ export default function POSPage() {
             if (socket.connected) joinRoom()
             socket.on('connect', joinRoom)
 
-            const handleUpdate = () => {
-                fetchActiveOrders()
-            }
+            const handleUpdate = () => fetchActiveOrders()
 
-            socket.on('kot:new', handleUpdate)
-            socket.on('kot:update', handleUpdate)
-            socket.on('queue_update', (data) => {
-                console.log("📢 Queue update received:", data);
+            // ✅ Named handlers stored as variables so cleanup can remove the EXACT same reference
+            const handleQueueUpdate = (data) => {
                 fetchWaitlistCount();
-                // If the modal is not open, show a small notification
-                if (!showQueueModal) {
+                // Use ref to read current modal state without needing it in deps
+                if (!showQueueModalRef.current) {
                     setNotification("New customer joined the waitlist!");
                     setTimeout(() => setNotification(''), 5000);
                 }
-            });
-            
-            socket.on('kot:statusUpdate', (data) => {
+            };
+
+            const handleStatusUpdate = (data) => {
                 handleUpdate();
-                // Auto-print if marked as PAID from another device
                 if (data.status?.toLowerCase() === 'paid' && data.orderId) {
                     api.get(`/orders/${data.orderId}`).then(res => {
                         if (res.data.success && res.data.data) {
@@ -177,8 +181,9 @@ export default function POSPage() {
                         }
                     }).catch(() => {});
                 }
-            })
-            socket.on('billing:newRequest', (data) => {
+            };
+
+            const handleBillingRequest = (data) => {
                 if (data.order && data.order._id) {
                     const printKey = `${data.order._id}_billing`;
                     if (!printedOrdersRef.current.has(printKey)) {
@@ -188,36 +193,46 @@ export default function POSPage() {
                         handleUpdate();
                     }
                 }
-            })
-            socket.on('kot:itemUpdate', (data) => {
+            };
+
+            const handleItemUpdate = (data) => {
                 handleUpdate();
-                // If the update is for the currently selected table, we should update the cart items
-                const tableKey = data.tableNumber || `Table ${data.tableNumber}`; 
-                if (selectedTable && (selectedTable === data.tableNumber || selectedTable === `Table ${data.tableNumber}`)) {
+                // Use ref to read selectedTable without needing it in effect deps
+                const curTable = selectedTableRef.current;
+                if (curTable && (curTable === data.tableNumber || curTable === `Table ${data.tableNumber}`)) {
                     setCart(prev => prev.map(item =>
                         item._id === data.itemId ? { ...item, status: data.status } : item
                     ));
                 }
-            })
-            socket.on('notification:send', (data) => {
+            };
+
+            const handleNotification = (data) => {
                 if (data.message) {
                     setNotification(data.message);
                     setTimeout(() => setNotification(''), 7000);
                 }
-            })
+            };
+
+            socket.on('kot:new', handleUpdate)
+            socket.on('kot:update', handleUpdate)
+            socket.on('queue_update', handleQueueUpdate)
+            socket.on('kot:statusUpdate', handleStatusUpdate)
+            socket.on('billing:newRequest', handleBillingRequest)
+            socket.on('kot:itemUpdate', handleItemUpdate)
+            socket.on('notification:send', handleNotification)
 
             return () => {
                 socket.off('connect', joinRoom)
                 socket.off('kot:new', handleUpdate)
                 socket.off('kot:update', handleUpdate)
-                socket.off('queue_update', fetchWaitlistCount)
-                socket.off('kot:itemUpdate', handleUpdate)
-                socket.off('kot:statusUpdate', handleUpdate)
-                socket.off('billing:newRequest')
-                socket.off('notification:send')
+                socket.off('queue_update', handleQueueUpdate)   // ✅ Exact same reference
+                socket.off('kot:statusUpdate', handleStatusUpdate)
+                socket.off('billing:newRequest', handleBillingRequest)
+                socket.off('kot:itemUpdate', handleItemUpdate)
+                socket.off('notification:send', handleNotification)
             }
         }
-    }, [restaurantId, socket, selectedTable])
+    }, [restaurantId, socket]) // ✅ Removed selectedTable — now accessed via ref instead
 
     // Update waitlist count when modal is fully closed so the waiter sees accurate numbers after managing queue
     useEffect(() => {
@@ -227,23 +242,24 @@ export default function POSPage() {
     }, [showQueueModal]);
     
     // Global Barcode Scan Listener
+    // ✅ Uses a ref for the buffer so the listener is registered ONCE (not on every keystroke)
     useEffect(() => {
         const handleKeyDown = (e) => {
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
             if (e.key === 'Enter') {
-                if (barcodeBuffer.length >= 3) {
-                    handleBarcodeScan(barcodeBuffer);
+                if (barcodeBufferRef.current.length >= 3) {
+                    handleBarcodeScan(barcodeBufferRef.current);
                 }
-                setBarcodeBuffer('');
+                barcodeBufferRef.current = '';
             } else if (e.key.length === 1) {
-                setBarcodeBuffer(prev => prev + e.key);
+                barcodeBufferRef.current += e.key;
             }
         };
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [barcodeBuffer, selectedTable]);
+    }, []); // ✅ Empty deps — registers ONCE, never accumulates
 
     const handleBarcodeScan = async (code) => {
         if (!selectedTable) {
@@ -545,7 +561,8 @@ export default function POSPage() {
                     notes: c.notes,
                     status: c.status,
                     inventoryItemId: c.inventoryItemId,
-                    barcode: c.barcode
+                    barcode: c.barcode,
+                    taxRate: c.taxRate !== undefined ? c.taxRate : (typeof user?.taxRate === 'number' ? user.taxRate : 5.0)
                 })),
                 orderType: (selectedTable && selectedTable.startsWith('Takeaway')) ? 'takeaway' : 'dine-in',
                 extraCharges: orderExtraCharges,
@@ -723,7 +740,8 @@ export default function POSPage() {
             await api.patch(`/orders/${existing._id}/status`, { 
                 status: 'paid', 
                 paymentStatus: 'paid', 
-                paymentMethod: method 
+                paymentMethod: method,
+                printWithGst: settleWithGst
             })
             const newOrders = { ...orders }
             delete newOrders[selectedTable]
@@ -755,34 +773,53 @@ export default function POSPage() {
         const logoImg = `<img src="${logoUrl}" class="logo" alt="logo" />`;
 
         const newJobs = [];
+        
+        // Evaluate user printer settings (default to true if undefined)
+        const isCashCounterPrinterEnabled = user?.billPrinterEnabled !== false;
+        const isKitchenPrinterEnabled = user?.kotPrinterEnabled !== false;
 
-        if (printCustomerCopy) {
-            newJobs.push({ 
-                type: t('bill.customer_copy', 'CUSTOMER COPY'), 
-                isKot: false,
-                printLang,
-                orderData: {
-                    items: order.items,
-                    orderNumber: order.orderNumber || (order._id ? String(order._id).slice(-8).toUpperCase() : 'NEW'),
-                    table: order.tableNumber || (order.tokenNumber ? `Token ${order.tokenNumber}` : 'Takeaway'),
-                    subtotal: order.total || order.subtotal || 0,
-                    extraCharges: order.extraCharges || [],
-                    createdAt: order.createdAt || new Date(),
-                    paymentMethod: order.paymentMethod || paymentMethod || 'Cash',
-                    // Pharmacy / custom bill fields
-                    billTemplate: order.billTemplate || 'standard',
-                    doctorName: order.doctorName || '',
-                    numberOfDays: order.numberOfDays || '',
-                    customerName: order.customerName || '',
-                    customerPhone: order.customerPhone || '',
-                    customerFirm: order.customerFirm || '',
-                    billNo: order.billNo || order.orderNumber || '',
-                    discountPct: order.discountPct || 0,
-                } 
-            });
+        if (printCustomerCopy && isCashCounterPrinterEnabled) {
+            const count = user?.printCount || 1;
+            for (let i = 0; i < count; i++) {
+                newJobs.push({ 
+                    type: t('bill.customer_copy', 'CUSTOMER COPY'), 
+                    itemWiseKOT: user.itemWiseKOT ?? false,
+                    printCount: user.printCount ?? 1,
+                    pharmacyFontSize: user.pharmacyFontSize || 11,
+                    quickMode: user.quickMode ?? false,
+                    printCategoryInBill: user?.printCategoryInBill ?? false,
+                    printLang,
+                    isKot: false,
+                    orderData: {
+                        items: order.items,
+                        orderNumber: order.orderNumber || (order._id ? String(order._id).slice(-8).toUpperCase() : 'NEW'),
+                        table: order.tableNumber || (order.tokenNumber ? `Token ${order.tokenNumber}` : 'Takeaway'),
+                        subtotal: order.subtotal !== undefined ? order.subtotal : (order.total || 0),
+                        extraCharges: order.extraCharges || [],
+                        createdAt: order.createdAt || new Date(),
+                        paymentMethod: order.paymentMethod || paymentMethod || 'Cash',
+                        // Pharmacy / custom bill fields
+                        billTemplate: user?.basicBillTemplate || order.billTemplate || 'standard',
+                        printWithGst: order.printWithGst !== false,
+                        doctorName: order.doctorName || '',
+                        numberOfDays: order.numberOfDays || '',
+                        customerName: order.customerName || '',
+                        customerPhone: order.customerPhone || '',
+                        customerFirm: order.customerFirm || '',
+                        billNo: order.billNo || order.orderNumber || '',
+                        discountPct: order.discountPct || 0,
+                        source: order.source || '',
+                        totalDiscount: order.totalDiscount,
+                        totalTax: order.totalTax,
+                        totalSgst: order.totalSgst,
+                        totalCgst: order.totalCgst,
+                        total: order.total
+                    } 
+                });
+            }
         }
 
-        if (printKitchenCopy && !order.skipKOT) {
+        if (printKitchenCopy && !order.skipKOT && isKitchenPrinterEnabled) {
             newJobs.push({ 
                 type: t('bill.kitchen_copy', 'KITCHEN COPY'), 
                 isKot: true,
@@ -819,7 +856,7 @@ export default function POSPage() {
     const handlePrintWithLanguage = (lang) => {
         setShowPrintLangModal(false);
         if (pendingPrintOrder) {
-            printBill(pendingPrintOrder, true, false, lang);
+            printBill({...pendingPrintOrder, printWithGst: settleWithGst}, true, false, lang);
             setPendingPrintOrder(null);
         }
         setShowPaymentModal(true);
@@ -869,7 +906,7 @@ export default function POSPage() {
 
         while (queueRef.current.length > 0) {
             const job = queueRef.current.shift();
-            const { type, isKot, orderData, printLang = 'en' } = job;
+            const { type, isKot, orderData, printLang = 'en', pharmacyFontSize = 11, printCategoryInBill = false } = job;
             const { items, orderNumber, table, subtotal, extraCharges, createdAt } = orderData;
 
             // ── Destructure pharmacy-specific fields FIRST (used inside getBillBody) ──
@@ -883,17 +920,54 @@ export default function POSPage() {
                 billNo: jobBillNo,
                 discountPct: jobDiscountPct,
                 paymentMethod: jobPaymentMethod,
+                printWithGst: jobPrintWithGst,
+                taxType,
             } = orderData;
 
             // KOT is ALWAYS thermal, never pharmacy A4
             const isPharmacy = !isKot && (jobBillTemplate === 'pharmacy' || jobBillTemplate === 'A4');
+            const isGstBill = !isKot && (jobBillTemplate === 'gst');
             
             const getBillBody = () => {
+                const isSupermarket = orderData.source === 'supermarket';
                 const totalItemsCount = items.reduce((acc, item) => acc + item.quantity, 0);
-                const sgst = (subtotal * 0.025).toFixed(2);
-                const cgst = (subtotal * 0.025).toFixed(2);
-                const totalGst = (parseFloat(sgst) + parseFloat(cgst)).toFixed(2);
-                const grandTotal = (subtotal + parseFloat(totalGst) + (extraCharges ? extraCharges.reduce((s,c) => s + Number(c.amount || 0), 0) : 0)).toFixed(2);
+                const discountRate = parseFloat(jobDiscountPct) || 0;
+                const taxRate = typeof user?.taxRate === 'number' ? user.taxRate : 18;
+                
+                const originalSubtotal = isSupermarket && orderData.subtotal !== undefined
+                    ? orderData.subtotal
+                    : items.reduce((s, item) => s + (parseFloat(item.price || 0) * (parseFloat(item.quantity) || 0)), 0);
+                
+                const discountAmount = isSupermarket
+                    ? (discountRate > 0 ? originalSubtotal * (discountRate / 100) : (orderData.totalDiscount || 0))
+                    : originalSubtotal * (discountRate / 100);
+                
+                const netSubtotal = originalSubtotal - discountAmount;
+                
+                const taxableSubtotal = isSupermarket
+                    ? (netSubtotal - (orderData.totalTax || 0))
+                    : (jobPrintWithGst !== false ? netSubtotal / (1 + taxRate / 100) : netSubtotal);
+
+                const totalGstAmount = isSupermarket && orderData.totalTax !== undefined
+                    ? orderData.totalTax
+                    : (jobPrintWithGst !== false ? netSubtotal - taxableSubtotal : 0);
+                
+                const sgstAmount = isSupermarket && orderData.totalSgst !== undefined
+                    ? orderData.totalSgst
+                    : totalGstAmount / 2;
+                
+                const cgstAmount = isSupermarket && orderData.totalCgst !== undefined
+                    ? orderData.totalCgst
+                    : totalGstAmount / 2;
+                
+                const extraTotal = extraCharges ? extraCharges.reduce((s,c) => s + Number(c.amount || 0), 0) : 0;
+                
+                const grandTotal = isSupermarket && orderData.total !== undefined
+                    ? orderData.total.toFixed(2)
+                    : (netSubtotal + extraTotal).toFixed(2);
+                
+                const sgstPct = taxRate / 2;
+                const cgstPct = taxRate / 2;
 
                 return `
                 <div class="${isKot ? 'kot-section' : 'customer-section'}">
@@ -902,7 +976,8 @@ export default function POSPage() {
                         <br/>
                         ${logoImg}
                         <h2 style="margin: 3px 0; text-transform: uppercase; font-size: 20px; font-weight: bold;">${restaurantName}</h2>
-                        ${!isKot ? `<div style="font-size: 15px; margin-bottom: 3px; font-weight: normal;">GSTIN: ${user.gstNumber || 'N/A'}</div>` : ''}
+                        ${(!isKot && user?.address) ? `<div style="font-size: 13px; margin: 2px auto; max-width: 95%; line-height: 1.2; font-weight: normal; color: #333;">${user.address}</div>` : ''}
+                        ${(!isKot && jobPrintWithGst !== false) ? `<div style="font-size: 15px; margin-bottom: 3px; font-weight: normal;">GSTIN: ${user.gstNumber || 'N/A'}</div>` : ''}
                     </div>
                     <div style="border-top: 1px solid #000; border-bottom: 1px solid #000; margin: 4px 0; padding: 3px 0;">
                         <div style="display: flex; justify-content: space-between; font-size: 15px; padding: 0 10px; font-weight: normal;">
@@ -917,10 +992,11 @@ export default function POSPage() {
                     <table>
                         <thead>
                             <tr style="border-bottom: 1px solid #000; font-size: ${printLang === 'ta' ? '12px' : '15px'}; font-weight: bold;">
-                                <th style="text-align: left; width: 42%;">${t('bill.item', 'Item')}</th>
-                                <th style="text-align: center; width: 15%;">${t('bill.qty', 'Qty')}</th>
-                                ${!isKot ? `<th style="text-align: right; width: 18%;">${t('bill.rate', 'Price')}</th>` : ''}
-                                ${!isKot ? `<th style="text-align: right; width: 25%;">${t('bill.amount', 'Amt')}</th>` : ''}
+                                <th style="text-align: left; width: ${!isKot && printCategoryInBill ? '30%' : '42%'};">${t('bill.item', 'Item')}</th>
+                                ${!isKot && printCategoryInBill ? `<th style="text-align: left; width: 18%;">${t('bill.category', 'Grp')}</th>` : ''}
+                                <th style="text-align: center; width: 12%;">${t('bill.qty', 'Qty')}</th>
+                                ${!isKot ? `<th style="text-align: right; width: ${printCategoryInBill ? '17%' : '18%'};">${t('bill.rate', 'Price')}</th>` : ''}
+                                ${!isKot ? `<th style="text-align: right; width: ${printCategoryInBill ? '23%' : '25%'};">${t('bill.amount', 'Amt')}</th>` : ''}
                             </tr>
                         </thead>
                         <tbody>
@@ -928,12 +1004,29 @@ export default function POSPage() {
                                 const matchedMenu = menuItems.find(m => String(m._id) === String(c.menuItemId));
                                 const tName = c.tamilName || (matchedMenu ? matchedMenu.tamilName : null);
                                 const displayName = (printLang === 'ta' && tName) ? tName : c.name;
+                                
+                                let itemBaseRate, rowTotal;
+                                if (jobPrintWithGst !== false) {
+                                    const finalItemPrice = parseFloat(c.price || 0) * (1 - discountRate / 100);
+                                    if (taxType === 'Exclusive') {
+                                        itemBaseRate = finalItemPrice;
+                                    } else {
+                                        itemBaseRate = finalItemPrice / (1 + taxRate / 100);
+                                    }
+                                    rowTotal = itemBaseRate * c.quantity;
+                                } else {
+                                    const finalItemPrice = parseFloat(c.price || 0) * (1 - discountRate / 100);
+                                    itemBaseRate = finalItemPrice;
+                                    rowTotal = itemBaseRate * c.quantity;
+                                }
+
                                 return `
                                 <tr>
                                     <td style="padding: 2px 0; font-size: ${printLang === 'ta' ? '12px' : '14px'}; font-weight: bold; padding-right: 2px;">${displayName}</td>
+                                    ${!isKot && printCategoryInBill ? `<td style="padding: 2px 0; font-size: ${printLang === 'ta' ? '12px' : '14px'}; font-weight: normal; padding-right: 2px; text-transform: capitalize;">${matchedMenu?.category || c.category || 'General'}</td>` : ''}
                                     <td style="padding: 2px 0; text-align: center; font-size: ${printLang === 'ta' ? '12px' : '14px'}; font-weight: normal;">${c.quantity}</td>
-                                    ${!isKot ? `<td style="padding: 2px 0; text-align: right; font-size: ${printLang === 'ta' ? '12px' : '14px'}; font-weight: normal;">${parseFloat(c.price).toFixed(2)}</td>` : ''}
-                                    ${!isKot ? `<td style="padding: 2px 0; text-align: right; font-size: ${printLang === 'ta' ? '12px' : '14px'}; font-weight: normal;">${(c.price * c.quantity).toFixed(2)}</td>` : ''}
+                                    ${!isKot ? `<td style="padding: 2px 0; text-align: right; font-size: ${printLang === 'ta' ? '12px' : '14px'}; font-weight: normal;">${itemBaseRate.toFixed(2)}</td>` : ''}
+                                    ${!isKot ? `<td style="padding: 2px 0; text-align: right; font-size: ${printLang === 'ta' ? '12px' : '14px'}; font-weight: normal;">${rowTotal.toFixed(2)}</td>` : ''}
                                 </tr>
                                 `;
                             }).join('')}
@@ -942,10 +1035,17 @@ export default function POSPage() {
                     ${!isKot ? `
                         <div class="total" style="border-top: 1px solid #000; padding-top: 5px; margin-top: 5px; font-weight: normal; font-size: 15px;">
                             <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
-                                <span>${t('bill.subtotal', 'Subtotal')}:</span>
-                                <span>₹${subtotal.toFixed(2)}</span>
+                                <span>${t('bill.subtotal', 'Gross Total')}:</span>
+                                <span>₹${originalSubtotal.toFixed(2)}</span>
                             </div>
                             
+                            ${discountAmount > 0 ? `
+                            <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 2px; color: #555;">
+                                <span>Discount (${discountRate.toFixed(2)}%):</span>
+                                <span>-₹${discountAmount.toFixed(2)}</span>
+                            </div>
+                            ` : ''}
+
                             ${extraCharges && extraCharges.length > 0 ? extraCharges.map(c => `
                                 <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 2px;">
                                     <span>${c.name}:</span>
@@ -953,14 +1053,20 @@ export default function POSPage() {
                                 </div>
                             `).join('') : ''}
 
-                            <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 2px; border-top: 1px dotted #ccc; padding-top: 2px;">
-                                <span>SGST (2.5%):</span>
-                                <span>₹${sgst}</span>
+                            ${(jobPrintWithGst !== false) ? `
+                            <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 2px; border-top: 1px dotted #ccc; padding-top: 2px;">
+                                <span>Actual Value:</span>
+                                <span>₹${taxableSubtotal.toFixed(2)}</span>
                             </div>
                             <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 2px;">
-                                <span>CGST (2.5%):</span>
-                                <span>₹${cgst}</span>
+                                <span>SGST (${sgstPct.toFixed(1)}%):</span>
+                                <span>₹${sgstAmount.toFixed(2)}</span>
                             </div>
+                            <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 2px;">
+                                <span>CGST (${cgstPct.toFixed(1)}%):</span>
+                                <span>₹${cgstAmount.toFixed(2)}</span>
+                            </div>
+                            ` : ''}
                             <div style="display: flex; justify-content: space-between; font-size: 16px; font-weight: bold; margin-top: 5px; border-top: 1px solid #000; padding-top: 3px;">
                                 <span>${t('bill.total', 'GRAND TOTAL')}:</span>
                                 <span>₹${grandTotal}</span>
@@ -969,7 +1075,6 @@ export default function POSPage() {
                         <hr style="border-top:1px dashed #000; margin: 10px 0;"/>
                         <div style="font-size: 12px; padding: 0 10px; margin-bottom: 5px;">
                             <div style="font-weight: bold; margin-bottom: 2px;">${t('pos.items', 'Total Items')}: ${totalItemsCount}</div>
-                            <div>${t('bill.payment_mode', 'Payment Mode')}: <span class="bold">${(jobPaymentMethod || 'Cash').toUpperCase()}</span></div>
                         </div>
                         <div class="center footer">
                             <div class="bold" style="font-size: 14px; margin-bottom: 3px;">${t('bill.thank_you', 'Thank You! Visit Again')}</div>
@@ -997,38 +1102,20 @@ export default function POSPage() {
                 const itemRows = (items || []).map((item, i) => {
                     const qty = parseFloat(item.quantity) || 0;
                     const mrp = parseFloat(item.mrp || item.price) || 0;
-                    const gstPct = parseFloat(item.tax || 5.00); // Default to 5% if not provided
-                    
-                    // Calculation: rate = mrp / (1 + gstPct/100)
-                    const rate = +(mrp / (1 + gstPct / 100)).toFixed(2);
-                    const taxable = +(rate * qty).toFixed(2);
-                    const gstAmt = +(taxable * gstPct / 100).toFixed(2);
-                    const cgst = +(gstAmt / 2).toFixed(2);
-                    const sgst = +(gstAmt / 2).toFixed(2);
-                    const total = +(taxable + gstAmt).toFixed(2);
-
-                    taxableTotal += taxable;
-                    cgstTotal += cgst;
-                    sgstTotal += sgst;
+                    const total = +(mrp * qty).toFixed(2);
                     grandTotalPharm += total;
 
-                    // Group for tax summary
-                    if (!gstSummary[gstPct]) gstSummary[gstPct] = { taxable: 0, cgst: 0, sgst: 0, total: 0 };
-                    gstSummary[gstPct].taxable += taxable;
-                    gstSummary[gstPct].cgst += cgst;
-                    gstSummary[gstPct].sgst += sgst;
-                    gstSummary[gstPct].total += total;
+                    const fSize = pharmacyFontSize;
 
                     return `<tr>
-                        <td style="border-left:1px solid #000;border-right:1px solid #000;padding:2px 4px;text-align:center">${i + 1}</td>
-                        <td style="border-right:1px solid #000;padding:2px 4px;text-align:center">${item.hsnCode || '-'}</td>
-                        <td style="border-right:1px solid #000;padding:2px 4px;text-align:left"><b>${item.name || ''}</b></td>
-                        <td style="border-right:1px solid #000;padding:2px 4px;text-align:center">${item.batchNo || '-'}</td>
-                        <td style="border-right:1px solid #000;padding:2px 4px;text-align:center">${item.expDate || '-'}</td>
-                        <td style="border-right:1px solid #000;padding:2px 4px;text-align:center">${qty}</td>
-                        <td style="border-right:1px solid #000;padding:2px 4px;text-align:right">${mrp.toFixed(2)}</td>
-                        <td style="border-right:1px solid #000;padding:2px 4px;text-align:center">${gstPct.toFixed(2)}</td>
-                        <td style="border-right:1px solid #000;padding:2px 4px;text-align:right">${total.toFixed(2)}</td>
+                        <td style="border-left:1px solid #000;border-right:1px solid #000;padding:2px 4px;text-align:center;font-size:${fSize}px">${i + 1}</td>
+                        <td style="border-right:1px solid #000;padding:2px 4px;text-align:center;font-size:${fSize}px">${item.hsnCode || '-'}</td>
+                        <td style="border-right:1px solid #000;padding:2px 4px;text-align:left;font-size:${fSize}px"><b>${item.name || ''}</b></td>
+                        <td style="border-right:1px solid #000;padding:2px 4px;text-align:center;font-size:${fSize}px">${item.batchNo || '-'}</td>
+                        <td style="border-right:1px solid #000;padding:2px 4px;text-align:center;font-size:${fSize}px">${item.expDate || '-'}</td>
+                        <td style="border-right:1px solid #000;padding:2px 4px;text-align:center;font-size:${fSize}px">${qty}</td>
+                        <td style="border-right:1px solid #000;padding:2px 4px;text-align:right;font-size:${fSize}px">${mrp.toFixed(2)}</td>
+                        <td style="border-right:1px solid #000;padding:2px 4px;text-align:right;font-size:${fSize}px">${total.toFixed(2)}</td>
                     </tr>`;
                 }).join('');
 
@@ -1045,16 +1132,16 @@ export default function POSPage() {
                 }).join('');
 
                 return `
-                <div style="font-family:Arial,sans-serif;font-size:11px;color:#000;max-width:210mm;margin:0 auto;padding:10px;border:1px solid #3b82f6;border-radius:12px;position:relative;">
+                <div style="font-family:Calibri, 'Segoe UI', Arial, sans-serif;font-size:11px;color:#000;max-width:210mm;margin:0 auto;padding:10px;border:1px solid #3b82f6;border-radius:12px;position:relative;">
                   
                   <!-- HEADER -->
                   <div style="text-align:center;position:relative;margin-bottom:10px">
                     ${logoImg ? `<img src="${logoImg.match(/src="([^"]+)"/)?.[1]||''}" style="position:absolute;left:0;top:0;max-height:60px"/>` : ''}
                     <div style="font-size:24px;font-weight:900;color:#1e40af;letter-spacing:1px">${restaurantName.toUpperCase()}</div>
-                    <div style="font-size:12px;margin:3px 0">${user?.address || ''}</div>
+                    <div style="font-size:12px;margin:2px 0;font-weight:bold">${user?.address || ''}</div>
                     <div style="font-size:12px">Phones : ${user?.phone || ''}  E-mail : ${user?.email || ''}</div>
-                    <div style="font-size:11px;margin-top:4px">DL. No. TN-05-20-00065/05-21-00065/05-20F-00004 TIN. No. - GST No. ${user?.gstNumber || ''}</div>
-                    <div style="font-size:11px">CIN No. CIN</div>
+                    <div style="font-size:11px;margin-top:4px">DL. No. ${user?.dlNumber || ''} TIN. No. ${user?.tinNumber || ''} GST No. ${user?.gstNumber || ''}</div>
+                    <div style="font-size:11px">CIN No. ${user?.cinNumber || ''}</div>
                     ${logoImg ? `<img src="${logoImg.match(/src="([^"]+)"/)?.[1]||''}" style="position:absolute;right:0;top:0;max-height:60px"/>` : ''}
                   </div>
 
@@ -1068,8 +1155,20 @@ export default function POSPage() {
                     <tr>
                         <td width="15%" style="border:1px solid #000;padding:4px">Bill No</td>
                         <td width="30%" style="border:1px solid #000;padding:4px;font-weight:900;font-size:14px">${jobBillNo || orderNumber || ''}</td>
-                        <td rowspan="2" style="border:1px solid #000;text-align:center;vertical-align:middle">
-                            <div style="font-family:'Libre Barcode 39', cursive;font-size:40px">|||| || || |||</div>
+                        <td rowspan="2" style="border:1px solid #000;text-align:center;vertical-align:middle;padding:5px">
+                            <svg id="pharmacy-barcode-${jobBillNo || orderNumber || '0000'}"></svg>
+                            <script>
+                                if (window.JsBarcode) {
+                                    JsBarcode("#pharmacy-barcode-${jobBillNo || orderNumber || '0000'}", "${jobBillNo || orderNumber || '0000'}", {
+                                        format: "CODE128",
+                                        lineColor: "#000",
+                                        width: 1.5,
+                                        height: 35,
+                                        displayValue: true,
+                                        fontSize: 12
+                                    });
+                                }
+                            </script>
                         </td>
                     </tr>
                     <tr>
@@ -1101,7 +1200,6 @@ export default function POSPage() {
                             <th style="border:1px solid #000;padding:4px;width:60px">Exp.dt</th>
                             <th style="border:1px solid #000;padding:4px;width:40px">Qty</th>
                             <th style="border:1px solid #000;padding:4px;width:60px">Price</th>
-                            <th style="border:1px solid #000;padding:4px;width:50px">GST%</th>
                             <th style="border:1px solid #000;padding:4px;width:70px">Amount</th>
                         </tr>
                     </thead>
@@ -1118,13 +1216,12 @@ export default function POSPage() {
                                 <td style="border-right:1px solid #000;"></td>
                                 <td style="border-right:1px solid #000;"></td>
                                 <td style="border-right:1px solid #000;"></td>
-                                <td style="border-right:1px solid #000;"></td>
                             </tr>
                         `).join('')}
                     </tbody>
                     <tfoot>
                         <tr style="border-top:1px solid #000">
-                            <td colspan="9" style="border:1px solid #000;padding:0"></td>
+                            <td colspan="8" style="border:1px solid #000;padding:0"></td>
                         </tr>
                     </tfoot>
                   </table>
@@ -1135,29 +1232,12 @@ export default function POSPage() {
                   <!-- SUMMARY SECTION -->
                   <div style="display:flex;justify-content:space-between;align-items:flex-start">
                     <div width="60%">
-                        <div style="margin-bottom:10px">Total No.of Medicines : ${(items || []).length}</div>
-                        <table style="border-collapse:collapse;font-size:10px">
-                            <tr style="background:#f8fafc">
-                                <th style="border:1px solid #ccc;padding:2px 6px">GST %</th>
-                                <th style="border:1px solid #ccc;padding:2px 6px">Price</th>
-                                <th style="border:1px solid #ccc;padding:2px 6px">CGST</th>
-                                <th style="border:1px solid #ccc;padding:2px 6px">SGST</th>
-                                <th style="border:1px solid #ccc;padding:2px 6px">Total</th>
-                            </tr>
-                            ${taxRows}
-                        </table>
+                        <div style="margin-bottom:10px;font-weight:bold">Total No.of Medicines : ${(items || []).length}</div>
+                        <div style="font-weight:bold;margin-top:20px;font-size:12px">Included GST</div>
                     </div>
                     <div width="40%" style="text-align:right">
-                        <table align="right" style="font-size:13px">
-                            <tr>
-                                <td style="padding:2px 10px;text-align:left"><b>Total Value :</b></td>
-                                <td style="padding:2px 0;width:80px"><b>${taxableTotal.toFixed(2)}</b></td>
-                            </tr>
-                            <tr>
-                                <td style="padding:2px 10px;text-align:left"><b>Total GST :</b></td>
-                                <td><b>${(cgstTotal + sgstTotal).toFixed(2)}</b></td>
-                            </tr>
-                            <tr style="font-size:16px">
+                        <table align="right" style="font-size:18px">
+                            <tr style="font-size:18px">
                                 <td style="padding:10px 10px 2px 10px;text-align:left"><b>Grand Total :</b></td>
                                 <td style="padding:10px 0 2px 0"><b>Rs ${Math.round(grandTotalPharm).toFixed(2)}</b></td>
                             </tr>
@@ -1165,39 +1245,242 @@ export default function POSPage() {
                     </div>
                   </div>
 
-                  <!-- SIGNATURES -->
-                  <div style="margin-top:40px;display:flex;justify-content:space-between;text-align:center;font-size:11px">
-                    <div style="width:100px">
-                        <div style="font-weight:700">${user?.name || ''}</div>
-                        <div style="border-top:1px solid #ccc;padding-top:4px">Billed By</div>
-                    </div>
-                    <div style="width:100px">
-                        <div style="height:15px"></div>
-                        <div style="border-top:1px solid #ccc;padding-top:4px">Taken By</div>
-                    </div>
-                    <div style="width:100px">
-                        <div style="height:15px"></div>
-                        <div style="border-top:1px solid #ccc;padding-top:4px">Checked By</div>
-                    </div>
-                    <div style="width:150px">
-                        <div style="height:15px"></div>
-                        <div style="border-top:1px solid #ccc;padding-top:4px;font-weight:700">Signature of Pharmacist</div>
-                    </div>
-                  </div>
-
-                  <div style="text-align:right;font-size:10px;margin-top:10px;color:#666">Page 1 of 1</div>
                 </div>`;
             };
 
-            const billHTML = isPharmacy ? `
+            // ─── GST Bill A4 Invoice Template ───
+            const getGstBillBody = () => {
+                const invoiceDate = new Date(createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                const discountRate = parseFloat(jobDiscountPct) || 0;
+                const taxRate = typeof user?.taxRate === 'number' ? user.taxRate : 18;
+                const sgstPct = taxRate / 2;
+                const cgstPct = taxRate / 2;
+
+                let grandTotalGst = 0;
+                let totalTaxableSubtotal = 0;
+                let totalCgstAmount = 0;
+                let totalSgstAmount = 0;
+                let totalTaxAmount = 0;
+
+                const rawGrossSubtotal = (items || []).reduce((s, item) => s + (parseFloat(item.mrp || item.price || 0) * (parseFloat(item.quantity) || 0)), 0);
+
+                const itemRows = (items || []).map((item, i) => {
+                    const qty = parseFloat(item.quantity) || 0;
+                    const mrp = parseFloat(item.mrp || item.price) || 0; // unit price before discount
+                    const finalSellingPrice = mrp * (1 - discountRate / 100);
+                    const baseRate = jobPrintWithGst !== false ? finalSellingPrice * (1 - taxRate / 100) : finalSellingPrice;
+                    const amount = +(baseRate * qty).toFixed(2);
+                    
+                    const cgst = jobPrintWithGst !== false ? finalSellingPrice * (cgstPct / 100) : 0;
+                    const sgst = jobPrintWithGst !== false ? finalSellingPrice * (sgstPct / 100) : 0;
+                    const taxPerUnit = cgst + sgst;
+                    
+                    const itemTax = taxPerUnit * qty;
+                    const itemCgst = cgst * qty;
+                    const itemSgst = sgst * qty;
+                    
+                    totalTaxableSubtotal += amount;
+                    totalCgstAmount += itemCgst;
+                    totalSgstAmount += itemSgst;
+                    totalTaxAmount += itemTax;
+                    grandTotalGst += (finalSellingPrice * qty);
+                    
+                    return `<tr>
+                        <td style="border:1px solid #000;padding:2px 4px;text-align:center;">${i + 1}</td>
+                        <td style="border:1px solid #000;padding:2px 4px;text-align:left;"><b>${item.name || ''}</b></td>
+                        <td style="border:1px solid #000;padding:2px 4px;text-align:center;">${item.hsnCode || '-'}</td>
+                        <td style="border:1px solid #000;padding:2px 4px;text-align:center;">${qty}</td>
+                        <td style="border:1px solid #000;padding:2px 4px;text-align:right;">${baseRate.toFixed(2)}</td>
+                        ${jobPrintWithGst !== false ? `
+                        <td style="border:1px solid #000;padding:2px 4px;text-align:right;">${taxPerUnit.toFixed(2)}</td>
+                        ` : ''}
+                        <td style="border:1px solid #000;padding:2px 4px;text-align:right;">${amount.toFixed(2)}</td>
+                    </tr>`;
+                }).join('');
+
+                return `
+                <div style="font-family:Arial, sans-serif;font-size:12px;color:#000;width:210mm;margin:0 auto;padding:10px;position:relative;">
+                  <table width="100%" style="border: 2px solid #000; border-collapse: collapse;">
+                    <tr>
+                      <td width="50%" style="border: 1px solid #000; padding: 10px; vertical-align: top;">
+                        <h2 style="margin: 0; font-size: 22px; font-weight: bold;">${restaurantName.toUpperCase()}</h2>
+                        <p style="margin: 5px 0 0 0;">${user?.address || ''}</p>
+                        <p style="margin: 2px 0 0 0;">Phone: ${user?.phone || ''}</p>
+                        <p style="margin: 2px 0 0 0;"><b>GSTIN:</b> ${user?.gstNumber || ''}</p>
+                        <p style="margin: 2px 0 0 0;"><b>PAN:</b> ${user?.panNumber || ''}</p>
+                      </td>
+                      <td width="50%" style="border: 1px solid #000; padding: 10px; vertical-align: top;">
+                        <h2 style="margin: 0; text-align: right; font-size: 20px;">TAX INVOICE</h2>
+                        <table width="100%" style="margin-top: 10px;">
+                          <tr><td><b>Invoice No:</b></td><td style="text-align: right">${jobBillNo || orderNumber || ''}</td></tr>
+                          <tr><td><b>Invoice Date:</b></td><td style="text-align: right">${invoiceDate}</td></tr>
+                          <tr><td><b>Email:</b></td><td style="text-align: right">${user?.email || ''}</td></tr>
+                          <tr><td><b>FSSAI No:</b></td><td style="text-align: right">${user?.fssaiNumber || ''}</td></tr>
+                        </table>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="border: 1px solid #000; padding: 5px 10px;">
+                        <b>BILL TO</b><br/>
+                        ${jobCustomerName ? `<b>${jobCustomerName}</b><br/>` : ''}
+                        ${jobCustomerFirm ? `${jobCustomerFirm}<br/>` : ''}
+                        ${jobCustomerPhone ? `Phone: ${jobCustomerPhone}<br/>` : ''}
+                      </td>
+                      <td style="border: 1px solid #000; padding: 5px 10px;">
+                        <b>SHIP TO</b><br/>
+                        ${jobCustomerName ? `<b>${jobCustomerName}</b><br/>` : ''}
+                        ${jobCustomerFirm ? `${jobCustomerFirm}<br/>` : ''}
+                        ${jobCustomerPhone ? `Phone: ${jobCustomerPhone}<br/>` : ''}
+                      </td>
+                    </tr>
+                  </table>
+                  
+                  <!-- ITEM TABLE -->
+                  <table width="100%" style="border: 2px solid #000; border-collapse: collapse; border-top: none; min-height: 400px;">
+                    <thead>
+                      <tr style="background: #f0f0f0;">
+                        <th style="border: 1px solid #000; padding: 5px; width: 40px;">S.No</th>
+                        <th style="border: 1px solid #000; padding: 5px;">Item</th>
+                        <th style="border: 1px solid #000; padding: 5px; width: 80px;">HSN</th>
+                        <th style="border: 1px solid #000; padding: 5px; width: 50px;">Qty</th>
+                        <th style="border: 1px solid #000; padding: 5px; width: 80px;">Rate</th>
+                        ${jobPrintWithGst !== false ? `
+                        <th style="border: 1px solid #000; padding: 5px; width: 80px;">Tax/Unit</th>
+                        ` : ''}
+                        <th style="border: 1px solid #000; padding: 5px; width: 100px;">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody style="vertical-align: top;">
+                      ${itemRows}
+                      <tr>
+                        <td style="border-left: 1px solid #000; border-right: 1px solid #000; padding: 10px;"></td>
+                        <td style="border-right: 1px solid #000;"></td>
+                        <td style="border-right: 1px solid #000;"></td>
+                        <td style="border-right: 1px solid #000;"></td>
+                        <td style="border-right: 1px solid #000;"></td>
+                        ${jobPrintWithGst !== false ? `<td style="border-right: 1px solid #000;"></td>` : ''}
+                        <td style="border-right: 1px solid #000;"></td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  <table width="100%" style="border: 2px solid #000; border-collapse: collapse; border-top: none;">
+                    <tr>
+                      <td width="50%" style="border: 1px solid #000; padding: 10px; vertical-align: top;">
+                        <div style="display:flex; justify-content: space-between; margin-bottom: 5px;">
+                          <span>Received Amount:</span>
+                          <b>₹${jobPaymentMethod !== 'CREDIT' ? grandTotalGst.toFixed(2) : '0.00'}</b>
+                        </div>
+                        <div style="display:flex; justify-content: space-between;">
+                          <span>Balance Amount:</span>
+                          <b>₹${jobPaymentMethod === 'CREDIT' ? grandTotalGst.toFixed(2) : '0.00'}</b>
+                        </div>
+                      </td>
+                      <td width="50%" style="border: 1px solid #000; padding: 0;">
+                        <table width="100%" style="border-collapse: collapse; height: 100%;">
+                          <tr>
+                            <td style="padding: 5px 10px; text-align: right; border-bottom: 1px solid #000;"><b>Gross Amount:</b></td>
+                            <td style="padding: 5px 10px; text-align: right; border-bottom: 1px solid #000; width: 100px;"><b>₹${rawGrossSubtotal.toFixed(2)}</b></td>
+                          </tr>
+                          ${discountRate > 0 ? `
+                          <tr>
+                            <td style="padding: 5px 10px; text-align: right; border-bottom: 1px solid #000;"><b>Discount (${discountRate.toFixed(2)}%):</b></td>
+                            <td style="padding: 5px 10px; text-align: right; border-bottom: 1px solid #000; width: 100px;"><b>₹${(rawGrossSubtotal * discountRate / 100).toFixed(2)}</b></td>
+                          </tr>
+                          ` : ''}
+                          <tr>
+                            <td style="padding: 5px 10px; text-align: right; border-bottom: 1px solid #000;"><b>Total Amount:</b></td>
+                            <td style="padding: 5px 10px; text-align: right; border-bottom: 1px solid #000; width: 100px;"><b>₹${grandTotalGst.toFixed(2)}</b></td>
+                          </tr>
+                          ${jobPrintWithGst !== false ? `
+                          <tr>
+                            <td style="padding: 5px 10px; text-align: right;"><b>Grand Total:</b></td>
+                            <td style="padding: 5px 10px; text-align: right; width: 100px;"><b>₹${grandTotalGst.toFixed(2)}</b></td>
+                          </tr>
+                          ` : ''}
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+
+                  ${jobPrintWithGst !== false ? `
+                  <table width="100%" style="border: 2px solid #000; border-collapse: collapse; border-top: none;">
+                    <tr style="background: #f0f0f0;">
+                      <th style="border: 1px solid #000; padding: 5px;">HSN</th>
+                      <th style="border: 1px solid #000; padding: 5px;">Taxable Amount</th>
+                      <th style="border: 1px solid #000; padding: 5px;" colspan="2">CGST</th>
+                      <th style="border: 1px solid #000; padding: 5px;" colspan="2">SGST</th>
+                      <th style="border: 1px solid #000; padding: 5px;">Total Tax Amount</th>
+                    </tr>
+                    <tr style="background: #f0f0f0;">
+                      <th style="border: 1px solid #000; padding: 5px;"></th>
+                      <th style="border: 1px solid #000; padding: 5px;"></th>
+                      <th style="border: 1px solid #000; padding: 5px;">Rate</th>
+                      <th style="border: 1px solid #000; padding: 5px;">Amount</th>
+                      <th style="border: 1px solid #000; padding: 5px;">Rate</th>
+                      <th style="border: 1px solid #000; padding: 5px;">Amount</th>
+                      <th style="border: 1px solid #000; padding: 5px;"></th>
+                    </tr>
+                    <tr>
+                      <td style="border: 1px solid #000; padding: 5px; text-align: center;">-</td>
+                      <td style="border: 1px solid #000; padding: 5px; text-align: right;">${totalTaxableSubtotal.toFixed(2)}</td>
+                      <td style="border: 1px solid #000; padding: 5px; text-align: center;">${cgstPct.toFixed(1)}%</td>
+                      <td style="border: 1px solid #000; padding: 5px; text-align: right;">${totalCgstAmount.toFixed(2)}</td>
+                      <td style="border: 1px solid #000; padding: 5px; text-align: center;">${sgstPct.toFixed(1)}%</td>
+                      <td style="border: 1px solid #000; padding: 5px; text-align: right;">${totalSgstAmount.toFixed(2)}</td>
+                      <td style="border: 1px solid #000; padding: 5px; text-align: right;">${totalTaxAmount.toFixed(2)}</td>
+                    </tr>
+                    <tr>
+                      <td style="border: 1px solid #000; padding: 5px; text-align: right;"><b>Total</b></td>
+                      <td style="border: 1px solid #000; padding: 5px; text-align: right;"><b>${totalTaxableSubtotal.toFixed(2)}</b></td>
+                      <td style="border: 1px solid #000; padding: 5px;"></td>
+                      <td style="border: 1px solid #000; padding: 5px; text-align: right;"><b>${totalCgstAmount.toFixed(2)}</b></td>
+                      <td style="border: 1px solid #000; padding: 5px;"></td>
+                      <td style="border: 1px solid #000; padding: 5px; text-align: right;"><b>${totalSgstAmount.toFixed(2)}</b></td>
+                      <td style="border: 1px solid #000; padding: 5px; text-align: right;"><b>${totalTaxAmount.toFixed(2)}</b></td>
+                    </tr>
+                  </table>
+                  ` : ''}
+                  
+                  <table width="100%" style="border: 2px solid #000; border-collapse: collapse; border-top: none;">
+                    <tr>
+                      <td width="70%" style="border: 1px solid #000; padding: 10px; vertical-align: top;">
+                        <b>Remark:</b><br/>
+                        <div style="font-size: 10px; margin-top: 5px;">
+                          <b>Terms & Conditions:</b><br/>
+                          1. Goods once sold will not be taken back.<br/>
+                          2. Interest @ 18% p.a. will be charged if payment is delayed.
+                        </div>
+                        <div style="margin-top: 10px;">
+                          <b>Bank Details:</b><br/>
+                          A/c Name: ${user?.bankAccountName || restaurantName}<br/>
+                          A/c No: ${user?.bankAccountNumber || '-'}<br/>
+                          Bank: ${user?.bankName || '-'}<br/>
+                          IFSC: ${user?.bankIfsc || '-'}
+                        </div>
+                      </td>
+                      <td width="30%" style="border: 1px solid #000; padding: 10px; vertical-align: bottom; text-align: right;">
+                        <div>For <b>${restaurantName.toUpperCase()}</b></div>
+                        <br/><br/><br/>
+                        <div>Authorised Signatory</div>
+                      </td>
+                    </tr>
+                  </table>
+
+                </div>`;
+            };
+
+            const billHTML = (isPharmacy || isGstBill) ? `
                 <html><head><title>BILL - ${jobBillNo || orderNumber}</title>
                 <style>
                     @page { size: A4; margin: 10mm; }
                     body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: #000; margin: 0; padding: 0; }
                     * { box-sizing: border-box; }
                     @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
-                </style></head>
-                <body>${getPharmacyBillBody()}</body></html>
+                </style>
+                <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+                </head>
+                <body>${isPharmacy ? getPharmacyBillBody() : getGstBillBody()}</body></html>
             ` : `
                 <html>
                 <head>
@@ -1855,6 +2138,14 @@ export default function POSPage() {
                         <div className="payment-summary">
                             <span className="summary-label">{t('pos.amount_due')}</span>
                             <span className="summary-val">₹{cartTotal.toLocaleString()}</span>
+                        </div>
+
+                        <div style={{ padding: '10px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', marginBottom: '10px' }}>
+                            <span style={{ fontWeight: 600, color: '#334155' }}>Print Bill with GST</span>
+                            <label className="switch" style={{ margin: 0 }}>
+                                <input type="checkbox" checked={settleWithGst} onChange={e => setSettleWithGst(e.target.checked)} />
+                                <span className="slider round"></span>
+                            </label>
                         </div>
 
                         <div className="payment-options-grid">

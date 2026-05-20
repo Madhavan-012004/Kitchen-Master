@@ -1,8 +1,11 @@
 import axios from 'axios'
 import { globalTriggerOffline } from '../context/NetworkContext.jsx'
 
+const isElectron = window.location.protocol === 'file:';
+const API_BASE_URL = isElectron ? 'http://localhost:8080/api/' : '/api/';
+
 const api = axios.create({
-    baseURL: 'http://localhost:8080/api',
+    baseURL: API_BASE_URL,
     timeout: 15000
 })
 
@@ -22,7 +25,9 @@ api.interceptors.request.use(config => {
 
     // Path normalization: ensure requests are relative to the baseURL
     if (config.url) {
+        // Remove leading slash if any
         if (config.url.startsWith('/')) config.url = config.url.substring(1);
+        // Remove 'api/' prefix if any (redundant with baseURL)
         if (config.url.startsWith('api/')) config.url = config.url.substring(4);
     }
     return config

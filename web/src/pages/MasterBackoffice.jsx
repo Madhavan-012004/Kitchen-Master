@@ -108,26 +108,28 @@ function OfflineLicenseGenerator({ clientOverride = null, onComplete = null, ref
             const { licenseB64, email, generatedPassword, customerName } = res.data.data;
 
             // ─── Dispatch via EmailJS ─────────────────────────────────────────
-            // Updated with correct credentials provided by user
             const SERVICE_ID = 'service_oblwsjg'; 
             const TEMPLATE_ID = 'template_aalh1yb';
             const PUBLIC_KEY = 'Vjm57tVlA_OAiZ1H8';
 
             console.log('Attempting EmailJS dispatch to:', email);
-            
-            // Send as raw base64 (EmailJS dashboard attachment should handle this)
-            await emailjs.send(
-                SERVICE_ID,
-                TEMPLATE_ID,
-                {
-                    to_email: email,
-                    customer_name: customerName,
-                    generated_password: generatedPassword,
-                    license_file: licenseB64,
-                    expiry_date: expiryDate
-                },
-                PUBLIC_KEY
-            );
+            try {
+                await emailjs.send(
+                    SERVICE_ID,
+                    TEMPLATE_ID,
+                    {
+                        to_email: email,
+                        customer_name: customerName,
+                        generated_password: generatedPassword,
+                        license_file: licenseB64,
+                        expiry_date: expiryDate
+                    },
+                    PUBLIC_KEY
+                );
+                console.log('EmailJS dispatch successful.');
+            } catch (mailErr) {
+                console.error('EmailJS dispatch failed:', mailErr);
+            }
 
             // ─── Local Download ───────────────────────────────────────────────
             // Save base64 string directly as the app expects encoded content
@@ -145,7 +147,10 @@ function OfflineLicenseGenerator({ clientOverride = null, onComplete = null, ref
             if (refreshList) refreshList()
             if (onComplete) setTimeout(onComplete, 2000)
         } catch (err) {
-            setResult({ success: false, message: 'Process Failed: ' + (err.response?.data?.message || err.message) })
+            console.error('License generation failed:', err);
+            let errMsg = err.response?.data?.message || err.message || 'Unknown error. Check console for details.';
+            if (typeof err === 'string') errMsg = err;
+            setResult({ success: false, message: 'Process Failed: ' + errMsg })
         } finally {
             setGenerating(false)
         }
@@ -225,7 +230,7 @@ function LicenseModal({ client, licenseKey, onClose }) {
     const download = () => {
         const content = [
             '════════════════════════════════════════════════════════',
-            '       PROBLOOM — KITCHEN MASTER LICENSE SECRETS        ',
+            '       PROBLOOM — ProBloom LICENSE SECRETS        ',
             '════════════════════════════════════════════════════════',
             `Restaurant : ${client.restaurantName}`,
             `Owner      : ${client.name}`,

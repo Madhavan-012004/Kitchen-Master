@@ -31,7 +31,7 @@ const BarcodeStickerModal = ({ show, onClose, items }) => {
     const handleThermalPrint = async () => {
         setIsPrinting(true);
         try {
-            const shopName = user?.restaurantName || "Kitchen Master";
+            const shopName = user?.restaurantName || "ProBloom";
             const tsplData = generateTSPL(printItems, shopName, labelHeight, gapHeight);
             
             // Send to backend bridge
@@ -47,7 +47,7 @@ const BarcodeStickerModal = ({ show, onClose, items }) => {
             }
         } catch (err) {
             console.error('Thermal print failed:', err);
-            alert('Failed to print to local printer. Please ensure the printer is shared and the Kitchen Master Local Print Service is running.');
+            alert('Failed to print to local printer. Please ensure the printer is shared and the ProBloom Local Print Service is running.');
         } finally {
             setIsPrinting(false);
         }
@@ -56,7 +56,7 @@ const BarcodeStickerModal = ({ show, onClose, items }) => {
     const handleBluetoothPrint = async () => {
         setIsPrinting(true);
         try {
-            const shopName = user?.restaurantName || "Kitchen Master";
+            const shopName = user?.restaurantName || "ProBloom";
             let tsplData = generateTSPL(printItems, shopName, { height: labelHeight, gap: gapHeight });
             
             if (!navigator.bluetooth) {
@@ -112,7 +112,7 @@ const BarcodeStickerModal = ({ show, onClose, items }) => {
     const handleSerialPrint = async () => {
         setIsPrinting(true);
         try {
-            const shopName = user?.restaurantName || "Kitchen Master";
+            const shopName = user?.restaurantName || "ProBloom";
             let tsplData = generateTSPL(printItems, shopName, { height: labelHeight, gap: gapHeight });
             
             if (!("serial" in navigator)) {
@@ -138,7 +138,7 @@ const BarcodeStickerModal = ({ show, onClose, items }) => {
     };
 
     const handleDownloadPRN = () => {
-        const shopName = user?.restaurantName || "Kitchen Master";
+        const shopName = user?.restaurantName || "ProBloom";
         const tsplData = generateTSPL(printItems, shopName, labelHeight, gapHeight);
         const blob = new Blob([tsplData], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);

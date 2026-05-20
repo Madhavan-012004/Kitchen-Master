@@ -62,6 +62,15 @@ public class User {
     @Column(name = "gst_number")
     private String gstNumber;
 
+    @Column(name = "dl_number")
+    private String dlNumber;
+
+    @Column(name = "tin_number")
+    private String tinNumber;
+
+    @Column(name = "cin_number")
+    private String cinNumber;
+
     @Column(name = "kitchen_printer_ip")
     private String kitchenPrinterIp;
 
@@ -113,6 +122,28 @@ public class User {
 
     @Column(name = "print_count")
     private Integer printCount = 1;
+
+    @Column(name = "pharmacy_font_size")
+    private Integer pharmacyFontSize = 11;
+
+    @Column(name = "basic_bill_template")
+    private String basicBillTemplate = "standard";
+
+    @Column(name = "print_category_in_bill")
+    private Boolean printCategoryInBill = false;
+
+    // --- BANK DETAILS ---
+    @Column(name = "bank_name")
+    private String bankName;
+
+    @Column(name = "bank_account_name")
+    private String bankAccountName;
+
+    @Column(name = "bank_account_number")
+    private String bankAccountNumber;
+
+    @Column(name = "bank_ifsc")
+    private String bankIfsc;
 
     // --- OTHER SETTINGS ---
     @Column(name = "quick_mode")
@@ -246,6 +277,9 @@ public class User {
 
     @Column(name = "accent_color")
     private String accentColor = "#C6F53D";
+
+    @Column(name = "stock_categories", columnDefinition = "TEXT")
+    private String stockCategories = "General,Grocery,Clothing,Pharmacy,Others";
 
     // Getters and Setters
     public Long getId() { return id; }
@@ -385,6 +419,26 @@ public class User {
     public void setItemWiseKOT(Boolean b) { this.itemWiseKOT = b; }
     public Integer getPrintCount() { return printCount; }
     public void setPrintCount(Integer i) { this.printCount = i; }
+    public Integer getPharmacyFontSize() { return pharmacyFontSize; }
+    public void setPharmacyFontSize(Integer i) { this.pharmacyFontSize = i; }
+    
+    public String getBasicBillTemplate() { return basicBillTemplate; }
+    public void setBasicBillTemplate(String template) { this.basicBillTemplate = template; }
+
+    public Boolean getPrintCategoryInBill() { return printCategoryInBill; }
+    public void setPrintCategoryInBill(Boolean b) { this.printCategoryInBill = b; }
+
+    public String getBankName() { return bankName; }
+    public void setBankName(String bankName) { this.bankName = bankName; }
+
+    public String getBankAccountName() { return bankAccountName; }
+    public void setBankAccountName(String bankAccountName) { this.bankAccountName = bankAccountName; }
+
+    public String getBankAccountNumber() { return bankAccountNumber; }
+    public void setBankAccountNumber(String bankAccountNumber) { this.bankAccountNumber = bankAccountNumber; }
+
+    public String getBankIfsc() { return bankIfsc; }
+    public void setBankIfsc(String bankIfsc) { this.bankIfsc = bankIfsc; }
 
     // Other Settings Setters/Getters
     public Boolean getQuickMode() { return quickMode; }
@@ -403,6 +457,9 @@ public class User {
     public void setAllowNoStockSale(Boolean b) { this.allowNoStockSale = b; }
     public Boolean getTrackCustomerDetail() { return trackCustomerDetail; }
     public void setTrackCustomerDetail(Boolean b) { this.trackCustomerDetail = b; }
+
+    public String getStockCategories() { return stockCategories; }
+    public void setStockCategories(String c) { this.stockCategories = c; }
 
     // Online Order Getters/Setters
     public Boolean getOnlineAutoAccept() { return onlineAutoAccept; }
@@ -424,7 +481,7 @@ public class User {
     public Boolean getWhatsappDetailedBill() { return whatsappDetailedBill; }
     public void setWhatsappDetailedBill(Boolean b) { this.whatsappDetailedBill = b; }
 
-    public enum Role { OWNER, MANAGER, WAITER, KITCHEN, INVENTORY, CUSTOMER, STAKEHOLDER }
+    public enum Role { OWNER, MANAGER, WAITER, KOT, INVENTORY, CUSTOMER, STAKEHOLDER }
     public enum SubscriptionPlan { FREE, PRO, ENTERPRISE }
 
     @PrePersist
@@ -474,8 +531,10 @@ public class User {
         public UserBuilder outletsCount(String o) { u.setOutletsCount(o); return this; }
         public UserBuilder tempPassword(String p) { u.setTempPassword(p); return this; }
         public UserBuilder preferredPosMode(String m) { u.setPreferredPosMode(m); return this; }
+        public UserBuilder printCategoryInBill(Boolean b) { u.setPrintCategoryInBill(b); return this; }
         public UserBuilder preferredLanguage(String l) { u.setPreferredLanguage(l); return this; }
         public UserBuilder printLanguage(String l) { u.setPrintLanguage(l); return this; }
         public UserBuilder accentColor(String a) { u.setAccentColor(a); return this; }
+        public UserBuilder stockCategories(String c) { u.setStockCategories(c); return this; }
     }
 }

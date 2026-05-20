@@ -148,6 +148,9 @@ public class Orders {
     @Column(name = "customer_firm")
     private String customerFirm;
 
+    @Column(name = "print_with_gst")
+    private Boolean printWithGst = true;
+
     // Getters and Setters
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -225,6 +228,9 @@ public class Orders {
     public String getCustomerFirm() { return customerFirm; }
     public void setCustomerFirm(String customerFirm) { this.customerFirm = customerFirm; }
 
+    public Boolean getPrintWithGst() { return printWithGst; }
+    public void setPrintWithGst(Boolean printWithGst) { this.printWithGst = printWithGst; }
+
     public enum OrderStatus { PENDING, PREPARING, READY, SERVED, PAID, CANCELLED }
     public enum PaymentMethod { CASH, CARD, UPI, PENDING }
     public enum PaymentStatus { UNPAID, PAID, PARTIAL }
@@ -262,6 +268,7 @@ public class Orders {
         public OrdersBuilder doctorName(String n) { o.setDoctorName(n); return this; }
         public OrdersBuilder numberOfDays(String d) { o.setNumberOfDays(d); return this; }
         public OrdersBuilder customerFirm(String f) { o.setCustomerFirm(f); return this; }
+        public OrdersBuilder printWithGst(Boolean p) { o.setPrintWithGst(p); return this; }
         public Orders build() { return o; }
     }
 }

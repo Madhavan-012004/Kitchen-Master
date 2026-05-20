@@ -1,13 +1,13 @@
 
 $JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-17.0.18.8-hotspot"
 $MVN       = "C:\Program Files\apache-maven-3.9.14\bin\mvn.cmd"
-$BACKEND   = "C:\FILES\KITCHEN MASTER\backend2"
-$FRONTEND  = "C:\FILES\KITCHEN MASTER\web"
+$BACKEND   = "C:\FILES\ProBloom\backend2"
+$FRONTEND  = "C:\FILES\ProBloom\web"
 $SEP       = "========================================"
 
 Write-Host ""
 Write-Host $SEP -ForegroundColor Cyan
-Write-Host "   Kitchen Master - Starting Up" -ForegroundColor Cyan
+Write-Host "   ProBloom - Starting Up" -ForegroundColor Cyan
 Write-Host $SEP -ForegroundColor Cyan
 Write-Host ""
 

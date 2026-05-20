@@ -2,8 +2,8 @@
   "nav": {
     "pos": "POS / Billing",
     "kitchen": "Kitchen Display",
-    "billing": "Order",
-    "orders": "Order History",
+    "billing": "Sale",
+    "orders": "Sales History",
     "menu": "Menu",
     "staff": "Staff",
     "analytics": "Analytics",
@@ -13,7 +13,7 @@
     "expenditures": "Expenditures",
     "settings": "Settings & Profile",
     "kanban": "Project Tracker",
-    "billing_short": "ORDER",
+    "billing_short": "SALE",
     "kot_short": "KOT",
     "bill_short": "BILL",
     "history_short": "HISTORY",
@@ -69,7 +69,7 @@
     "empty_cart": "Cart is empty",
     "customer": "Customer",
     "table": "Table",
-    "waiter": "Waiter",
+    "waiter": "Captain",
     "order_type": "Order Type",
     "dine_in": "Dine In",
     "parcel": "Parcel",
@@ -140,8 +140,9 @@
     "date": "Date",
     "time": "Time",
     "table_no": "Table No",
-    "waiter": "Waiter",
+    "waiter": "Captain",
     "item": "Item",
+    "category": "Grp",
     "qty": "Qty",
     "rate": "Rate",
     "amount": "Amount",
@@ -163,7 +164,7 @@
     "paid": "Paid"
   },
   "orders": {
-    "title": "Order History",
+    "title": "Sales History",
     "all_orders": "All Orders",
     "pending": "Pending",
     "completed": "Completed",
@@ -299,7 +300,7 @@
     "table_details_hint": "Configure specific details for each table to help staff with seating.",
     "uncategorized": "Uncategorized",
     "change_logo": "CHANGE LOGO",
-    "localhost_warning": "⚠️ WARNING: You are currently accessing Kitchen Master via 'localhost'. The generated QR code will point to localhost and will NOT work on other devices like phones. \n\nPlease access Kitchen Master using your computer's local Wi-Fi IP address (e.g. 192.168.x.x:5173) to generate a working QR code.",
+    "localhost_warning": "⚠️ WARNING: You are currently accessing ProBloom via 'localhost'. The generated QR code will point to localhost and will NOT work on other devices like phones. \n\nPlease access ProBloom using your computer's local Wi-Fi IP address (e.g. 192.168.x.x:5173) to generate a working QR code.",
     "qr_opened_toast": "Waitlist QR opened. Right-click to save or print.",
     "unsaved": "UNSAVED",
     "save_general_details": "Save General Details",
@@ -413,15 +414,15 @@
     "save_app_settings": "Save App Settings"
   },
   "license": {
-    "expired": "Your Kitchen Master license has expired! ",
+    "expired": "Your ProBloom license has expired! ",
     "expiring_in": "Your license expires in {{days}} day{{count}} ({{date}}). ",
     "contact_support": "Contact ProBloom support to renew."
   },
   "role": {
     "owner": "OWNER",
     "manager": "MANAGER",
-    "waiter": "WAITER",
-    "kitchen": "KITCHEN",
+    "waiter": "CAPTAIN",
+    "kot": "KOT STAFF",
     "inventory": "INVENTORY",
     "customer": "CUSTOMER",
     "stakeholder": "STAKEHOLDER"

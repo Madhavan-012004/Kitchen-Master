@@ -1,6 +1,6 @@
 /**
  * ╔══════════════════════════════════════════════════════════════╗
- * ║         ProBloom Kitchen Master — License Request Tool       ║
+ * ║         ProBloom ProBloom — License Request Tool       ║
  * ║                                                              ║
  * ║  Run this script ONCE on your server machine.               ║
  * ║  It will generate a  machine.req  file in this folder.      ║
@@ -39,7 +39,7 @@ function getHardwareId(mac) {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 console.log('\n╔══════════════════════════════════════════════════════════════╗');
-console.log('║       ProBloom Kitchen Master — License Request Tool         ║');
+console.log('║       ProBloom ProBloom — License Request Tool         ║');
 console.log('╚══════════════════════════════════════════════════════════════╝\n');
 
 console.log('Reading hardware information from this machine...\n');

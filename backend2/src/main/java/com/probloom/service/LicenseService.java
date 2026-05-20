@@ -87,7 +87,7 @@ public class LicenseService {
         req.put("requestedAt", Instant.now().toString());
         req.put("appVersion", "1.0.0");
         req.put("type", "LICENSE_REQUEST");
-        req.put("customer", customerDetails);
+        req.put("customer", customerDetails != null ? customerDetails : new HashMap<>());
         return req;
     }
 

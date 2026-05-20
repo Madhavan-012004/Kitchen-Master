@@ -40,7 +40,7 @@ export default function WeightLabelModal({ show, onClose, item, scaleValue, inve
     const handleThermalPrint = async () => {
         setIsPrinting(true);
         try {
-            const shopName = user?.restaurantName || "Kitchen Master";
+            const shopName = user?.restaurantName || "ProBloom";
             const barcodeValue = finalBarcode;
             const name = (itemName || "Product").substring(0, 25).toUpperCase();
             
@@ -91,7 +91,7 @@ export default function WeightLabelModal({ show, onClose, item, scaleValue, inve
     const handleBluetoothPrint = async () => {
         setIsPrinting(true);
         try {
-            const shopName = user?.restaurantName || "Kitchen Master";
+            const shopName = user?.restaurantName || "ProBloom";
             const barcodeValue = finalBarcode;
             const name = (itemName || "Product").substring(0, 25).toUpperCase();
             
@@ -174,7 +174,7 @@ export default function WeightLabelModal({ show, onClose, item, scaleValue, inve
     const handleSerialPrint = async () => {
         setIsPrinting(true);
         try {
-            const shopName = user?.restaurantName || "Kitchen Master";
+            const shopName = user?.restaurantName || "ProBloom";
             const barcodeValue = finalBarcode;
             const name = (itemName || "Product").substring(0, 25).toUpperCase();
             
@@ -227,7 +227,7 @@ export default function WeightLabelModal({ show, onClose, item, scaleValue, inve
     };
     
     const handleDownloadPRN = () => {
-        const shopName = user?.restaurantName || "Kitchen Master";
+        const shopName = user?.restaurantName || "ProBloom";
         const barcodeValue = finalBarcode;
         const name = (itemName || "Product").substring(0, 25).toUpperCase();
         

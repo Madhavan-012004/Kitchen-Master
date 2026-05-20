@@ -1,6 +1,5 @@
 package com.probloom.util;
 
-import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.security.MessageDigest;
 import java.util.Enumeration;
@@ -28,8 +27,10 @@ public class HardwareUtil {
             }
 
             if (macAddressStr.length() == 0) {
-                // Fallback if MAC address cannot be found
-                macAddressStr.append(InetAddress.getLocalHost().getHostName());
+                // Fallback: use user name and OS name instead of slow network lookup
+                macAddressStr.append(System.getProperty("user.name", "user"))
+                            .append("-")
+                            .append(System.getProperty("os.name", "os"));
             }
 
             // Hash the hardware identifier to create a consistent, non-raw string
@@ -43,9 +44,14 @@ public class HardwareUtil {
                 hexString.append(hex);
             }
 
-            return hexString.toString().substring(0, 16).toUpperCase();
+            String result = hexString.toString();
+            if (result.length() < 16) {
+                return "GENERIC-HWID-001";
+            }
+            return result.substring(0, 16).toUpperCase();
 
         } catch (Exception e) {
+            System.err.println("Error generating hardware ID: " + e.getMessage());
             e.printStackTrace();
             return "UNKNOWN-HARDWARE-ID";
         }

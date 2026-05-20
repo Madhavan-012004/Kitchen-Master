@@ -24,6 +24,12 @@ public class StockMovement {
     private Double quantity;
 
     @Column
+    private Double paidQuantity = 0.0;
+
+    @Column
+    private Double freeQuantity = 0.0;
+
+    @Column
     private String reason;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -74,6 +80,11 @@ public class StockMovement {
     public LocalDateTime getTimestamp() { return movementTimestamp; }
     public void setTimestamp(LocalDateTime movementTimestamp) { this.movementTimestamp = movementTimestamp; }
 
+    public Double getPaidQuantity() { return paidQuantity; }
+    public void setPaidQuantity(Double paidQuantity) { this.paidQuantity = paidQuantity; }
+    public Double getFreeQuantity() { return freeQuantity; }
+    public void setFreeQuantity(Double freeQuantity) { this.freeQuantity = freeQuantity; }
+
     public enum MovementType {
         ADD, DEDUCT, ADJUST
     }
@@ -88,6 +99,8 @@ public class StockMovement {
         public StockMovementBuilder reason(String r) { m.setReason(r); return this; }
         public StockMovementBuilder order(Orders o) { m.setOrder(o); return this; }
         public StockMovementBuilder performedBy(User p) { m.setPerformedBy(p); return this; }
+        public StockMovementBuilder paidQuantity(Double q) { m.setPaidQuantity(q); return this; }
+        public StockMovementBuilder freeQuantity(Double q) { m.setFreeQuantity(q); return this; }
         public StockMovementBuilder timestamp(LocalDateTime t) { m.setTimestamp(t); return this; }
         public StockMovement build() { return m; }
     }

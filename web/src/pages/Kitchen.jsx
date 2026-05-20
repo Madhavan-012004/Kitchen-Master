@@ -44,33 +44,28 @@ export default function KitchenPage() {
         if (!restaurantId) return
         fetchOrders()
 
-        // Polling fallback: refresh every 15 seconds in case socket events are missed
-        const pollInterval = setInterval(fetchOrders, 15000)
+        // Polling fallback: refresh every 30 seconds in case socket events are missed
+        const pollInterval = setInterval(fetchOrders, 30000)
 
         // Real-time events
+        // ✅ Store ALL handlers as named variables so cleanup removes the EXACT same references
         if (socket) {
-            const joinRoom = () => {
-                socket.emit('join:restaurant', String(restaurantId))
-            }
+            const joinRoom = () => socket.emit('join:restaurant', String(restaurantId))
 
-            // Join immediately if already connected, or wait for connect event
-            if (socket.connected) {
-                joinRoom()
-            }
+            if (socket.connected) joinRoom()
             socket.on('connect', joinRoom)
 
-            socket.on('kot:new', (data) => {
+            const handleKotNew = (data) => {
                 if (!data.order) return
                 if (data.order.status === 'READY' || data.order.status === 'PAID') return
                 setOrders(prev => {
                     if (prev.find(o => o._id === data.order._id)) return prev
                     return [...prev, data.order].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
                 })
-            })
+            }
 
-            socket.on('kot:update', (data) => {
+            const handleKotUpdate = (data) => {
                 if (!data.order) return
-                // Only remove from display if order is PAID 
                 if (data.order.status?.toUpperCase() === 'PAID') {
                     setOrders(prev => prev.filter(o => o._id !== data.order._id))
                     return
@@ -82,13 +77,12 @@ export default function KitchenPage() {
                     updated[idx] = data.order
                     return updated
                 })
-            })
+            }
 
-            socket.on('kot:itemUpdate', (data) => {
+            const handleItemUpdate = (data) => {
                 setOrders(prev => {
                     const orderIdx = prev.findIndex(o => o._id === data.orderId)
                     if (orderIdx === -1) return prev
-
                     const updated = [...prev]
                     const order = { ...updated[orderIdx] }
                     order.items = order.items.map(item =>
@@ -98,26 +92,32 @@ export default function KitchenPage() {
                     updated[orderIdx] = order
                     return updated
                 })
-            })
+            }
 
-            socket.on('kot:statusUpdate', (data) => {
+            const handleStatusUpdate = (data) => {
                 const status = data.status?.toUpperCase();
                 if (status === 'PAID' || status === 'CANCELLED' || status === 'READY') {
                     setOrders(prev => prev.filter(o => o._id !== data.orderId || o.orderNumber !== data.orderNumber))
                 }
-            })
-        }
+            }
 
-        return () => {
-            clearInterval(pollInterval)
-            if (socket) {
-                socket.off('connect')
-                socket.off('kot:new')
-                socket.off('kot:update')
-                socket.off('kot:itemUpdate')
-                socket.off('kot:statusUpdate')
+            socket.on('kot:new', handleKotNew)
+            socket.on('kot:update', handleKotUpdate)
+            socket.on('kot:itemUpdate', handleItemUpdate)
+            socket.on('kot:statusUpdate', handleStatusUpdate)
+
+            return () => {
+                clearInterval(pollInterval)
+                // ✅ Pass the exact same handler reference to .off() so only OUR listeners are removed
+                socket.off('connect', joinRoom)
+                socket.off('kot:new', handleKotNew)
+                socket.off('kot:update', handleKotUpdate)
+                socket.off('kot:itemUpdate', handleItemUpdate)
+                socket.off('kot:statusUpdate', handleStatusUpdate)
             }
         }
+
+        return () => clearInterval(pollInterval)
     }, [restaurantId])
 
     // Update wait times every minute
@@ -204,7 +204,7 @@ export default function KitchenPage() {
                 <div className="empty-kitchen">
                     <div className="empty-icon">🍳</div>
                     <h2>No pending orders</h2>
-                    <p>Tell the waiters to get busy!</p>
+                    <p>Tell the CAPTAINs to get busy!</p>
                 </div>
             ) : (
                 <div className="kot-grid">

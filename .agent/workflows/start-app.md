@@ -1,17 +1,17 @@
 ---
-description: How to start the Kitchen Master application (Backend and Frontend)
+description: How to start the ProBloom application (Backend and Frontend)
 ---
 
-To start the Kitchen Master application, follow these steps:
+To start the ProBloom application, follow these steps:
 
 ### 1. Start the Java Backend (backend2)
 Open a new terminal and run:
 ```powershell
-cd 'C:\FILES\KITCHEN MASTER\backend2'
+cd 'C:\FILES\ProBloom\backend2'
 $env:JAVA_HOME="C:\Program Files\Eclipse Adoptium\jdk-17.0.18.8-hotspot"; $env:Path="$env:JAVA_HOME\bin;$env:Path"; & "C:\Program Files\apache-maven-3.9.14\bin\mvn.cmd" spring-boot:run
 ```
 The backend will start on port **8080**.
-Wait until you see `Started KitchenMasterApplication`.
+Wait until you see `Started ProBloomApplication`.
 **Copy that IP** — you'll need it to configure the app on your phone.
 
 ---
@@ -19,7 +19,7 @@ Wait until you see `Started KitchenMasterApplication`.
 ### 2. Start the Frontend App
 Open another terminal and run:
 ```powershell
-cd 'C:\FILES\KITCHEN MASTER\app'
+cd 'C:\FILES\ProBloom\app'
 npx expo start --lan --clear
 ```
 

@@ -7,6 +7,8 @@ import com.probloom.repository.UserRepository;
 import com.probloom.security.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.jdbc.core.JdbcTemplate;
+import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Service;
 import org.springframework.lang.NonNull;
 
@@ -27,6 +29,19 @@ public class AuthService {
     
     @Autowired
     private JwtUtil jwtUtil;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @PostConstruct
+    public void migrateRoles() {
+        try {
+            // Update roles from KITCHEN to KOT in database
+            jdbcTemplate.execute("UPDATE users SET role = 'KOT' WHERE role = 'KITCHEN'");
+        } catch (Exception e) {
+            System.err.println("Role migration failed: " + e.getMessage());
+        }
+    }
 
     public Map<String, Object> register(String name, String email, String password, String restaurantName, String phone, String address, 
                                       Double latitude, Double longitude, String businessType, String requestedPlan, String outletsCount) {
@@ -79,7 +94,7 @@ public class AuthService {
             User owner = user.getRole() == User.Role.OWNER ? user : user.getParentOwner();
             if (owner != null && owner.getSubscriptionExpiresAt() != null) {
                 if (java.time.LocalDateTime.now().isAfter(owner.getSubscriptionExpiresAt())) {
-                    throw new BadRequestException("Your Kitchen Master license expired on " 
+                    throw new BadRequestException("Your ProBloom license expired on " 
                         + owner.getSubscriptionExpiresAt().toLocalDate() 
                         + ". Please contact ProBloom support to renew your subscription.");
                 }
@@ -140,6 +155,14 @@ public class AuthService {
         
         if (updates.containsKey("minPrintPrice")) user.setMinPrintPrice(parseOptionalDouble(updates, "minPrintPrice", user.getMinPrintPrice()));
         if (updates.containsKey("printCount")) user.setPrintCount(parseOptionalInt(updates, "printCount", user.getPrintCount()));
+        if (updates.containsKey("basicBillTemplate")) user.setBasicBillTemplate((String) updates.get("basicBillTemplate"));
+        if (updates.containsKey("printCategoryInBill")) user.setPrintCategoryInBill((Boolean) updates.get("printCategoryInBill"));
+        
+        // --- BANK DETAILS ---
+        if (updates.containsKey("bankName")) user.setBankName((String) updates.get("bankName"));
+        if (updates.containsKey("bankAccountName")) user.setBankAccountName((String) updates.get("bankAccountName"));
+        if (updates.containsKey("bankAccountNumber")) user.setBankAccountNumber((String) updates.get("bankAccountNumber"));
+        if (updates.containsKey("bankIfsc")) user.setBankIfsc((String) updates.get("bankIfsc"));
 
         // --- OTHER SETTINGS ---
         if (updates.containsKey("quickMode")) user.setQuickMode((Boolean) updates.get("quickMode"));
@@ -166,6 +189,7 @@ public class AuthService {
         
         if (updates.containsKey("tableMetadata")) user.setTableMetadata((String) updates.get("tableMetadata"));
         if (updates.containsKey("tableCategories" )) user.setTableCategories((String) updates.get( "tableCategories" ));
+        if (updates.containsKey("stockCategories")) user.setStockCategories((String) updates.get("stockCategories"));
         if (updates.containsKey( "preferredPosMode" )) user.setPreferredPosMode((String) updates.get( "preferredPosMode" ));
         
         if (updates.containsKey("preferredLanguage")) user.setPreferredLanguage((String) updates.get("preferredLanguage"));
@@ -299,7 +323,7 @@ public class AuthService {
                     .email(phone + "@customer.com")
                     .password(passwordEncoder.encode(java.util.UUID.randomUUID().toString()))
                     .role(User.Role.CUSTOMER)
-                    .restaurantName("Kitchen Master")
+                    .restaurantName("ProBloom")
                     .isActive(true)
                     .build();
     
@@ -382,6 +406,13 @@ public class AuthService {
         u.put("largeFontKOT", owner != null ? owner.getLargeFontKOT() : user.getLargeFontKOT());
         u.put("itemWiseKOT", owner != null ? owner.getItemWiseKOT() : user.getItemWiseKOT());
         u.put("printCount", owner != null ? owner.getPrintCount() : user.getPrintCount());
+        u.put("basicBillTemplate", owner != null ? owner.getBasicBillTemplate() : user.getBasicBillTemplate());
+        u.put("printCategoryInBill", owner != null ? owner.getPrintCategoryInBill() : user.getPrintCategoryInBill());
+        
+        u.put("bankName", owner != null ? owner.getBankName() : user.getBankName());
+        u.put("bankAccountName", owner != null ? owner.getBankAccountName() : user.getBankAccountName());
+        u.put("bankAccountNumber", owner != null ? owner.getBankAccountNumber() : user.getBankAccountNumber());
+        u.put("bankIfsc", owner != null ? owner.getBankIfsc() : user.getBankIfsc());
 
         // --- OTHER SETTINGS ---
         u.put("quickMode", owner != null ? owner.getQuickMode() : user.getQuickMode());
@@ -406,9 +437,11 @@ public class AuthService {
         u.put("whatsappDetailedBill", owner != null ? owner.getWhatsappDetailedBill() : user.getWhatsappDetailedBill());
         u.put("tableMetadata", owner != null ? owner.getTableMetadata() : user.getTableMetadata());
         u.put("tableCategories", owner != null ? owner.getTableCategories() : user.getTableCategories());
+        u.put("stockCategories", owner != null ? owner.getStockCategories() : user.getStockCategories());
         u.put("preferredLanguage", user.getPreferredLanguage());
         u.put("printLanguage", user.getPrintLanguage());
         u.put("accentColor", owner != null ? owner.getAccentColor() : user.getAccentColor());
+        u.put("preferredPosMode", user.getPreferredPosMode());
         u.put("parentOwnerId", user.getParentOwner() != null ? user.getParentOwner().getId() : null);
         u.put("createdAt", user.getCreatedAt());
         return u;

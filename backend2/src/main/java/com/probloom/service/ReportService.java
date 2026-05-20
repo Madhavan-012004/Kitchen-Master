@@ -82,6 +82,8 @@ public class ReportService {
         switch (reportType) {
             case "sales-summary":   addSalesSummaryContent(document, restaurant, start, end); break;
             case "sales-report":    addSalesReportContent(document, restaurant, start, end); break;
+            case "sales-gst-report": addSalesGstReportContent(document, restaurant, start, end, true); break;
+            case "sales-non-gst-report": addSalesGstReportContent(document, restaurant, start, end, false); break;
             case "monthly-day-wise": addMonthlyDayWiseContent(document, restaurant, start, end); break;
             case "end-day-report":  addEndDayReportContent(document, restaurant); break;
             case "category-item-wise":
@@ -93,6 +95,9 @@ public class ReportService {
             case "cashier-wise-sales": addCashierSalesReportContent(document, restaurant, start, end); break;
             case "cancelled-item-summary": addCancelledReportContent(document, restaurant, start, end); break;
             case "gst-ledger-report": addLedgerReportContent(document, restaurant, start, end); break;
+            case "expenditure-report": addExpenditureReportContent(document, restaurant, start, end); break;
+            case "purchase-gst-report": addPurchaseGstReportContent(document, restaurant, start, end, true); break;
+            case "purchase-non-gst-report": addPurchaseGstReportContent(document, restaurant, start, end, false); break;
             default:
                 document.add(new Paragraph("Report type '" + reportType + "' is not yet available.", getFont(10, false, TEXT_MUTED)));
         }
@@ -227,6 +232,129 @@ public class ReportService {
         document.add(table);
 
         addKeyValueSummary(document, "Total Revenue (excl. cancelled)", String.format("₹%,.2f", grandTotal));
+    }
+
+    private void addSalesGstReportContent(Document document, User restaurant, LocalDateTime start, LocalDateTime end, boolean withGst) {
+        List<Orders> all = orderRepository.findByRestaurantAndCreatedAtBetweenOrderByCreatedAtDesc(restaurant, start, end);
+        
+        List<Orders> filtered = all.stream().filter(o -> o.getStatus() != Orders.OrderStatus.CANCELLED && o.getItems() != null && (withGst ? (o.getPrintWithGst() != Boolean.FALSE && o.getItems().stream().anyMatch(item -> {
+            if (item.getStatus() == OrderItem.ItemStatus.CANCELLED) return false;
+            double rate = item.getTaxRate() != null ? item.getTaxRate() : 0.0;
+            return rate > 0.0;
+        })) : (o.getPrintWithGst() == Boolean.FALSE || o.getItems().stream().anyMatch(item -> {
+            if (item.getStatus() == OrderItem.ItemStatus.CANCELLED) return false;
+            double rate = item.getTaxRate() != null ? item.getTaxRate() : 0.0;
+            return rate == 0.0;
+        })))).toList();
+
+        double totalRevenue = 0.0;
+        double totalTax = 0.0;
+        
+        for (Orders o : filtered) {
+            double orderBase = 0.0;
+            double orderTax = 0.0;
+            boolean treatAsNonGst = o.getPrintWithGst() == Boolean.FALSE;
+            for (OrderItem item : o.getItems()) {
+                if (item.getStatus() == OrderItem.ItemStatus.CANCELLED) continue;
+                double rate = item.getTaxRate() != null ? item.getTaxRate() : 0.0;
+                if (withGst) {
+                    if (rate > 0.0 && !treatAsNonGst) {
+                        double itemTotal = item.getPrice() * item.getQuantity();
+                        double itemBase = itemTotal / (1.0 + rate / 100.0);
+                        double itemTax = itemTotal - itemBase;
+                        orderBase += itemBase;
+                        orderTax += itemTax;
+                    }
+                } else {
+                    if (rate == 0.0 || treatAsNonGst) {
+                        double itemTotal = item.getPrice() * item.getQuantity();
+                        orderBase += itemTotal;
+                    }
+                }
+            }
+            double proportion = o.getSubtotal() != null && o.getSubtotal() > 0 ? (orderBase / o.getSubtotal()) : 0.0;
+            double orderDiscount = o.getDiscountAmount() != null ? o.getDiscountAmount() * proportion : 0.0;
+            double orderExtra = 0.0;
+            if (o.getExtraCharges() != null) {
+                orderExtra = o.getExtraCharges().stream().mapToDouble(com.probloom.model.entity.ExtraCharge::getAmount).sum() * proportion;
+            }
+            double orderTotal = orderBase + orderTax + orderExtra - orderDiscount;
+            
+            totalRevenue += orderTotal;
+            totalTax += orderTax;
+        }
+        
+        double baseRevenue  = totalRevenue - totalTax;
+
+        String title = withGst ? "Sales Report — With GST" : "Sales Report — Without GST";
+        addSectionTitle(document, title);
+        addKeyValueSummary(document, "Total Revenue", String.format("₹%,.2f", totalRevenue));
+        if (withGst) {
+            addKeyValueSummary(document, "Base Revenue (excl. GST)", String.format("₹%,.2f", baseRevenue));
+            addKeyValueSummary(document, "Total GST Collected", String.format("₹%,.2f", totalTax));
+            addKeyValueSummary(document, "  CGST (50%)", String.format("₹%,.2f", totalTax / 2));
+            addKeyValueSummary(document, "  SGST (50%)", String.format("₹%,.2f", totalTax / 2));
+        }
+
+        PdfPTable table = withGst
+                ? createStyledTable(6, 15, 18, 20, 12, 17, 18)
+                : createStyledTable(5, 15, 18, 25, 12, 30);
+
+        if (withGst) {
+            addHeaderRow(table, "Order #", "Date", "Customer", "Payment", "Base Amt (₹)", "GST Amt (₹)");
+        } else {
+            addHeaderRow(table, "Order #", "Date", "Customer", "Payment", "Total (₹)");
+        }
+
+        for (int i = 0; i < filtered.size(); i++) {
+            Orders o = filtered.get(i);
+            double orderBase = 0.0;
+            double orderTax = 0.0;
+            boolean treatAsNonGst = o.getPrintWithGst() == Boolean.FALSE;
+            for (OrderItem item : o.getItems()) {
+                if (item.getStatus() == OrderItem.ItemStatus.CANCELLED) continue;
+                double rate = item.getTaxRate() != null ? item.getTaxRate() : 0.0;
+                if (withGst) {
+                    if (rate > 0.0 && !treatAsNonGst) {
+                        double itemTotal = item.getPrice() * item.getQuantity();
+                        double itemBase = itemTotal / (1.0 + rate / 100.0);
+                        double itemTax = itemTotal - itemBase;
+                        orderBase += itemBase;
+                        orderTax += itemTax;
+                    }
+                } else {
+                    if (rate == 0.0 || treatAsNonGst) {
+                        double itemTotal = item.getPrice() * item.getQuantity();
+                        orderBase += itemTotal;
+                    }
+                }
+            }
+            double proportion = o.getSubtotal() != null && o.getSubtotal() > 0 ? (orderBase / o.getSubtotal()) : 0.0;
+            double orderDiscount = o.getDiscountAmount() != null ? o.getDiscountAmount() * proportion : 0.0;
+            double orderExtra = 0.0;
+            if (o.getExtraCharges() != null) {
+                orderExtra = o.getExtraCharges().stream().mapToDouble(com.probloom.model.entity.ExtraCharge::getAmount).sum() * proportion;
+            }
+            double orderTotal = orderBase + orderTax + orderExtra - orderDiscount;
+
+            if (withGst) {
+                addDataRow(table, i % 2 == 0,
+                        o.getOrderNumber(),
+                        o.getCreatedAt().format(DATE_FMT),
+                        o.getCustomerName() != null ? o.getCustomerName() : "Walk-in",
+                        o.getPaymentMethod().toString(),
+                        String.format("₹%,.2f", orderBase + orderExtra - orderDiscount),
+                        String.format("₹%,.2f", orderTax));
+            } else {
+                addDataRow(table, i % 2 == 0,
+                        o.getOrderNumber(),
+                        o.getCreatedAt().format(DATE_FMT),
+                        o.getCustomerName() != null ? o.getCustomerName() : "Walk-in",
+                        o.getPaymentMethod().toString(),
+                        String.format("₹%,.2f", orderTotal));
+            }
+        }
+        document.add(table);
     }
 
     private void addSalesSummaryContent(Document document, User restaurant, LocalDateTime start, LocalDateTime end) {
@@ -435,6 +563,80 @@ public class ReportService {
         for (int i = 0; i < cancelled.size(); i++) {
             Orders o = cancelled.get(i);
             addDataRow(table, i % 2 == 0, o.getOrderNumber(), o.getCreatedAt().format(DT_FMT), String.format("₹%,.2f", o.getTotal()));
+        }
+        document.add(table);
+    }
+
+    private void addExpenditureReportContent(Document document, User restaurant, LocalDateTime start, LocalDateTime end) {
+        List<Transaction> transactions = transactionRepository.findByRestaurantAndDateBetweenOrderByDateDesc(restaurant, start, end);
+        List<Transaction> expenses = transactions.stream().filter(t -> t.getType() == Transaction.TransactionType.EXPENSE).toList();
+        double totalExpense = expenses.stream().mapToDouble(Transaction::getAmount).sum();
+
+        addSectionTitle(document, "Detailed Expenditure Report");
+        addKeyValueSummary(document, "Total Expenses", String.format("₹%,.2f", totalExpense));
+
+        PdfPTable table = createStyledTable(4, 20, 35, 20, 25);
+        addHeaderRow(table, "Date", "Description", "Category", "Amount (₹)");
+        for (int i = 0; i < expenses.size(); i++) {
+            Transaction t = expenses.get(i);
+            addDataRow(table, i % 2 == 0,
+                    t.getDate().format(DATE_FMT),
+                    t.getDescription(),
+                    t.getCategory() != null ? t.getCategory() : "-",
+                    String.format("₹%,.2f", t.getAmount()));
+        }
+        document.add(table);
+    }
+
+    private void addPurchaseGstReportContent(Document document, User restaurant, LocalDateTime start, LocalDateTime end, boolean withGst) {
+        List<Transaction> allExpenses = transactionRepository.findByRestaurantAndDateBetweenOrderByDateDesc(restaurant, start, end)
+                .stream().filter(t -> t.getType() == Transaction.TransactionType.EXPENSE).toList();
+
+        List<Transaction> filtered = withGst
+                ? allExpenses.stream().filter(t -> t.getGstAmount() != null && t.getGstAmount() > 0).toList()
+                : allExpenses.stream().filter(t -> t.getGstAmount() == null || t.getGstAmount() == 0.0).toList();
+
+        double totalAmount = filtered.stream().mapToDouble(Transaction::getAmount).sum();
+        double totalGst    = filtered.stream().mapToDouble(t -> t.getGstAmount() != null ? t.getGstAmount() : 0.0).sum();
+        double baseAmount  = totalAmount - totalGst;
+
+        String title = withGst ? "Purchase Report — With GST" : "Purchase Report — Without GST";
+        addSectionTitle(document, title);
+        addKeyValueSummary(document, "Total Purchases", String.format("₹%,.2f", totalAmount));
+        if (withGst) {
+            addKeyValueSummary(document, "Base Amount (excl. GST)", String.format("₹%,.2f", baseAmount));
+            addKeyValueSummary(document, "Total GST", String.format("₹%,.2f", totalGst));
+        }
+
+        int cols = withGst ? 5 : 4;
+        PdfPTable table = withGst
+                ? createStyledTable(cols, 18, 30, 18, 17, 17)
+                : createStyledTable(cols, 20, 40, 20, 20);
+
+        if (withGst) {
+            addHeaderRow(table, "Date", "Description", "Invoice #", "Base Amt (₹)", "GST Amt (₹)");
+        } else {
+            addHeaderRow(table, "Date", "Description", "Category", "Amount (₹)");
+        }
+
+        for (int i = 0; i < filtered.size(); i++) {
+            Transaction t = filtered.get(i);
+            double gst  = t.getGstAmount() != null ? t.getGstAmount() : 0.0;
+            double base = t.getAmount() - gst;
+            if (withGst) {
+                addDataRow(table, i % 2 == 0,
+                        t.getDate().format(DATE_FMT),
+                        t.getDescription(),
+                        t.getInvoiceNumber() != null ? t.getInvoiceNumber() : "-",
+                        String.format("₹%,.2f", base),
+                        String.format("₹%,.2f", gst));
+            } else {
+                addDataRow(table, i % 2 == 0,
+                        t.getDate().format(DATE_FMT),
+                        t.getDescription(),
+                        t.getCategory() != null ? t.getCategory() : "-",
+                        String.format("₹%,.2f", t.getAmount()));
+            }
         }
         document.add(table);
     }
@@ -722,6 +924,10 @@ public class ReportService {
                 buildWordSalesSummary(doc, restaurant, start, end); break;
             case "sales-report":
                 buildWordSalesReport(doc, restaurant, start, end); break;
+            case "sales-gst-report":
+                buildWordSalesGstReport(doc, restaurant, start, end, true); break;
+            case "sales-non-gst-report":
+                buildWordSalesGstReport(doc, restaurant, start, end, false); break;
             case "item-wise-sales":
             case "category-item-wise":
                 buildWordItemWise(doc, restaurant, start, end); break;
@@ -736,6 +942,12 @@ public class ReportService {
                 buildWordInventory(doc, restaurant); break;
             case "gst-ledger-report":
                 buildWordLedgerReport(doc, restaurant, start, end); break;
+            case "expenditure-report":
+                buildWordExpenditureReport(doc, restaurant, start, end); break;
+            case "purchase-gst-report":
+                buildWordPurchaseGstReport(doc, restaurant, start, end, true); break;
+            case "purchase-non-gst-report":
+                buildWordPurchaseGstReport(doc, restaurant, start, end, false); break;
             default:
                 XWPFParagraph p = doc.createParagraph();
                 p.createRun().setText("Detailed data for '" + reportType + "' is available in PDF or JSON format.");
@@ -772,6 +984,133 @@ public class ReportService {
         buildWordTable(doc, new String[]{"Order #", "Date", "Customer", "Payment", "Total"}, data);
     }
 
+    private void buildWordSalesGstReport(XWPFDocument doc, User restaurant, LocalDateTime start, LocalDateTime end, boolean withGst) {
+        List<Orders> all = orderRepository.findByRestaurantAndCreatedAtBetweenOrderByCreatedAtDesc(restaurant, start, end);
+        
+        List<Orders> filtered = all.stream().filter(o -> o.getStatus() != Orders.OrderStatus.CANCELLED && o.getItems() != null && (withGst ? (o.getPrintWithGst() != Boolean.FALSE && o.getItems().stream().anyMatch(item -> {
+            if (item.getStatus() == OrderItem.ItemStatus.CANCELLED) return false;
+            double rate = item.getTaxRate() != null ? item.getTaxRate() : 0.0;
+            return rate > 0.0;
+        })) : (o.getPrintWithGst() == Boolean.FALSE || o.getItems().stream().anyMatch(item -> {
+            if (item.getStatus() == OrderItem.ItemStatus.CANCELLED) return false;
+            double rate = item.getTaxRate() != null ? item.getTaxRate() : 0.0;
+            return rate == 0.0;
+        })))).toList();
+
+        double totalRevenue = 0.0;
+        double totalTax = 0.0;
+
+        for (Orders o : filtered) {
+            double orderBase = 0.0;
+            double orderTax = 0.0;
+            boolean treatAsNonGst = o.getPrintWithGst() == Boolean.FALSE;
+            for (OrderItem item : o.getItems()) {
+                if (item.getStatus() == OrderItem.ItemStatus.CANCELLED) continue;
+                double rate = item.getTaxRate() != null ? item.getTaxRate() : 0.0;
+                if (withGst) {
+                    if (rate > 0.0 && !treatAsNonGst) {
+                        double itemTotal = item.getPrice() * item.getQuantity();
+                        double itemBase = itemTotal / (1.0 + rate / 100.0);
+                        double itemTax = itemTotal - itemBase;
+                        orderBase += itemBase;
+                        orderTax += itemTax;
+                    }
+                } else {
+                    if (rate == 0.0 || treatAsNonGst) {
+                        double itemTotal = item.getPrice() * item.getQuantity();
+                        orderBase += itemTotal;
+                    }
+                }
+            }
+            double proportion = o.getSubtotal() != null && o.getSubtotal() > 0 ? (orderBase / o.getSubtotal()) : 0.0;
+            double orderDiscount = o.getDiscountAmount() != null ? o.getDiscountAmount() * proportion : 0.0;
+            double orderExtra = 0.0;
+            if (o.getExtraCharges() != null) {
+                orderExtra = o.getExtraCharges().stream().mapToDouble(com.probloom.model.entity.ExtraCharge::getAmount).sum() * proportion;
+            }
+            double orderTotal = orderBase + orderTax + orderExtra - orderDiscount;
+
+            totalRevenue += orderTotal;
+            totalTax += orderTax;
+        }
+
+        double baseRevenue  = totalRevenue - totalTax;
+
+        XWPFParagraph p = doc.createParagraph();
+        XWPFRun r = p.createRun();
+        r.setText((withGst ? "WITH GST" : "WITHOUT GST") + " Sales Report");
+        r.setBold(true); r.setFontSize(13);
+
+        XWPFParagraph p2 = doc.createParagraph();
+        XWPFRun r2 = p2.createRun();
+        String summary = "Total Revenue: " + String.format("₹%,.2f", totalRevenue);
+        if (withGst) summary += "   |   Base: " + String.format("₹%,.2f", baseRevenue) + "   |   GST: " + String.format("₹%,.2f", totalTax);
+        r2.setText(summary); r2.setBold(true);
+
+        if (withGst) {
+            String[][] data = filtered.stream().map(o -> {
+                double orderBase = 0.0;
+                double orderTax = 0.0;
+                boolean treatAsNonGst = o.getPrintWithGst() == Boolean.FALSE;
+                for (OrderItem item : o.getItems()) {
+                    if (item.getStatus() == OrderItem.ItemStatus.CANCELLED) continue;
+                    double rate = item.getTaxRate() != null ? item.getTaxRate() : 0.0;
+                    if (rate > 0.0 && !treatAsNonGst) {
+                        double itemTotal = item.getPrice() * item.getQuantity();
+                        double itemBase = itemTotal / (1.0 + rate / 100.0);
+                        double itemTax = itemTotal - itemBase;
+                        orderBase += itemBase;
+                        orderTax += itemTax;
+                    }
+                }
+                double proportion = o.getSubtotal() != null && o.getSubtotal() > 0 ? (orderBase / o.getSubtotal()) : 0.0;
+                double orderDiscount = o.getDiscountAmount() != null ? o.getDiscountAmount() * proportion : 0.0;
+                double orderExtra = 0.0;
+                if (o.getExtraCharges() != null) {
+                    orderExtra = o.getExtraCharges().stream().mapToDouble(com.probloom.model.entity.ExtraCharge::getAmount).sum() * proportion;
+                }
+                double base = orderBase + orderExtra - orderDiscount;
+                return new String[]{
+                        o.getOrderNumber(),
+                        o.getCreatedAt().format(DT_FMT),
+                        o.getCustomerName() != null ? o.getCustomerName() : "Walk-in",
+                        o.getPaymentMethod().toString(),
+                        String.format("₹%,.2f", base),
+                        String.format("₹%,.2f", orderTax)
+                };
+            }).toArray(String[][]::new);
+            buildWordTable(doc, new String[]{"Order #", "Date", "Customer", "Payment", "Base Amt", "GST Amt"}, data);
+        } else {
+            String[][] data = filtered.stream().map(o -> {
+                double orderBase = 0.0;
+                boolean treatAsNonGst = o.getPrintWithGst() == Boolean.FALSE;
+                for (OrderItem item : o.getItems()) {
+                    if (item.getStatus() == OrderItem.ItemStatus.CANCELLED) continue;
+                    double rate = item.getTaxRate() != null ? item.getTaxRate() : 0.0;
+                    if (rate == 0.0 || treatAsNonGst) {
+                        double itemTotal = item.getPrice() * item.getQuantity();
+                        orderBase += itemTotal;
+                    }
+                }
+                double proportion = o.getSubtotal() != null && o.getSubtotal() > 0 ? (orderBase / o.getSubtotal()) : 0.0;
+                double orderDiscount = o.getDiscountAmount() != null ? o.getDiscountAmount() * proportion : 0.0;
+                double orderExtra = 0.0;
+                if (o.getExtraCharges() != null) {
+                    orderExtra = o.getExtraCharges().stream().mapToDouble(com.probloom.model.entity.ExtraCharge::getAmount).sum() * proportion;
+                }
+                double orderTotal = orderBase + orderExtra - orderDiscount;
+                return new String[]{
+                        o.getOrderNumber(),
+                        o.getCreatedAt().format(DT_FMT),
+                        o.getCustomerName() != null ? o.getCustomerName() : "Walk-in",
+                        o.getPaymentMethod().toString(),
+                        String.format("₹%,.2f", orderTotal)
+                };
+            }).toArray(String[][]::new);
+            buildWordTable(doc, new String[]{"Order #", "Date", "Customer", "Payment", "Total"}, data);
+        }
+    }
+
     private void buildWordItemWise(XWPFDocument doc, User restaurant, LocalDateTime start, LocalDateTime end) {
         List<Orders> orders = orderRepository.findByRestaurantAndCreatedAtBetweenOrderByCreatedAtDesc(restaurant, start, end);
         Map<String, Integer> salesMap = new LinkedHashMap<>();
@@ -797,6 +1136,70 @@ public class ReportService {
         });
         String[][] data = salesMap.entrySet().stream().map(e -> new String[]{e.getKey(), String.format("₹%,.2f", e.getValue())}).toArray(String[][]::new);
         buildWordTable(doc, new String[]{"Cashier Name", "Total Sales"}, data);
+    }
+
+    private void buildWordExpenditureReport(XWPFDocument doc, User restaurant, LocalDateTime start, LocalDateTime end) {
+        List<Transaction> transactions = transactionRepository.findByRestaurantAndDateBetweenOrderByDateDesc(restaurant, start, end);
+        List<Transaction> expenses = transactions.stream().filter(t -> t.getType() == Transaction.TransactionType.EXPENSE).toList();
+        double total = expenses.stream().mapToDouble(Transaction::getAmount).sum();
+
+        XWPFParagraph p = doc.createParagraph();
+        XWPFRun r = p.createRun();
+        r.setText("Total Expenses: " + String.format("₹%,.2f", total));
+        r.setBold(true);
+
+        String[][] data = expenses.stream().map(t -> new String[]{
+            t.getDate().format(DATE_FMT),
+            t.getDescription(),
+            t.getCategory() != null ? t.getCategory() : "-",
+            String.format("₹%,.2f", t.getAmount())
+        }).toArray(String[][]::new);
+        buildWordTable(doc, new String[]{"Date", "Description", "Category", "Amount"}, data);
+    }
+
+    private void buildWordPurchaseGstReport(XWPFDocument doc, User restaurant, LocalDateTime start, LocalDateTime end, boolean withGst) {
+        List<Transaction> all = transactionRepository.findByRestaurantAndDateBetweenOrderByDateDesc(restaurant, start, end)
+                .stream().filter(t -> t.getType() == Transaction.TransactionType.EXPENSE).toList();
+        List<Transaction> filtered = withGst
+                ? all.stream().filter(t -> t.getGstAmount() != null && t.getGstAmount() > 0).toList()
+                : all.stream().filter(t -> t.getGstAmount() == null || t.getGstAmount() == 0.0).toList();
+
+        double totalAmount = filtered.stream().mapToDouble(Transaction::getAmount).sum();
+        double totalGst    = filtered.stream().mapToDouble(t -> t.getGstAmount() != null ? t.getGstAmount() : 0.0).sum();
+        double baseAmount  = totalAmount - totalGst;
+
+        XWPFParagraph p = doc.createParagraph();
+        XWPFRun r = p.createRun();
+        r.setText((withGst ? "WITH GST" : "WITHOUT GST") + " Purchase Report");
+        r.setBold(true); r.setFontSize(13);
+
+        XWPFParagraph p2 = doc.createParagraph();
+        XWPFRun r2 = p2.createRun();
+        String summary = "Total: " + String.format("₹%,.2f", totalAmount);
+        if (withGst) summary += "   |   Base: " + String.format("₹%,.2f", baseAmount) + "   |   GST: " + String.format("₹%,.2f", totalGst);
+        r2.setText(summary); r2.setBold(true);
+
+        if (withGst) {
+            String[][] data = filtered.stream().map(t -> {
+                double gst = t.getGstAmount() != null ? t.getGstAmount() : 0.0;
+                return new String[]{
+                        t.getDate().format(DATE_FMT),
+                        t.getDescription(),
+                        t.getInvoiceNumber() != null ? t.getInvoiceNumber() : "-",
+                        String.format("₹%,.2f", t.getAmount() - gst),
+                        String.format("₹%,.2f", gst)
+                };
+            }).toArray(String[][]::new);
+            buildWordTable(doc, new String[]{"Date", "Description", "Invoice #", "Base Amt", "GST Amt"}, data);
+        } else {
+            String[][] data = filtered.stream().map(t -> new String[]{
+                    t.getDate().format(DATE_FMT),
+                    t.getDescription(),
+                    t.getCategory() != null ? t.getCategory() : "-",
+                    String.format("₹%,.2f", t.getAmount())
+            }).toArray(String[][]::new);
+            buildWordTable(doc, new String[]{"Date", "Description", "Category", "Amount"}, data);
+        }
     }
 
     private void buildWordCancelledReport(XWPFDocument doc, User restaurant, LocalDateTime start, LocalDateTime end) {

@@ -10,7 +10,7 @@ export default function HelpSupportScreen({ navigation }: any) {
     const themedStyles = React.useMemo(() => createStyles(colors, gradients, isDark), [colors, gradients, isDark]);
 
     const handleEmail = () => {
-        Linking.openURL('mailto:support@kitchenmaster.com?subject=App Support Request');
+        Linking.openURL('mailto:support@ProBloom.com?subject=App Support Request');
     };
 
     return (

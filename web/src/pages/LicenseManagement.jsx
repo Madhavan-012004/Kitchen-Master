@@ -93,7 +93,7 @@ export default function LicenseManagement() {
   const fetchStatus = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get('/api/license/status');
+      const res = await api.get('/license/status');
       setLicenseStatus(res.data);
     } catch (err) {
       setLicenseStatus({
@@ -115,7 +115,7 @@ export default function LicenseManagement() {
   const handleGenerateRequest = async () => {
     setGeneratingRequest(true);
     try {
-      const res = await api.get('/api/license/generate-request');
+      const res = await api.post('/license/generate-request', {});
       const requestData = res.data.requestData;
       const blob = new Blob([JSON.stringify(requestData, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -139,7 +139,7 @@ export default function LicenseManagement() {
     try {
       const formData = new FormData();
       formData.append('file', uploadFile);
-      const res = await api.post('/api/license/upload', formData);
+      const res = await api.post('/license/upload', formData);
       setUploadResult({ success: res.data.success, message: res.data.message });
       if (res.data.success) {
         // Refresh license status
@@ -181,7 +181,7 @@ export default function LicenseManagement() {
         {/* Header */}
         <div className="license-header">
           <div className="license-logo"><ShieldIcon /></div>
-          <h1>Kitchen Master License</h1>
+          <h1>ProBloom License</h1>
           <p>Offline activation powered by ProBloom HQ</p>
         </div>
 
@@ -334,7 +334,7 @@ export default function LicenseManagement() {
 
         {/* Footer */}
         <div className="license-footer">
-          ProBloom Kitchen Master · Offline Edition<br />
+          ProBloom ProBloom · Offline Edition<br />
           For support, contact{' '}
           <a href="mailto:support@probloom.in">support@probloom.in</a>
         </div>
