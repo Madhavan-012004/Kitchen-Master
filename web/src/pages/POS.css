@@ -937,13 +937,15 @@
     padding: 10px 8px;
     border-radius: 10px;
     font-size: 13px;
-    font-weight: 700;
+    font-weight: 800;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 6px;
     border: 1px solid transparent;
     transition: all 0.2s;
+    cursor: pointer;
+    color: #1a1a2e;
 }
 
 .compact-btn:disabled {
@@ -967,7 +969,7 @@
 
 .compact-btn.kot {
     background: var(--accent);
-    color: #fff;
+    color: #1a1a2e;
     box-shadow: 0 4px 10px var(--accent-glow);
 }
 
@@ -977,9 +979,9 @@
 }
 
 .compact-btn.settle {
-    background: var(--success);
+    background: #6366f1;
     color: #fff;
-    box-shadow: 0 4px 10px rgba(34, 197, 94, 0.2);
+    box-shadow: 0 4px 10px rgba(99, 102, 241, 0.3);
 }
 
 .compact-btn.settle:hover:not(:disabled) {
@@ -988,13 +990,16 @@
 }
 
 .compact-cancel-btn {
-    background: transparent;
-    color: var(--text-muted);
-    font-size: 11px;
-    font-weight: 600;
-    text-decoration: underline;
+    background: rgba(239, 68, 68, 0.08);
+    color: #ef4444;
+    font-size: 12px;
+    font-weight: 700;
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    border-radius: 8px;
+    padding: 8px;
     text-align: center;
     margin-top: 4px;
+    cursor: pointer;
     transition: all 0.2s;
 }
 
@@ -3484,6 +3489,7 @@
     align-items: center;
     justify-content: center;
     gap: 4px;
+    color: #1a1a2e;
 }
 
 .compact-btn:disabled {
@@ -3493,7 +3499,7 @@
 
 .compact-btn.kot {
     background: var(--accent);
-    color: white;
+    color: #1a1a2e;
     box-shadow: 0 4px 12px rgba(198, 245, 61, 0.3);
 }
 
@@ -3504,7 +3510,7 @@
 
 .compact-btn.settle {
     background: #6366f1;
-    color: white;
+    color: #fff;
     box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
 }
 

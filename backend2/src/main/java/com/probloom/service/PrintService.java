@@ -179,7 +179,14 @@ public class PrintService {
                     if (cat.length() > 6) cat = cat.substring(0, 6);
                     String name = item.getName();
                     if (name.length() > 12) name = name.substring(0, 12);
-                    double tot = item.getPrice() * item.getQuantity();
+                    double price = item.getPrice() != null ? item.getPrice() : 0.0;
+                    double quantity = item.getQuantity() != null ? item.getQuantity() : 0;
+                    double tot = price * quantity;
+                    if (printGst) {
+                        double rate = item.getTaxRate() != null ? item.getTaxRate() : 0.0;
+                        double itemTax = (tot * rate) / (100.0 + rate);
+                        tot = tot - itemTax;
+                    }
                     
                     write(out, String.format("%-6s %-12s %4d %8.2f\n", cat, name, item.getQuantity(), tot));
                 }

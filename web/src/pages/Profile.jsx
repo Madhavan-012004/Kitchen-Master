@@ -84,7 +84,8 @@ export default function ProfilePage() {
 
         // WhatsApp Settings
         whatsappCountryCode: user?.whatsappCountryCode || '+91',
-        whatsappDetailedBill: user?.whatsappDetailedBill ?? false
+        whatsappDetailedBill: user?.whatsappDetailedBill ?? false,
+        cloudBackupPath: user?.cloudBackupPath || ''
     });
     
     const [initialTableMeta, setInitialTableMeta] = useState({});
@@ -230,7 +231,8 @@ export default function ProfilePage() {
                 onlineStockActivateTime: user.onlineStockActivateTime ?? false,
 
                 whatsappCountryCode: user.whatsappCountryCode || '+91',
-                whatsappDetailedBill: user.whatsappDetailedBill ?? false
+                whatsappDetailedBill: user.whatsappDetailedBill ?? false,
+                cloudBackupPath: user.cloudBackupPath || ''
             });
         }
     }, [user]);
@@ -1977,9 +1979,44 @@ export default function ProfilePage() {
                             >
                                 {backupLoading ? '⚙️ Creating Backup...' : '📦 Create Backup Now'}
                             </button>
-                            <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '10px', textAlign: 'center' }}>
+                            <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '10px', textAlign: 'center', marginBottom: '15px' }}>
                                 Backups are stored in the <code>database_dump/</code> folder.
                             </p>
+
+                            <div style={{ marginTop: '20px', paddingTop: '15px', borderTop: '1px dashed var(--border-color)' }}>
+                                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '8px', color: 'var(--text-primary)' }}>
+                                    ☁️ Cloud Sync Directory Path
+                                </label>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <input 
+                                        type="text" 
+                                        name="cloudBackupPath"
+                                        value={formData.cloudBackupPath || ''} 
+                                        onChange={handleInputChange}
+                                        placeholder="e.g. C:\Users\Username\OneDrive\Backups"
+                                        style={{ 
+                                            flex: 1, 
+                                            padding: '8px 12px', 
+                                            borderRadius: '6px', 
+                                            border: '1px solid var(--border-color)', 
+                                            background: 'var(--bg-primary)', 
+                                            color: 'var(--text-primary)',
+                                            fontSize: '13px'
+                                        }}
+                                    />
+                                    <button 
+                                        className="profile-save-btn" 
+                                        style={{ width: 'auto', padding: '0 15px', whiteSpace: 'nowrap', margin: 0 }}
+                                        onClick={handleSaveProfile}
+                                        disabled={loading}
+                                    >
+                                        Save Path
+                                    </button>
+                                </div>
+                                <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px', lineHeight: '1.4' }}>
+                                    Provide a local path synchronized to a cloud service (OneDrive, Google Drive, Dropbox, etc.). Newly generated backups will automatically copy here.
+                                </p>
+                            </div>
                         </div>
                     )}
                 </div>

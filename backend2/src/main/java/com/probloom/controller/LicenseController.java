@@ -86,4 +86,29 @@ public class LicenseController {
             return ResponseEntity.internalServerError().body(err);
         }
     }
+
+    /**
+     * DELETE /api/license/remove
+     * Removes the currently installed license.
+     */
+    @DeleteMapping("/remove")
+    public ResponseEntity<Map<String, Object>> removeLicense() {
+        try {
+            boolean removed = licenseService.removeLicense();
+            Map<String, Object> response = new HashMap<>();
+            if (removed) {
+                response.put("success", true);
+                response.put("message", "License successfully removed.");
+            } else {
+                response.put("success", false);
+                response.put("message", "No license found to remove.");
+            }
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> err = new HashMap<>();
+            err.put("success", false);
+            err.put("message", "Failed to remove license: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(err);
+        }
+    }
 }

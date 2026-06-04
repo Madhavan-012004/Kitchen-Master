@@ -250,10 +250,31 @@ public class OrderService {
             order.setExtraCharges(extraCharges);
         }
 
+        if (data.containsKey("paymentMethod") && data.get("paymentMethod") != null) {
+            try {
+                order.setPaymentMethod(Orders.PaymentMethod.valueOf(data.get("paymentMethod").toString().toUpperCase()));
+            } catch (Exception ignored) {}
+        }
+        
+        // Auto-mark as PAID if a customer places an order using UPI
+        if (createdBy == null && Orders.PaymentMethod.UPI.equals(order.getPaymentMethod())) {
+            order.setPaymentStatus(Orders.PaymentStatus.PAID);
+        }
+
         // Recalculate totals
         recalculateTotals(order);
         
         Orders saved = orderRepository.save(order);
+
+        // If instantly paid, deduct stock and print bill
+        if (createdBy == null && Orders.PaymentStatus.PAID.equals(saved.getPaymentStatus())) {
+            deductStockFromOrder(saved);
+            
+            if (!"pharmacy".equalsIgnoreCase(saved.getBillTemplate()) && Boolean.TRUE.equals(restaurant.getBillPrinterEnabled()) && restaurant.getCounterPrinterIp() != null && !restaurant.getCounterPrinterIp().trim().isEmpty()) {
+                final Orders finalSaved = saved;
+                new Thread(() -> printService.printBill(finalSaved, restaurant, restaurant.getCounterPrinterIp())).start();
+            }
+        }
 
         // Auto-save/update customer details to persistent database
         saveCustomerProfile(restaurant, saved);
@@ -585,12 +606,17 @@ public class OrderService {
     }
 
     @Transactional
-    public Orders requestBillPublic(@NonNull Long id) {
+    public Orders requestBillPublic(@NonNull Long id, String paymentMethod) {
         // Use new findByIdWithItems to avoid LazyInitializationException in Socket thread
         Orders order = Objects.requireNonNull(orderRepository.findByIdWithItems(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found")));
         order.setBillRequested(true);
         order.setBillRequestedAt(LocalDateTime.now());
+        if (paymentMethod != null && !paymentMethod.trim().isEmpty()) {
+            try {
+                order.setPaymentMethod(Orders.PaymentMethod.valueOf(paymentMethod.toUpperCase()));
+            } catch (Exception ignored) {}
+        }
         Orders saved = orderRepository.save(order);
         
         // Ensure items are loaded into the object being sent
@@ -1067,6 +1093,54 @@ public class OrderService {
                 System.err.println("⚠️ Failed to deduct stock for item " + item.getName() + ": " + e.getMessage());
             }
         }
+    }
+
+    private void restoreStockFromOrder(Orders order) {
+        if (order.getItems() == null) return;
+        for (OrderItem item : order.getItems()) {
+            try {
+                InventoryItem inventoryItem = null;
+                if (item.getInventoryItemId() != null) {
+                    inventoryItem = inventoryService.getById(Objects.requireNonNull(order.getRestaurant()), Objects.requireNonNull(item.getInventoryItemId()));
+                } else if (item.getBarcode() != null && !item.getBarcode().trim().isEmpty()) {
+                    try {
+                        inventoryItem = inventoryService.getByBarcode(Objects.requireNonNull(order.getRestaurant()), Objects.requireNonNull(item.getBarcode()));
+                    } catch (Exception ignored) {}
+                }
+                if (inventoryItem == null && item.getName() != null) {
+                    try {
+                        inventoryItem = inventoryService.getByName(Objects.requireNonNull(order.getRestaurant()), Objects.requireNonNull(item.getName()));
+                    } catch (Exception ignored) {}
+                }
+
+                if (inventoryItem != null) {
+                    inventoryService.adjustStock(
+                        Objects.requireNonNull(order.getRestaurant()), 
+                        Objects.requireNonNull(inventoryItem.getId()), 
+                        Objects.requireNonNull(Map.of(
+                            "type", "ADD",
+                            "quantity", Double.valueOf(item.getQuantity()),
+                            "reason", "Revert Sale (Deleted Order #" + order.getOrderNumber() + ")"
+                        )),
+                        order.getCreatedBy()
+                    );
+                }
+            } catch (Exception e) {
+                System.err.println("⚠️ Failed to restore stock for item " + item.getName() + ": " + e.getMessage());
+            }
+        }
+    }
+
+    @Transactional
+    public void delete(@NonNull User restaurant, @NonNull Long id) {
+        Orders order = orderRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
+        if (!order.getRestaurant().getId().equals(restaurant.getId())) {
+            throw new ResourceNotFoundException("Order not found for this restaurant");
+        }
+        
+        restoreStockFromOrder(order);
+        orderRepository.delete(order);
     }
 
     @Transactional

@@ -2,6 +2,7 @@ package com.probloom.repository;
 
 import com.probloom.model.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import org.springframework.data.repository.query.Param;
@@ -15,4 +16,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     List<User> findByParentOwner(@Param("parentOwner") User parentOwner);
     List<User> findByParentOwnerAndIsActiveTrue(@Param("parentOwner") User parentOwner);
     Optional<User> findFirstByPhone(@Param("phone") String phone);
+
+    @Query("SELECT u FROM User u WHERE u.isActive = true AND u.cloudBackupPath IS NOT NULL AND u.cloudBackupPath <> ''")
+    List<User> findActiveUsersWithCloudBackupPath();
 }

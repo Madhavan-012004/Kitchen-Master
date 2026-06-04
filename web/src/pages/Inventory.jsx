@@ -288,6 +288,47 @@ export default function Inventory() {
         }
     };
 
+    const handleExportActivityLog = () => {
+        if (!movements || movements.length === 0) {
+            toast.error("No movements to export.");
+            return;
+        }
+        const headers = ["Time,Material,Action,Change,Unit,Performed By,Reason\n"];
+        const rows = movements.map(m => {
+            const time = `"${new Date(m.timestamp).toLocaleString()}"`;
+            const name = `"${m.itemName || ''}"`;
+            const action = `"${m.type || ''}"`;
+            const change = `"${m.type === 'DEDUCT' ? '-' : '+'}${m.quantity}"`;
+            const unit = `"${m.inventoryItem?.unit || ''}"`;
+            const performedBy = `"${m.performedByName || 'System'}"`;
+            const reason = `"${(m.reason || '').replace(/"/g, '""')}"`;
+            return [time, name, action, change, unit, performedBy, reason].join(',');
+        });
+        const blob = new Blob([headers.concat(rows.join('\n'))], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `activity_log_${new Date().toISOString().slice(0,10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const handleClearActivityLog = async () => {
+        if (!window.confirm("⚠️ Are you sure you want to wipe all activity logs? This action cannot be undone.")) return;
+        setLoading(true);
+        try {
+            await api.delete('/inventory/movements');
+            setMovements([]);
+            toast.success("Activity log wiped successfully!");
+        } catch (err) {
+            console.error("Failed to clear activity log:", err);
+            toast.error("Failed to clear activity log.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleCsvImport = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -674,7 +715,11 @@ export default function Inventory() {
                 </div>
             ) : (
                 <div className="tab-content animate-fade">
-                    <ActivityLog movements={movements} onExport={() => alert('Feature coming soon!')} />
+                    <ActivityLog 
+                        movements={movements} 
+                        onExport={handleExportActivityLog} 
+                        onClear={handleClearActivityLog} 
+                    />
                 </div>
             )}
 
@@ -973,16 +1018,17 @@ function ItemModal({ onSubmit, onClose, initialData, isEditing, scaleValue }) {
                                 onChange={(e) => setFormData({...formData, hsnCode: e.target.value})}
                             />
                         </div>
-                    </div>
-
-                    <div className="form-row" style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '10px 0' }}>
-                        <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: 10, margin: 0 }}>
-                            <input 
-                                type="checkbox" 
-                                checked={formData.isBilliable !== false}
-                                onChange={(e) => setFormData({...formData, isBilliable: e.target.checked})}
-                            />
-                            <label style={{ margin: 0 }}>Available for Billing (POS)</label>
+                        <div className="form-group">
+                            <label>&nbsp;</label>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', background: formData.isBilliable !== false ? 'rgba(16, 185, 129, 0.1)' : 'var(--bg-secondary)', padding: '10px 14px', borderRadius: '8px', border: `1px solid ${formData.isBilliable !== false ? 'rgba(16, 185, 129, 0.3)' : 'var(--border)'}`, width: '100%', transition: 'all 0.2s', margin: 0, boxSizing: 'border-box' }}>
+                                <input 
+                                    type="checkbox" 
+                                    checked={formData.isBilliable !== false}
+                                    onChange={(e) => setFormData({...formData, isBilliable: e.target.checked})}
+                                    style={{ width: '16px', height: '16px', accentColor: '#10b981', cursor: 'pointer', margin: 0 }}
+                                />
+                                <span style={{ margin: 0, fontWeight: '600', color: formData.isBilliable !== false ? '#10b981' : 'var(--text-muted)', fontSize: '0.85rem' }}>Available for Billing (POS)</span>
+                            </label>
                         </div>
                     </div>
 
@@ -1454,22 +1500,25 @@ function AdjustModal({ item, onSubmit, onClose, scaleValue }) {
 
 function StatsCard({ icon, label, value, color, textStyle }) {
     return (
-        <div className="stat-card">
-            <div className="stat-icon-bg" style={{background: color}}>{icon}</div>
-            <div className="stat-info">
-                <label>{label}</label>
-                <div className="stat-value" style={textStyle}>{value}</div>
+        <div className="stat-item">
+            <div className="stat-left">
+                <div className="stat-icon-bg" style={{background: color}}>{icon}</div>
+                <label className="stat-label">{label}</label>
             </div>
+            <div className="stat-value" style={textStyle}>{value}</div>
         </div>
     );
 }
 
-function ActivityLog({ movements, onExport }) {
+function ActivityLog({ movements, onExport, onClear }) {
     return (
         <div className="activity-section">
             <div className="activity-controls">
                 <h2>Audit Log & Item History</h2>
-                <button className="export-btn" onClick={onExport}>📥 Export CSV</button>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                    <button className="export-btn" onClick={onExport}>📥 Export CSV</button>
+                    <button className="wipe-btn" onClick={onClear}>🗑️ Wipe Activity Log</button>
+                </div>
             </div>
             
             <div className="activity-table-wrapper">

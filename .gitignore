@@ -64,3 +64,28 @@ web/dist/
 app/dist/
 app/build/
 backend2/target/
+
+# Python Cache and Virtual Environments
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+ENV/
+env/
+.pytest_cache/
+
+# Large binaries, ZIPs, logs, and database dumps
+*.zip
+*.log
+backend2/database_dump/
+*.sql
+
+# Embedded runtimes and packages
+web/pgsql/
+web/jre/
+web/dist-packager/
+dist-packager/
+node_modules/
+dist/

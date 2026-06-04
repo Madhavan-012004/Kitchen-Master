@@ -224,6 +224,17 @@ public class LicenseService {
     }
 
     /**
+     * Removes the current license file.
+     */
+    public boolean removeLicense() {
+        File licFile = new File(getLicenseFilePath());
+        if (licFile.exists()) {
+            return licFile.delete();
+        }
+        return false;
+    }
+
+    /**
      * Ensures the owner user exists in the local database based on license data.
      */
     private void syncUserFromLicense(Map<String, Object> status) {

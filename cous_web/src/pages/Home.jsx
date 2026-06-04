@@ -12,8 +12,19 @@ import { useTranslation } from 'react-i18next';
 import './Home.css';
 
 /* ─── Small pure helpers ─── */
+// Resolve the image URL for a menu item.
+// Priority: (1) real uploaded image (/uploads/...) → backend origin
+//           (2) external URL (http...) → use as-is
+//           (3) fallback to category-based stock photos
+const BACKEND_ORIGIN = window.location.origin; // cous_web is served from the same host as the backend
+
 function getDishImage(item) {
-    if (item.imageUrl && item.imageUrl.startsWith('http')) return item.imageUrl;
+    if (item.imageUrl) {
+        if (item.imageUrl.startsWith('http')) return item.imageUrl;
+        // Local upload path like /uploads/menu/filename.jpg
+        return BACKEND_ORIGIN + item.imageUrl;
+    }
+    // Fallback stock images by name/category
     const name = item.name?.toLowerCase() || '';
     const cat = item.category?.toLowerCase() || '';
     if (name.includes('biryani')) return "https://images.unsplash.com/photo-1563379091339-03b21bc4a4f8?q=80&w=400&auto=format&fit=crop";
@@ -22,7 +33,7 @@ function getDishImage(item) {
     if (name.includes('parotta') || name.includes('bread')) return "https://images.unsplash.com/photo-1534308983496-4fabb1a015ee?q=80&w=400&auto=format&fit=crop";
     if (cat.includes('dessert') || name.includes('payasam')) return "https://images.unsplash.com/photo-1551024601-bec78aea704b?q=80&w=400&auto=format&fit=crop";
     if (cat.includes('beverage') || cat.includes('drink') || name.includes('lassi') || name.includes('juice')) return "https://images.unsplash.com/photo-1544145945-f90425340c7e?q=80&w=400&auto=format&fit=crop";
-    return `https://loremflickr.com/400/300/food,${encodeURIComponent(item.name || 'dish')}/all`;
+    return `https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=400&auto=format&fit=crop`;
 }
 
 /* ─── Language Toggle Pill ─── */
@@ -202,6 +213,10 @@ export default function Home() {
 
     /* ─── Order actions ─── */
     const handlePlaceOrder = async () => {
+        if (paymentMethod === 'UPI') {
+            setOrderStatus('processing_upi');
+            await new Promise(r => setTimeout(r, 2000));
+        }
         setOrderStatus('submitting');
         try {
             const payload = {
@@ -228,7 +243,7 @@ export default function Home() {
     const handleRequestBill = async () => {
         if (!placedOrderId || !activeOrder) return;
         try {
-            await api.patch(`/orders/public/${placedOrderId}/bill-request`);
+            await api.patch(`/orders/public/${placedOrderId}/bill-request`, { paymentMethod });
             alert("Bill requested! Our staff will bring it shortly.");
         } catch (err) { 
             const msg = err.response?.data?.message || err.message;
@@ -392,9 +407,21 @@ export default function Home() {
                                 <div className="bill-row total"><span>Total to Pay</span><span>₹{activeOrder.total?.toFixed(2)}</span></div>
                             </div>
                             {activeOrder.status?.toUpperCase() !== 'PAID' && (
-                                <button className="confirm-order-btn" style={{ marginTop: '16px' }} onClick={handleRequestBill} disabled={orderStatus === 'submitting'}>
-                                    {orderStatus === 'submitting' ? 'Notifying Cashier...' : `Request Bill • ₹${activeOrder.total?.toFixed(2)}`}
-                                </button>
+                                <>
+                                    <div className="payment-method-section" style={{ marginTop: '16px', textAlign: 'left' }}>
+                                        <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 'bold' }}>Payment Method</label>
+                                        <div className="payment-options">
+                                            {[['CASH', '💵'], ['CARD', '💳'], ['UPI', '📱']].map(([m, icon]) => (
+                                                <button key={m} className={`pay-opt ${paymentMethod === m ? 'active' : ''}`} onClick={() => setPaymentMethod(m)}>
+                                                    {icon} {m}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <button className="confirm-order-btn" style={{ marginTop: '16px' }} onClick={handleRequestBill} disabled={orderStatus === 'submitting'}>
+                                        {orderStatus === 'submitting' ? 'Notifying Cashier...' : `Confirm Payment & Request Bill • ₹${activeOrder.total?.toFixed(2)}`}
+                                    </button>
+                                </>
                             )}
                             {activeOrder.status?.toUpperCase() === 'PAID' && (
                                 <button className="confirm-order-btn" style={{ marginTop: '16px', background: '#4ADE80', color: '#000', boxShadow: '0 10px 32px rgba(74,222,128,0.3)' }} disabled>
@@ -557,6 +584,15 @@ export default function Home() {
                 {showActiveOrderModal && activeOrder && (
                     <ActiveOrderModal order={activeOrder} onClose={() => setShowActiveOrderModal(false)} lang={i18n.language} />
                 )}
+                {orderStatus === 'processing_upi' && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="modal-overlay centered" style={{ zIndex: 9999 }}>
+                        <div className="processing-modal" style={{ background: 'var(--surface)', padding: '32px', borderRadius: '24px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                            <div className="spinner" style={{ borderColor: 'var(--brand)', borderTopColor: 'transparent', width: '40px', height: '40px', borderWidth: '4px', margin: '0 auto 16px' }}></div>
+                            <h3 style={{ color: 'var(--text)', marginBottom: '8px', fontSize: '1.2rem' }}>Processing UPI Payment</h3>
+                            <p style={{ color: 'var(--text-dim)', fontSize: '0.9rem' }}>Please complete the payment on your UPI app...</p>
+                        </div>
+                    </motion.div>
+                )}
                 {orderStatus === 'success' && (
                     <SuccessModal onClose={() => setOrderStatus(null)} name={firstName} />
                 )}
@@ -687,16 +723,7 @@ function CartModal({ cart, onClose, onUpdateQty, onConfirm, total, orderNotes, s
                     />
                 </div>
 
-                <div className="payment-method-section">
-                    <label>Payment Method</label>
-                    <div className="payment-options">
-                        {[['CASH', '💵'], ['CARD', '💳'], ['UPI', '📱']].map(([m, icon]) => (
-                            <button key={m} className={`pay-opt ${paymentMethod === m ? 'active' : ''}`} onClick={() => setPaymentMethod(m)}>
-                                {icon} {m}
-                            </button>
-                        ))}
-                    </div>
-                </div>
+
 
                 <div className="bill-summary">
                     <div className="bill-row"><span>Item Total</span><span>₹{total}</span></div>

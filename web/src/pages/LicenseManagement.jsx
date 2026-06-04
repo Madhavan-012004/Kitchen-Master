@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import './LicenseManagement.css';
 import api from '../api/client.js';
 
@@ -81,6 +82,7 @@ function getBadgeText(status, daysLeft, message) {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function LicenseManagement() {
+  const navigate = useNavigate();
   const [licenseStatus, setLicenseStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [uploadFile, setUploadFile] = useState(null);
@@ -169,6 +171,20 @@ export default function LicenseManagement() {
     }
   };
 
+  // Remove License
+  const handleRemoveLicense = async () => {
+    if (!window.confirm('Are you sure you want to remove the current license? This will restrict access to the system.')) return;
+    setLoading(true);
+    try {
+      const res = await api.delete('/license/remove');
+      alert(res.data.message || 'License removed successfully.');
+      await fetchStatus();
+    } catch (err) {
+      alert('Failed to remove license: ' + (err.response?.data?.message || err.message));
+      setLoading(false);
+    }
+  };
+
   // ── Render ────────────────────────────────────────────────────────────────
   const badgeClass = licenseStatus
     ? getBadgeClass(licenseStatus.status, licenseStatus.daysLeft)
@@ -176,6 +192,11 @@ export default function LicenseManagement() {
 
   return (
     <div className="license-page">
+      <div style={{ width: '100%', maxWidth: '1200px', margin: '0 auto', display: 'flex', justifyContent: 'flex-start' }}>
+        <button onClick={() => navigate('/login')} className="btn-license-secondary" style={{ width: 'auto', padding: '0.6rem 1rem', marginBottom: '1rem' }}>
+          &larr; Back to Login
+        </button>
+      </div>
       <div className="license-card">
 
         {/* Header */}
@@ -195,10 +216,22 @@ export default function LicenseManagement() {
 
         {!loading && licenseStatus && (
           <>
-            {/* Status Badge */}
-            <div className={`license-status-badge ${badgeClass}`}>
-              <span className={`status-dot ${badgeClass}`} />
-              <span>{getBadgeText(licenseStatus.status, licenseStatus.daysLeft, licenseStatus.message)}</span>
+            {/* Status Badge & Remove Action */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', gap: '1rem', flexWrap: 'wrap' }}>
+              <div className={`license-status-badge ${badgeClass}`} style={{ marginBottom: 0, flex: 1 }}>
+                <span className={`status-dot ${badgeClass}`} />
+                <span>{getBadgeText(licenseStatus.status, licenseStatus.daysLeft, licenseStatus.message)}</span>
+              </div>
+              
+              {licenseStatus.valid && (
+                <button 
+                  className="btn-license-secondary" 
+                  style={{ width: 'auto', padding: '0.8rem 1.2rem', color: '#f87171', borderColor: 'rgba(239, 68, 68, 0.3)', background: 'rgba(239, 68, 68, 0.1)' }}
+                  onClick={handleRemoveLicense}
+                >
+                  Remove License
+                </button>
+              )}
             </div>
 
             {/* Info Grid */}
@@ -241,93 +274,96 @@ export default function LicenseManagement() {
 
             <hr className="license-divider" />
 
-            {/* === Step 1: Generate Machine Request === */}
-            <p className="license-section-title">Step 1 — Generate License Request</p>
-            <div className="license-steps" style={{ marginBottom: '1.5rem' }}>
-              <div className="license-step">
-                <div className="step-number">1</div>
-                <div className="step-content">
-                  <h4>Download your Machine Request file</h4>
-                  <p>This file contains your unique Hardware ID. Email it to ProBloom HQ to receive your license.</p>
+            <div className="license-sections-grid">
+              <div className="license-section">
+                {/* === Step 1: Generate Machine Request === */}
+                <p className="license-section-title">Step 1 — Generate License Request</p>
+                <div className="license-steps" style={{ marginBottom: '1.5rem' }}>
+                  <div className="license-step">
+                    <div className="step-number">1</div>
+                    <div className="step-content">
+                      <h4>Download your Machine Request file</h4>
+                      <p>This file contains your unique Hardware ID. Email it to ProBloom HQ to receive your license.</p>
+                    </div>
+                  </div>
+                  <div className="license-step">
+                    <div className="step-number">2</div>
+                    <div className="step-content">
+                      <h4>Send to ProBloom HQ</h4>
+                      <p>Email the <code>machine.req</code> file to <strong>admin.probloom@gmail.com</strong> with your business name.</p>
+                    </div>
+                  </div>
+                  <div className="license-step">
+                    <div className="step-number">3</div>
+                    <div className="step-content">
+                      <h4>Upload the license file</h4>
+                      <p>ProBloom HQ will send you a <code>license.lic</code> file. Upload it to activate your system.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  id="btn-generate-request"
+                  className="btn-license-secondary"
+                  onClick={handleGenerateRequest}
+                  disabled={generatingRequest}
+                >
+                  <DownloadIcon />
+                  {generatingRequest ? 'Generating...' : 'Download machine.req File'}
+                </button>
+              </div>
+
+              <div className="license-section">
+                {/* === Step 2: Upload License === */}
+                <p className="license-section-title">Step 2 — Upload License File</p>
+
+                <div
+                  className={`license-upload-zone ${dragOver ? 'drag-over' : ''}`}
+                  onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={handleDrop}
+                >
+                  <input
+                    id="license-file-input"
+                    type="file"
+                    accept=".lic"
+                    onChange={(e) => {
+                      setUploadFile(e.target.files[0] || null);
+                      setUploadResult(null);
+                    }}
+                  />
+                  <div className="upload-icon"><UploadIcon /></div>
+                  <h4>Drop your license.lic file here</h4>
+                  <p>or click to browse</p>
+                  {uploadFile && <div className="upload-filename">📄 {uploadFile.name}</div>}
+                </div>
+
+                {uploadResult && (
+                  <div className={`license-alert ${uploadResult.success ? 'success' : 'error'}`}>
+                    {uploadResult.success ? '✓ ' : '✗ '}{uploadResult.message}
+                  </div>
+                )}
+
+                <div className="license-actions" style={{ marginTop: '1rem' }}>
+                  <button
+                    id="btn-upload-license"
+                    className="btn-license-primary"
+                    onClick={handleUpload}
+                    disabled={!uploadFile || uploading}
+                  >
+                    <ShieldIcon />
+                    {uploading ? 'Activating License...' : 'Activate License'}
+                  </button>
+
+                  <button
+                    id="btn-refresh-status"
+                    className="btn-license-secondary"
+                    onClick={fetchStatus}
+                  >
+                    Refresh Status
+                  </button>
                 </div>
               </div>
-              <div className="license-step">
-                <div className="step-number">2</div>
-                <div className="step-content">
-                  <h4>Send to ProBloom HQ</h4>
-                  <p>Email the <code>machine.req</code> file to <strong>support@probloom.in</strong> with your business name.</p>
-                </div>
-              </div>
-              <div className="license-step">
-                <div className="step-number">3</div>
-                <div className="step-content">
-                  <h4>Upload the license file below</h4>
-                  <p>ProBloom HQ will send you a <code>license.lic</code> file. Upload it here to activate your system.</p>
-                </div>
-              </div>
-            </div>
-
-            <button
-              id="btn-generate-request"
-              className="btn-license-secondary"
-              onClick={handleGenerateRequest}
-              disabled={generatingRequest}
-              style={{ marginBottom: '1.5rem' }}
-            >
-              <DownloadIcon />
-              {generatingRequest ? 'Generating...' : 'Download machine.req File'}
-            </button>
-
-            <hr className="license-divider" />
-
-            {/* === Step 2: Upload License === */}
-            <p className="license-section-title">Step 2 — Upload License File</p>
-
-            <div
-              className={`license-upload-zone ${dragOver ? 'drag-over' : ''}`}
-              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={handleDrop}
-            >
-              <input
-                id="license-file-input"
-                type="file"
-                accept=".lic"
-                onChange={(e) => {
-                  setUploadFile(e.target.files[0] || null);
-                  setUploadResult(null);
-                }}
-              />
-              <div className="upload-icon"><UploadIcon /></div>
-              <h4>Drop your license.lic file here</h4>
-              <p>or click to browse</p>
-              {uploadFile && <div className="upload-filename">📄 {uploadFile.name}</div>}
-            </div>
-
-            {uploadResult && (
-              <div className={`license-alert ${uploadResult.success ? 'success' : 'error'}`}>
-                {uploadResult.success ? '✓ ' : '✗ '}{uploadResult.message}
-              </div>
-            )}
-
-            <div className="license-actions" style={{ marginTop: '1rem' }}>
-              <button
-                id="btn-upload-license"
-                className="btn-license-primary"
-                onClick={handleUpload}
-                disabled={!uploadFile || uploading}
-              >
-                <ShieldIcon />
-                {uploading ? 'Activating License...' : 'Activate License'}
-              </button>
-
-              <button
-                id="btn-refresh-status"
-                className="btn-license-secondary"
-                onClick={fetchStatus}
-              >
-                Refresh Status
-              </button>
             </div>
           </>
         )}
@@ -336,7 +372,7 @@ export default function LicenseManagement() {
         <div className="license-footer">
           ProBloom ProBloom · Offline Edition<br />
           For support, contact{' '}
-          <a href="mailto:support@probloom.in">support@probloom.in</a>
+          <a href="mailto:admin.probloom@gmail.com">admin.probloom@gmail.com</a>
         </div>
       </div>
     </div>

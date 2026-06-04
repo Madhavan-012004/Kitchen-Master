@@ -12,6 +12,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { LineChart, BarChart } from 'react-native-chart-kit';
 import { analyticsAPI } from '../../api/analytics';
+import ReportViewer from './ReportViewer';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useStakeholderStore } from '../../store/useStakeholderStore';
 import { useAppTheme, Typography, Spacing, Radius, Shadows } from '../../theme';
@@ -20,6 +21,31 @@ const W = Dimensions.get('window').width;
 
 const PERIODS = ['Today', 'Week', 'Month'] as const;
 type Period = typeof PERIODS[number];
+
+const REPORTS = [
+    { id: 'sales-summary', label: 'Sales Summary', icon: 'bar-chart-outline' },
+    { id: 'sales-report', label: 'Sales Report', icon: 'document-text-outline' },
+    { id: 'sales-gst-report', label: 'Sales Report (With GST)', icon: 'cash-outline' },
+    { id: 'sales-non-gst-report', label: 'Sales Report (Without GST)', icon: 'card-outline' },
+    { id: 'payment-mode-sales', label: 'Payment Mode Wise Report', icon: 'card-outline' },
+    { id: 'monthly-day-wise', label: 'Monthly Day wise Report', icon: 'calendar-outline' },
+    { id: 'end-day-report', label: 'End Day Report', icon: 'flag-outline' },
+    { id: 'category-item-wise', label: 'Category & Item wise Report', icon: 'folder-outline' },
+    { id: 'item-wise-sales', label: 'Item wise sales Report', icon: 'fast-food-outline' },
+    { id: 'income-expense', label: 'Income & Expense Report', icon: 'wallet-outline' },
+    { id: 'expenditure-report', label: 'Detailed Expenditure Report', icon: 'receipt-outline' },
+    { id: 'purchase-gst-report', label: 'Purchase Report (With GST)', icon: 'calculator-outline' },
+    { id: 'purchase-non-gst-report', label: 'Purchase Report (Without GST)', icon: 'pricetag-outline' },
+    { id: 'stock-report', label: 'Stock Report', icon: 'cube-outline' },
+    { id: 'recipe-stock', label: 'Recipe Stock Report', icon: 'restaurant-outline' },
+    { id: 'purchase-item-stock', label: 'Purchase Item Stock Report', icon: 'download-outline' },
+    { id: 'purchase-recipe-stock', label: 'Purchase Recipe Stock Report', icon: 'download-outline' },
+    { id: 'expiry-date-wise', label: 'Expiry Date Wise Stock Report', icon: 'warning-outline' },
+    { id: 'total-inventory-valuation', label: 'Total Inventory Valuation', icon: 'cash-outline' },
+    { id: 'cashier-wise-sales', label: 'Cashier wise sales Report', icon: 'person-outline' },
+    { id: 'hsn-summary', label: 'HSN Summary', icon: 'list-outline' },
+    { id: 'cancelled-item-summary', label: 'Cancelled Item Summary', icon: 'close-circle-outline' }
+];
 
 export default function AnalyticsScreen() {
     const { colors, gradients, isDark } = useAppTheme();
@@ -31,8 +57,10 @@ export default function AnalyticsScreen() {
     const [period, setPeriod] = useState<Period>('Today');
     const [isDownloading, setIsDownloading] = useState(false);
     const [isReportModalVisible, setIsReportModalVisible] = useState(false);
-    const [selectedReportType, setSelectedReportType] = useState('end-day-report');
+    const [selectedReportType, setSelectedReportType] = useState('sales-summary');
     const [selectedReportFormat, setSelectedReportFormat] = useState('pdf');
+    const [reportData, setReportData] = useState<any>(null);
+    const [reportLoading, setReportLoading] = useState(false);
 
     const executeDownload = async () => {
         try {
@@ -92,6 +120,22 @@ export default function AnalyticsScreen() {
         fetch();
     }, [period, selectedRestaurantId]); // Refetch if restaurant scope changes
 
+    useEffect(() => {
+        const fetchReport = async () => {
+            if (!selectedReportType) return;
+            setReportLoading(true);
+            try {
+                const res = await api.get(`/analytics/report-data?type=${selectedReportType}`);
+                setReportData(res.data.data);
+            } catch (e) {
+                console.error(e);
+            } finally {
+                setReportLoading(false);
+            }
+        };
+        fetchReport();
+    }, [selectedReportType, selectedRestaurantId]);
+
     if (loading) return (
         <LinearGradient colors={gradients.background} style={themedStyles.center}>
             <ActivityIndicator color={colors.primary} size="large" />
@@ -127,6 +171,25 @@ export default function AnalyticsScreen() {
                             )}
                         </TouchableOpacity>
                     </View>
+
+                    {/* Detailed Report Viewer UI */}
+                    <View style={themedStyles.reportSelectorRow}>
+                        <Text style={themedStyles.sectionTitle}>Detailed Reports</Text>
+                        <TouchableOpacity 
+                            style={themedStyles.selectorBtn} 
+                            onPress={() => setIsReportModalVisible(true)}
+                        >
+                            <Text style={themedStyles.selectorBtnText}>
+                                {REPORTS.find(r => r.id === selectedReportType)?.label || 'Select Report'}
+                            </Text>
+                            <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
+                        </TouchableOpacity>
+                    </View>
+                    <ReportViewer 
+                        reportId={selectedReportType} 
+                        reportData={reportData} 
+                        loading={reportLoading} 
+                    />
 
                     {/* Stakeholder Restaurant Switcher */}
                     {user?.role === 'stakeholder' && accessibleRestaurants?.length > 0 && (
@@ -312,20 +375,21 @@ export default function AnalyticsScreen() {
                             </View>
 
                             <Text style={themedStyles.modalSectionTitle}>Report Type</Text>
-                            <View style={themedStyles.optionsGrid}>
-                                {[
-                                    { id: 'end-day-report', label: 'End of Day Report', icon: 'today-outline' },
-                                    { id: 'gst-ledger-report', label: 'GST Ledger Report', icon: 'document-text-outline' }
-                                ].map((type) => (
-                                    <TouchableOpacity 
-                                        key={type.id} 
-                                        style={[themedStyles.optionCard, selectedReportType === type.id && themedStyles.optionCardActive]}
-                                        onPress={() => setSelectedReportType(type.id)}
-                                    >
-                                        <Ionicons name={type.icon as any} size={24} color={selectedReportType === type.id ? colors.primary : colors.textSecondary} />
-                                        <Text style={[themedStyles.optionText, selectedReportType === type.id && themedStyles.optionTextActive]}>{type.label}</Text>
-                                    </TouchableOpacity>
-                                ))}
+                            <View style={[themedStyles.optionsGrid, { maxHeight: 200 }]}>
+                                <ScrollView showsVerticalScrollIndicator={true} nestedScrollEnabled={true}>
+                                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+                                        {REPORTS.map((type) => (
+                                            <TouchableOpacity 
+                                                key={type.id} 
+                                                style={[themedStyles.optionCard, selectedReportType === type.id && themedStyles.optionCardActive, { minWidth: '45%' }]}
+                                                onPress={() => setSelectedReportType(type.id)}
+                                            >
+                                                <Ionicons name={type.icon as any} size={24} color={selectedReportType === type.id ? colors.primary : colors.textSecondary} />
+                                                <Text style={[themedStyles.optionText, selectedReportType === type.id && themedStyles.optionTextActive]}>{type.label}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </ScrollView>
                             </View>
 
                             <Text style={themedStyles.modalSectionTitle}>Format</Text>
@@ -333,7 +397,8 @@ export default function AnalyticsScreen() {
                                 {[
                                     { id: 'pdf', label: 'PDF Document', icon: 'document-outline' },
                                     { id: 'word', label: 'Word (.docx)', icon: 'document-text' },
-                                    { id: 'excel', label: 'Excel (.xlsx)', icon: 'grid-outline' }
+                                    { id: 'excel', label: 'Excel (.xlsx)', icon: 'grid-outline' },
+                                    { id: 'json', label: 'JSON Data', icon: 'code-slash-outline' }
                                 ].map((format) => (
                                     <TouchableOpacity 
                                         key={format.id} 
@@ -455,5 +520,16 @@ const createStyles = (colors: any, gradients: any, isDark: boolean) => StyleShee
         backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
         paddingVertical: 14, borderRadius: Radius.md, marginTop: Spacing.xl, gap: 8
     },
-    downloadBtnText: { ...Typography.button, color: colors.white, fontWeight: '700' }
+    downloadBtnText: { ...Typography.button, color: colors.white, fontWeight: '700' },
+    reportSelectorRow: {
+        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Spacing.md
+    },
+    selectorBtn: {
+        flexDirection: 'row', alignItems: 'center', gap: 6,
+        backgroundColor: colors.card, paddingHorizontal: 12, paddingVertical: 8,
+        borderRadius: Radius.md, borderWidth: 1, borderColor: colors.border
+    },
+    selectorBtnText: {
+        ...Typography.body2, color: colors.textPrimary, fontWeight: '600'
+    }
 });

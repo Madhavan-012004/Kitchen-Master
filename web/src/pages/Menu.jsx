@@ -1,9 +1,17 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import api from '../api/client.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useLanguage } from '../context/LanguageContext.jsx'
 import { useTranslation } from 'react-i18next'
 import './Simple.css'
+import './Menu.css'
+
+// Vite dev server proxies /uploads → http://localhost:8080
+// So /uploads/menu/xxx.jpg works directly in browser
+function getItemImage(item) {
+    if (!item.imageUrl) return null
+    return item.imageUrl  // works for both http://... and /uploads/...
+}
 
 export default function MenuPage() {
     const { user } = useAuth()
@@ -23,6 +31,12 @@ export default function MenuPage() {
     })
     const [importing, setImporting] = useState(false)
 
+    // Image upload state
+    const [imageFile, setImageFile] = useState(null)
+    const [imagePreview, setImagePreview] = useState(null)
+    const [uploadingImage, setUploadingImage] = useState(false)
+    const imageInputRef = useRef(null)
+
     const fetchMenu = () => {
         setLoading(true)
         api.get('/menu').then(r => setItems(r.data.data?.menuItems || r.data.data?.items || []))
@@ -36,6 +50,8 @@ export default function MenuPage() {
     const handleAdd = () => {
         setEditingItem(null)
         setFormData({ name: '', tamilName: '', description: '', tamilDescription: '', price: '', category: 'Main Course', isVeg: true, isAvailable: true })
+        setImageFile(null)
+        setImagePreview(null)
         setShowModal(true)
     }
 
@@ -51,7 +67,18 @@ export default function MenuPage() {
             isVeg: item.isVeg !== false,
             isAvailable: item.isAvailable !== false
         })
+        setImageFile(null)
+        setImagePreview(getItemImage(item))
         setShowModal(true)
+    }
+
+    const handleImageChange = (e) => {
+        const file = e.target.files[0]
+        if (!file) return
+        setImageFile(file)
+        const reader = new FileReader()
+        reader.onload = (ev) => setImagePreview(ev.target.result)
+        reader.readAsDataURL(file)
     }
 
     const handleDelete = async (id) => {
@@ -69,14 +96,30 @@ export default function MenuPage() {
         e.preventDefault()
         try {
             const payload = { ...formData, price: Number(formData.price) }
+            let savedItem
             if (editingItem) {
-                await api.put(`/menu/${editingItem._id}`, payload)
+                const res = await api.put(`/menu/${editingItem._id}`, payload)
+                savedItem = res.data.data
             } else {
-                await api.post('/menu', payload)
+                const res = await api.post('/menu', payload)
+                savedItem = res.data.data
             }
+
+            // If an image was selected, upload it
+            if (imageFile && savedItem) {
+                setUploadingImage(true)
+                const fd = new FormData()
+                fd.append('file', imageFile)
+                await api.post(`/menu/${savedItem._id || savedItem.id}/image`, fd)
+                setUploadingImage(false)
+            }
+
             setShowModal(false)
+            setImageFile(null)
+            setImagePreview(null)
             fetchMenu()
         } catch (error) {
+            setUploadingImage(false)
             alert(editingItem ? t('menu.update_failed', 'Failed to update item') : t('menu.add_failed', 'Failed to add item'))
             console.error(error)
         }
@@ -92,11 +135,11 @@ export default function MenuPage() {
 
         try {
             const res = await api.post('/menu/import', fd)
-            alert(`\u2705 ${res.data.message || t('menu.import_success', 'Import successful!')}`)
+            alert(`✅ ${res.data.message || t('menu.import_success', 'Import successful!')}`)
             fetchMenu()
         } catch (error) {
             const msg = error.response?.data?.message || error.message || t('menu.upload_failed', 'Upload failed')
-            alert('\u274c ' + t('menu.bulk_upload_failed', 'Bulk Upload Failed') + ': ' + msg)
+            alert('❌ ' + t('menu.bulk_upload_failed', 'Bulk Upload Failed') + ': ' + msg)
             console.error(error)
         } finally {
             setImporting(false)
@@ -105,15 +148,15 @@ export default function MenuPage() {
     }
 
     const handleDeleteAll = async () => {
-        if (!window.confirm(t('menu.confirm_delete_all', '\u26a0\ufe0f WARNING: This will permanently delete ALL menu items. This action cannot be undone. Are you sure?'))) return
+        if (!window.confirm(t('menu.confirm_delete_all', '⚠️ WARNING: This will permanently delete ALL menu items. This action cannot be undone. Are you sure?'))) return
 
         setLoading(true)
         try {
             await api.delete('/menu/all')
-            alert('\u2705 ' + t('menu.all_deleted', 'All menu items deleted successfully'))
+            alert('✅ ' + t('menu.all_deleted', 'All menu items deleted successfully'))
             fetchMenu()
         } catch (error) {
-            alert('\u274c ' + t('menu.delete_all_failed', 'Failed to delete items') + ': ' + (error.response?.data?.message || error.message))
+            alert('❌ ' + t('menu.delete_all_failed', 'Failed to delete items') + ': ' + (error.response?.data?.message || error.message))
             console.error(error)
         } finally {
             setLoading(false)
@@ -122,29 +165,28 @@ export default function MenuPage() {
 
     const handleDownloadTemplate = () => {
         const csvContent = [
-            'name,price,category,type,description,tamilName',
-            'Paneer Butter Masala,280,Main Course,Veg,Creamy paneer dish,\u0baa\u0ba9\u0bc0\u0bb0\u0bcd \u0baa\u0b9f\u0bcd\u0b9f\u0bb0\u0bcd \u0bae\u0b9a\u0bbe\u0bb2\u0bbe',
-            'Chicken Biryani,320,Rice & Biryani,Non-Veg,Fragrant rice with chicken,\u0b9a\u0bbf\u0b95\u0bcd\u0b95\u0ba9\u0bcd \u0baa\u0bbf\u0bb0\u0bbf\u0baf\u0bbe\u0ba3\u0bbf',
-            'Masala Dosa,80,South Indian,Veg,Crispy dosa with potato filling,\u0bae\u0b9a\u0bbe\u0bb2\u0bbe \u0ba4\u0bcb\u0b9a\u0bc8',
-            'Filter Coffee,40,Beverages,Veg,Traditional South Indian coffee,\u0b83\u0baa\u0bbf\u0bb2\u0bcd\u0b9f\u0bb0\u0bcd \u0b95\u0bbe\u0baa\u0bbf',
-            'Idli Sambar,60,South Indian,Veg,Soft idlis with sambar,\u0b87\u0b9f\u0bcd\u0bb2\u0bbf \u0b9a\u0bbe\u0bae\u0bcd\u0baa\u0bbe\u0bb0\u0bcd',
-            'Chicken 65,180,Starters,Non-Veg,Spicy fried chicken,\u0b9a\u0bbf\u0b95\u0bcd\u0b95\u0ba9\u0bcd 65',
-            'Veg Fried Rice,150,Rice & Biryani,Veg,Stir-fried rice with vegetables,\u0bb5\u0bc6\u0b9c\u0bcd \u0b83\u0baa\u0bcd\u0bb0\u0bc8\u0b9f\u0bcd \u0bb0\u0bc8\u0bb8\u0bcd',
-            'Mutton Curry,350,Main Course,Non-Veg,Spicy mutton gravy,\u0bae\u0b9f\u0bcd\u0b9f\u0ba9\u0bcd \u0b95\u0bb1\u0bbf',
-            'Samosa,30,Starters,Veg,Crispy potato stuffed pastry,\u0b9a\u0bae\u0bcb\u0b9a\u0bbe',
-            'Pongal,70,Breakfast,Veg,Rice and lentil comfort dish,\u0baa\u0bca\u0b99\u0bcd\u0b95\u0bb2\u0bcd'
+            'name,price,category,type,description,tamilName,image_url',
+            'Paneer Butter Masala,280,Main Course,Veg,Creamy paneer dish,பனீர் பட்டர் மசாலா,https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=400',
+            'Chicken Biryani,320,Rice & Biryani,Non-Veg,Fragrant rice with chicken,சிக்கன் பிரியாணி,https://images.unsplash.com/photo-1563379091339-03b21bc4a4f8?w=400',
+            'Masala Dosa,80,South Indian,Veg,Crispy dosa with potato filling,மசாலா தோசை,',
+            'Filter Coffee,40,Beverages,Veg,Traditional South Indian coffee,ஃபில்டர் காபி,',
+            'Idli Sambar,60,South Indian,Veg,Soft idlis with sambar,இட்லி சாம்பார்,',
+            'Chicken 65,180,Starters,Non-Veg,Spicy fried chicken,சிக்கன் 65,',
+            'Veg Fried Rice,150,Rice & Biryani,Veg,Stir-fried rice with vegetables,வெஜ் ஃபிரைட் ரைஸ்,',
+            'Mutton Curry,350,Main Course,Non-Veg,Spicy mutton gravy,மட்டன் கறி,',
+            'Samosa,30,Starters,Veg,Crispy potato stuffed pastry,சமோசா,',
+            'Pongal,70,Breakfast,Veg,Rice and lentil comfort dish,பொங்கல்,'
         ].join('\n')
 
         const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = 'menu.csv'
+        a.download = 'menu_template.csv'
         a.click()
         URL.revokeObjectURL(url)
     }
 
-    // Display name based on active language
     const getDisplayName = (item) => {
         return (showTamilName && item.tamilName) ? item.tamilName : item.name
     }
@@ -167,15 +209,13 @@ export default function MenuPage() {
                         />
                         <button
                             className="add-btn"
-                            style={{ background: '#6366f1' }}
                             onClick={handleDownloadTemplate}
-                            title={t('menu.download_template_hint', 'Download a sample CSV with Tamil names')}
+                            title={t('menu.download_template_hint', 'Download a sample CSV with Tamil names and image_url column')}
                         >
                             📄 {t('menu.download_template', 'Download CSV Template')}
                         </button>
                         <button
                             className="add-btn"
-                            style={{ background: '#4f46e5' }}
                             onClick={() => document.getElementById('menuCsvImport').click()}
                             disabled={importing}
                         >
@@ -183,7 +223,6 @@ export default function MenuPage() {
                         </button>
                         <button
                             className="add-btn"
-                            style={{ background: '#ef4444' }}
                             onClick={handleDeleteAll}
                             disabled={loading}
                         >
@@ -197,8 +236,19 @@ export default function MenuPage() {
             {loading ? <div className="loading">{t('common.loading')}</div> : (
                 <div className="orders-list">
                     {items.map(i => (
-                        <div key={i._id} className="order-row">
-                            <div className="order-row-left">
+                        <div key={i._id} className="order-row menu-item-row">
+                            {/* Thumbnail */}
+                            <div className="menu-thumb-wrap">
+                                {getItemImage(i) ? (
+                                    <img src={getItemImage(i)} alt={i.name} className="menu-thumb" />
+                                ) : (
+                                    <div className="menu-thumb-placeholder">
+                                        {i.isVeg ? '🌿' : '🍖'}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="order-row-left" style={{ flex: 1 }}>
                                 <div className={`veg-indicator ${i.isVeg ? 'veg' : 'nonveg'}`} />
                                 <span className="order-table">
                                     {getDisplayName(i)}
@@ -234,88 +284,127 @@ export default function MenuPage() {
 
             {showModal && (
                 <div className="modal-overlay">
-                    <div className="modal-content">
+                    <div className="modal-content menu-modal-content">
                         <div className="modal-header">
                             <h2 style={{ color: 'var(--text-primary)' }}>{editingItem ? t('menu.edit_item', 'Edit Menu Item') : t('menu.add_new_item', 'Add New Item')}</h2>
                             <button className="close-modal-btn" onClick={() => setShowModal(false)}>&times;</button>
                         </div>
                         <form className="modal-form" onSubmit={handleSubmit}>
-                            <div className="form-group">
-                                <label style={{ color: 'var(--text-primary)' }}>📝 {t('menu.item_name_en', 'Item Name (English)')}</label>
-                                <input required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="E.g. Paneer Butter Masala" />
+
+                            {/* Image Upload Section */}
+                            <div className="menu-image-upload-section">
+                                <div
+                                    className="menu-image-dropzone"
+                                    onClick={() => imageInputRef.current?.click()}
+                                >
+                                    {imagePreview ? (
+                                        <img src={imagePreview} alt="Preview" className="menu-image-preview" />
+                                    ) : (
+                                        <div className="menu-image-placeholder">
+                                            <span style={{ fontSize: '36px' }}>🍽️</span>
+                                            <p>Click to upload dish photo</p>
+                                            <span className="menu-image-hint">JPG, PNG, WEBP · Max 5MB</span>
+                                        </div>
+                                    )}
+                                    <input
+                                        ref={imageInputRef}
+                                        type="file"
+                                        accept="image/*"
+                                        style={{ display: 'none' }}
+                                        onChange={handleImageChange}
+                                    />
+                                </div>
+                                {imagePreview && (
+                                    <button
+                                        type="button"
+                                        className="menu-image-remove-btn"
+                                        onClick={() => { setImageFile(null); setImagePreview(null); if (imageInputRef.current) imageInputRef.current.value = ''; }}
+                                    >
+                                        ✕ Remove Photo
+                                    </button>
+                                )}
                             </div>
 
-                            <div className="form-group">
-                                <label style={{ color: 'var(--text-primary)' }}>
-                                    🔤 {t('menu.item_name_ta', 'Tamil Name (\u0ba4\u0bae\u0bbf\u0bb4\u0bcd \u0baa\u0bc6\u0baf\u0bb0\u0bcd)')}
-                                    <span className="optional-text">{t('menu.optional', '(Optional)')}</span>
-                                </label>
-                                <input value={formData.tamilName} onChange={e => setFormData({ ...formData, tamilName: e.target.value })} placeholder="E.g. பனீர் பட்டர் மசாலா" />
-                            </div>
-
-                            <div className="form-group">
-                                <label style={{ color: 'var(--text-primary)' }}>💰 {t('menu.price', 'Price')} (&#8377;)</label>
-                                <input required type="number" min="0" value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value })} placeholder="E.g. 250" />
-                            </div>
-
-                            <div className="form-group">
-                                <label style={{ color: 'var(--text-primary)' }}>🏷️ {t('menu.category_label', 'Category (Select or type new)')}</label>
-                                <input
-                                    list="category-suggestions"
-                                    required
-                                    value={formData.category}
-                                    onChange={e => setFormData({ ...formData, category: e.target.value })}
-                                    placeholder="e.g. Starters"
-                                />
-                                <datalist id="category-suggestions">
-                                    <option value="Starters" />
-                                    <option value="Main Course" />
-                                    <option value="Lunch Special" />
-                                    <option value="Breakfast" />
-                                    <option value="South Indian" />
-                                    <option value="Rice & Biryani" />
-                                    <option value="Breads" />
-                                    <option value="Desserts" />
-                                    <option value="Snacks & Sides" />
-                                    <option value="Beverages" />
-                                </datalist>
-                            </div>
-
-                            <div className="form-group">
-                                <label style={{ color: 'var(--text-primary)' }}>📄 {t('menu.description', 'Description')}</label>
-                                <textarea 
-                                    value={formData.description} 
-                                    onChange={e => setFormData({ ...formData, description: e.target.value })} 
-                                    placeholder="Brief description of the dish..."
-                                    rows={2}
-                                />
-                            </div>
-
-                            <div className="form-group">
-                                <label style={{ color: 'var(--text-primary)' }}>🔤 {t('menu.description_ta', 'Tamil Description')}</label>
-                                <textarea 
-                                    value={formData.tamilDescription} 
-                                    onChange={e => setFormData({ ...formData, tamilDescription: e.target.value })} 
-                                    placeholder="இந்த உணவு பற்றிய சிறு குறிப்பு..."
-                                    rows={2}
-                                />
-                            </div>
-
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                                <div className="form-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '10px', background: 'var(--bg-primary)', padding: '10px', borderRadius: '12px', border: '1px solid var(--border)' }}>
-                                    <input type="checkbox" id="isVeg" checked={formData.isVeg} onChange={e => setFormData({ ...formData, isVeg: e.target.checked })} style={{ width: '18px', height: '18px', cursor: 'pointer' }} />
-                                    <label htmlFor="isVeg" style={{ fontSize: '14px', cursor: 'pointer', marginBottom: 0, color: 'var(--text-primary)' }}>{t('menu.is_veg', 'Vegetarian')}</label>
+                            <div className="menu-modal-fields">
+                                <div className="form-group">
+                                    <label style={{ color: 'var(--text-primary)' }}>📝 {t('menu.item_name_en', 'Item Name (English)')}</label>
+                                    <input required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="E.g. Paneer Butter Masala" />
                                 </div>
 
-                                <div className="form-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '10px', background: 'var(--bg-primary)', padding: '10px', borderRadius: '12px', border: '1px solid var(--border)' }}>
-                                    <input type="checkbox" id="isAvailable" checked={formData.isAvailable} onChange={e => setFormData({ ...formData, isAvailable: e.target.checked })} style={{ width: '18px', height: '18px', cursor: 'pointer' }} />
-                                    <label htmlFor="isAvailable" style={{ fontSize: '14px', cursor: 'pointer', marginBottom: 0, color: 'var(--text-primary)' }}>{t('menu.is_available', 'In Stock')}</label>
+                                <div className="form-group">
+                                    <label style={{ color: 'var(--text-primary)' }}>
+                                        🔤 {t('menu.item_name_ta', 'Tamil Name (தமிழ் பெயர்)')}
+                                        <span className="optional-text">{t('menu.optional', '(Optional)')}</span>
+                                    </label>
+                                    <input value={formData.tamilName} onChange={e => setFormData({ ...formData, tamilName: e.target.value })} placeholder="E.g. பனீர் பட்டர் மசாலா" />
+                                </div>
+
+                                <div className="form-group">
+                                    <label style={{ color: 'var(--text-primary)' }}>💰 {t('menu.price', 'Price')} (&#8377;)</label>
+                                    <input required type="number" min="0" value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value })} placeholder="E.g. 250" />
+                                </div>
+
+                                <div className="form-group">
+                                    <label style={{ color: 'var(--text-primary)' }}>🏷️ {t('menu.category_label', 'Category (Select or type new)')}</label>
+                                    <input
+                                        list="category-suggestions"
+                                        required
+                                        value={formData.category}
+                                        onChange={e => setFormData({ ...formData, category: e.target.value })}
+                                        placeholder="e.g. Starters"
+                                    />
+                                    <datalist id="category-suggestions">
+                                        <option value="Starters" />
+                                        <option value="Main Course" />
+                                        <option value="Lunch Special" />
+                                        <option value="Breakfast" />
+                                        <option value="South Indian" />
+                                        <option value="Rice & Biryani" />
+                                        <option value="Breads" />
+                                        <option value="Desserts" />
+                                        <option value="Snacks & Sides" />
+                                        <option value="Beverages" />
+                                    </datalist>
+                                </div>
+
+                                <div className="form-group">
+                                    <label style={{ color: 'var(--text-primary)' }}>📄 {t('menu.description', 'Description')}</label>
+                                    <textarea
+                                        value={formData.description}
+                                        onChange={e => setFormData({ ...formData, description: e.target.value })}
+                                        placeholder="Brief description of the dish..."
+                                        rows={2}
+                                    />
+                                </div>
+
+                                <div className="form-group">
+                                    <label style={{ color: 'var(--text-primary)' }}>🔤 {t('menu.description_ta', 'Tamil Description')}</label>
+                                    <textarea
+                                        value={formData.tamilDescription}
+                                        onChange={e => setFormData({ ...formData, tamilDescription: e.target.value })}
+                                        placeholder="இந்த உணவு பற்றிய சிறு குறிப்பு..."
+                                        rows={2}
+                                    />
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                    <div className="form-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '10px', background: 'var(--bg-primary)', padding: '10px', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                                        <input type="checkbox" id="isVeg" checked={formData.isVeg} onChange={e => setFormData({ ...formData, isVeg: e.target.checked })} style={{ width: '18px', height: '18px', cursor: 'pointer' }} />
+                                        <label htmlFor="isVeg" style={{ fontSize: '14px', cursor: 'pointer', marginBottom: 0, color: 'var(--text-primary)' }}>{t('menu.is_veg', 'Vegetarian')}</label>
+                                    </div>
+
+                                    <div className="form-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '10px', background: 'var(--bg-primary)', padding: '10px', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                                        <input type="checkbox" id="isAvailable" checked={formData.isAvailable} onChange={e => setFormData({ ...formData, isAvailable: e.target.checked })} style={{ width: '18px', height: '18px', cursor: 'pointer' }} />
+                                        <label htmlFor="isAvailable" style={{ fontSize: '14px', cursor: 'pointer', marginBottom: 0, color: 'var(--text-primary)' }}>{t('menu.is_available', 'In Stock')}</label>
+                                    </div>
                                 </div>
                             </div>
 
                             <div className="modal-actions">
                                 <button type="button" className="cancel-modal-btn" onClick={() => setShowModal(false)}>{t('common.cancel')}</button>
-                                <button type="submit" className="save-modal-btn">{editingItem ? t('menu.save_changes', 'Save Changes') : t('menu.add_item')}</button>
+                                <button type="submit" className="save-modal-btn" disabled={uploadingImage}>
+                                    {uploadingImage ? '⏳ Uploading Image...' : editingItem ? t('menu.save_changes', 'Save Changes') : t('menu.add_item')}
+                                </button>
                             </div>
                         </form>
                     </div>

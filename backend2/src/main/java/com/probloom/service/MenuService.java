@@ -137,6 +137,13 @@ public class MenuService {
         return menuItemRepository.save(item);
     }
 
+    @Transactional
+    public MenuItem setImageUrl(@NonNull User restaurant, @NonNull Long id, @NonNull String imageUrl) {
+        MenuItem item = getById(restaurant, id);
+        item.setImageUrl(imageUrl);
+        return menuItemRepository.save(item);
+    }
+
     public void deleteAll(@NonNull User restaurant) {
         orderItemRepository.setMenuItemNullByRestaurant(restaurant);
         menuItemRepository.deleteByRestaurant(restaurant);
@@ -212,6 +219,10 @@ public class MenuService {
 
                     // Column 5 is Tamil Name
                     String tamilName = parts.length > 5 ? cleanCsvValue(parts[5]) : null;
+
+                    // Column 6 is Image URL
+                    String imageUrl = parts.length > 6 ? cleanCsvValue(parts[6]) : null;
+                    if (imageUrl != null && imageUrl.isEmpty()) imageUrl = null;
                     
                     System.out.println("✅ Parsed item: " + name + " (Veg: " + isVeg + ")");
 
@@ -224,6 +235,7 @@ public class MenuService {
                             .isAvailable(true)
                             .isVeg(isVeg)
                             .description(description)
+                            .imageUrl(imageUrl)
                             .taxRate(0.0) // Default values
                             .preparationTime(10) // Default values
                             .sortOrder(0) // Default values

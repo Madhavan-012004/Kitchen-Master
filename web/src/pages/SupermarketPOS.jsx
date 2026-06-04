@@ -108,6 +108,7 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
     const [tenderUPI, setTenderUPI]           = useState(0)
     const [tenderCard, setTenderCard]         = useState(0)
     const [editableGrandTotal, setEditableGrandTotal] = useState(undefined)
+    const [givenAmount, setGivenAmount]       = useState(0)
 
     // ── History & Email Modals ───────────────────────────────
     const [showHistoryModal, setShowHistoryModal] = useState(false)
@@ -372,6 +373,14 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
         const newDisPct = subTotal > 0 ? (val / subTotal) * 100 : 0;
         setDisPctHeader(Number(newDisPct.toFixed(2)));
         setEditableGrandTotal(undefined);
+    };
+
+    const handleGivenAmountChange = (e) => {
+        const val = parseFloat(e.target.value) || 0;
+        setGivenAmount(val);
+        setTenderCash(val);
+        setTenderUPI(0);
+        setTenderCard(0);
     };
 
     // ── When a row's MRP/qty/dis changes, recalc ─────────────
@@ -799,6 +808,7 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
         }
 
         setTenderCash(grandTotal)
+        setGivenAmount(grandTotal)
         setTenderUPI(0)
         setTenderCard(0)
         setEditableGrandTotal(undefined)
@@ -1499,7 +1509,7 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
                         </div>
                         <div className="sm-tender-body">
                             <div className="tender-row total" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                                <label style={{ color: '#0f172a', fontWeight: 'bold' }}>Net Amount Payable (Editable)</label>
+                                <label style={{ color: 'var(--text-primary)', fontWeight: 'bold' }}>Net Amount Payable (Editable)</label>
                                 <input 
                                     type="number" 
                                     min="0" 
@@ -1510,8 +1520,8 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
                                         fontSize: '24px', 
                                         fontWeight: 'bold', 
                                         color: '#22c55e', 
-                                        background: '#f8fafc', 
-                                        border: '2px solid #cbd5e1', 
+                                        background: 'var(--bg-secondary)', 
+                                        border: '2px solid var(--border)', 
                                         borderRadius: '8px', 
                                         padding: '5px 10px', 
                                         width: '100%', 
@@ -1521,7 +1531,7 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginTop: '10px', marginBottom: '15px', width: '100%' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                    <label style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '13px', marginBottom: '4px' }}>Discount (%)</label>
+                                    <label style={{ color: 'var(--text-primary)', fontWeight: 'bold', fontSize: '13px', marginBottom: '4px' }}>Discount (%)</label>
                                     <input 
                                         type="number" 
                                         min="0" 
@@ -1529,24 +1539,28 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
                                         step="0.1" 
                                         value={disPctHeader} 
                                         onChange={handleDiscountPctChange} 
-                                        style={{ width: '100%', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '6px', color: '#0f172a', background: '#fff' }}
+                                        style={{ width: '100%', padding: '8px', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', background: 'var(--bg-card)' }}
                                     />
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                    <label style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '13px', marginBottom: '4px' }}>Discount (₹)</label>
+                                    <label style={{ color: 'var(--text-primary)', fontWeight: 'bold', fontSize: '13px', marginBottom: '4px' }}>Discount (₹)</label>
                                     <input 
                                         type="number" 
                                         min="0" 
                                         step="0.01" 
                                         value={(subTotal * (parseFloat(disPctHeader) / 100)).toFixed(2)} 
                                         onChange={handleDiscountAmtChange} 
-                                        style={{ width: '100%', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '6px', color: '#0f172a', background: '#fff' }}
+                                        style={{ width: '100%', padding: '8px', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', background: 'var(--bg-card)' }}
                                     />
                                 </div>
                             </div>
                             <div className="tender-row mt-3">
                                 <label>Cash</label>
-                                <input autoFocus type="number" min="0" value={tenderCash} onChange={e => setTenderCash(parseFloat(e.target.value)||0)} onFocus={e => e.target.select()} />
+                                <input autoFocus type="number" min="0" value={tenderCash} onChange={e => {
+                                    const val = parseFloat(e.target.value)||0;
+                                    setTenderCash(val);
+                                    setGivenAmount(val);
+                                }} onFocus={e => e.target.select()} />
                             </div>
                             <div className="tender-row">
                                 <label>UPI / WALLET</label>
@@ -1557,75 +1571,124 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
                                 <input type="number" min="0" value={tenderCard} onChange={e => setTenderCard(parseFloat(e.target.value)||0)} onFocus={e => e.target.select()} />
                             </div>
 
+                            {/* Cash Return Calculator */}
+                            <div className="tender-change-calc" style={{
+                                marginTop: '15px',
+                                padding: '15px',
+                                background: 'var(--bg-secondary)',
+                                borderRadius: '8px',
+                                border: '1px solid var(--border)'
+                            }}>
+                                <h3 style={{ margin: '0 0 10px 0', fontSize: '13px', color: 'var(--accent)', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                    💵 Cash Return Calculator
+                                </h3>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)', marginBottom: '4px' }}>Given Amount (from Customer)</label>
+                                        <input 
+                                            type="number" 
+                                            min="0" 
+                                            placeholder="e.g. 200, 500" 
+                                            value={givenAmount || ''} 
+                                            onChange={handleGivenAmountChange}
+                                            style={{
+                                                width: '100%',
+                                                padding: '8px',
+                                                border: '1px solid var(--border)',
+                                                borderRadius: '6px',
+                                                color: 'var(--text-primary)',
+                                                background: 'var(--bg-card)',
+                                                fontSize: '18px',
+                                                fontWeight: 'bold',
+                                                textAlign: 'right',
+                                                outline: 'none'
+                                            }}
+                                            onFocus={e => e.target.select()}
+                                        />
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'flex-end' }}>
+                                        <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)' }}>Balance Return (Change)</span>
+                                        <span style={{
+                                            fontSize: '24px',
+                                            fontWeight: '900',
+                                            color: '#22c55e',
+                                            marginTop: '4px'
+                                        }}>
+                                            ₹{Math.max(0, (givenAmount || 0) - (editableGrandTotal !== undefined ? parseFloat(editableGrandTotal) : grandTotal)).toFixed(2)}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div className="sm-template-section" style={{ margin: '20px 0', background: 'none', border: 'none', boxShadow: 'none', padding: 0 }}>
                                 <div className="sm-template-toggle" style={{ marginBottom: '16px', display: 'flex', gap: '10px' }}>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', background: '#f8fafc', padding: '10px 15px', borderRadius: '8px', border: '1px solid #cbd5e1', flex: 1 }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', background: 'var(--bg-secondary)', padding: '10px 15px', borderRadius: '8px', border: '1px solid var(--border)', flex: 1 }}>
                                         <input 
                                             type="checkbox" 
                                             checked={printWithGst} 
                                             onChange={(e) => setPrintWithGst(e.target.checked)} 
                                             style={{ width: '18px', height: '18px', cursor: 'pointer' }}
                                         />
-                                        <span style={{ fontWeight: 'bold', color: '#0f172a' }}>Print with GST</span>
+                                        <span style={{ fontWeight: 'bold', color: 'var(--text-primary)' }}>Print with GST</span>
                                     </label>
                                 </div>
 
                                 {billTemplate === 'pharmacy' && (
-                                    <div className="sm-pharmacy-details fade-in-down" style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '10px', borderRadius: '8px' }}>
+                                    <div className="sm-pharmacy-details fade-in-down" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', padding: '10px', borderRadius: '8px' }}>
                                         <div className="pharmacy-header" onClick={() => setIsPharmacyDetailsOpen(!isPharmacyDetailsOpen)} style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                                 <span className="sm-icon">📝</span>
-                                                <span style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '13px' }}>Prescription Details</span>
+                                                <span style={{ color: 'var(--text-primary)', fontWeight: 'bold', fontSize: '13px' }}>Prescription Details</span>
                                             </div>
-                                            <span style={{ fontSize: '12px', color: '#0f172a', transition: 'transform 0.2s', transform: isPharmacyDetailsOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
+                                            <span style={{ fontSize: '12px', color: 'var(--text-primary)', transition: 'transform 0.2s', transform: isPharmacyDetailsOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
                                         </div>
                                         {isPharmacyDetailsOpen && (
                                             <div className="pharmacy-grid fade-in-down" style={{ marginTop: '10px', display: 'grid', gap: '10px' }}>
                                                 <div className="sm-cust-field">
-                                                    <label style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '12px' }}>Doctor Name</label>
+                                                    <label style={{ color: 'var(--text-primary)', fontWeight: 'bold', fontSize: '12px' }}>Doctor Name</label>
                                                     <input
                                                         value={doctorName}
                                                         onChange={e => setDoctorName(e.target.value)}
                                                         placeholder="Dr. Name..."
-                                                        style={{ width: '100%', padding: '6px', color: '#0f172a', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '4px' }}
+                                                        style={{ width: '100%', padding: '6px', color: 'var(--text-primary)', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '4px' }}
                                                     />
                                                 </div>
                                                 <div className="sm-cust-field">
-                                                    <label style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '12px' }}>No. of Days</label>
+                                                    <label style={{ color: 'var(--text-primary)', fontWeight: 'bold', fontSize: '12px' }}>No. of Days</label>
                                                     <input
                                                         type="number"
                                                         value={numberOfDays}
                                                         onChange={e => setNumberOfDays(e.target.value)}
                                                         placeholder="Days"
                                                         min="1"
-                                                        style={{ width: '100%', padding: '6px', color: '#0f172a', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '4px' }}
+                                                        style={{ width: '100%', padding: '6px', color: 'var(--text-primary)', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '4px' }}
                                                     />
                                                 </div>
                                                 <div className="sm-cust-field full-width">
-                                                    <label style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '12px' }}>M/S (Customer Firm)</label>
+                                                    <label style={{ color: 'var(--text-primary)', fontWeight: 'bold', fontSize: '12px' }}>M/S (Customer Firm)</label>
                                                     <input
                                                         value={customerId}
                                                         onChange={e => setCustomerId(e.target.value)}
                                                         placeholder="Customer Firm Name"
-                                                        style={{ width: '100%', padding: '6px', color: '#0f172a', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '4px' }}
+                                                        style={{ width: '100%', padding: '6px', color: 'var(--text-primary)', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '4px' }}
                                                     />
                                                 </div>
                                                 <div className="sm-cust-field">
-                                                    <label style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '12px' }}>Customer Name</label>
+                                                    <label style={{ color: 'var(--text-primary)', fontWeight: 'bold', fontSize: '12px' }}>Customer Name</label>
                                                     <input
                                                         value={customerName}
                                                         onChange={e => setCustomerName(e.target.value)}
                                                         placeholder="Name"
-                                                        style={{ width: '100%', padding: '6px', color: '#0f172a', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '4px' }}
+                                                        style={{ width: '100%', padding: '6px', color: 'var(--text-primary)', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '4px' }}
                                                     />
                                                 </div>
                                                 <div className="sm-cust-field">
-                                                    <label style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '12px' }}>Mobile Number</label>
+                                                    <label style={{ color: 'var(--text-primary)', fontWeight: 'bold', fontSize: '12px' }}>Mobile Number</label>
                                                     <input
                                                         value={customerMobile}
                                                         onChange={e => setCustomerMobile(e.target.value)}
                                                         placeholder="Mobile"
-                                                        style={{ width: '100%', padding: '6px', color: '#0f172a', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '4px' }}
+                                                        style={{ width: '100%', padding: '6px', color: 'var(--text-primary)', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '4px' }}
                                                     />
                                                 </div>
                                             </div>

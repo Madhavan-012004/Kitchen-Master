@@ -140,6 +140,13 @@ public class InventoryController {
         return ok("Category deleted successfully", null);
     }
 
+    @DeleteMapping("/movements")
+    public ResponseEntity<?> clearMovements() {
+        User restaurant = resolver.getRestaurantOwner();
+        inventoryService.clearMovements(restaurant);
+        return ok("Activity log cleared successfully!", null);
+    }
+
     @PostMapping("/bulk-add")
     public ResponseEntity<?> bulkAdd(@RequestBody @NonNull Map<String, Object> body) {
         User restaurant = resolver.getRestaurantOwner();

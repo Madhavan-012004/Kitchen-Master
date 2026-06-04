@@ -12,6 +12,10 @@ import java.util.List;
 @Repository
 public interface StockMovementRepository extends JpaRepository<StockMovement, Long> {
 
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query("DELETE FROM StockMovement sm WHERE sm.restaurant = :restaurant")
+    void deleteByRestaurant(@org.springframework.data.repository.query.Param("restaurant") User restaurant);
+
     @Query("SELECT sm FROM StockMovement sm JOIN FETCH sm.inventoryItem LEFT JOIN FETCH sm.performedBy WHERE sm.restaurant = :restaurant ORDER BY sm.movementTimestamp DESC")
     List<StockMovement> findByRestaurantOrderByMovementTimestampDesc(@Param("restaurant") User restaurant);
 

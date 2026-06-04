@@ -37,14 +37,14 @@
 .ai-avatar-glow {
     width: 60px;
     height: 60px;
-    background: linear-gradient(135deg, #4285f4, #8ab4f8, #c61ad9);
+    background: linear-gradient(135deg, #4f46e5, #c026d3);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 32px;
     margin-bottom: 20px;
-    box-shadow: 0 0 30px rgba(138, 180, 248, 0.4);
+    box-shadow: 0 0 30px rgba(192, 38, 211, 0.4);
     animation: pulse 3s infinite;
     transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -54,19 +54,19 @@
     height: 32px;
     font-size: 16px;
     margin-bottom: 0;
-    box-shadow: 0 0 15px rgba(138, 180, 248, 0.3);
+    box-shadow: 0 0 15px rgba(192, 38, 211, 0.3);
 }
 
 @keyframes pulse {
-    0% { transform: scale(1); box-shadow: 0 0 20px rgba(138, 180, 248, 0.4); }
-    50% { transform: scale(1.05); box-shadow: 0 0 40px rgba(138, 180, 248, 0.6); }
-    100% { transform: scale(1); box-shadow: 0 0 20px rgba(138, 180, 248, 0.4); }
+    0% { transform: scale(1); box-shadow: 0 0 20px rgba(192, 38, 211, 0.3); }
+    50% { transform: scale(1.05); box-shadow: 0 0 40px rgba(192, 38, 211, 0.5); }
+    100% { transform: scale(1); box-shadow: 0 0 20px rgba(192, 38, 211, 0.3); }
 }
 
 .ai-header-info h1 {
     font-size: 28px;
     font-weight: 800;
-    background: linear-gradient(90deg, #fff, #8ab4f8);
+    background: linear-gradient(90deg, #4f46e5, #c026d3);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -139,9 +139,10 @@
 }
 
 .user .ai-message-bubble {
-    background: var(--bg-hover);
+    background: var(--bg-card);
     border-bottom-right-radius: 4px;
     border: 1px solid var(--border);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
 
 .assistant .ai-message-bubble {
@@ -221,13 +222,13 @@
 }
 
 .ai-input-form {
-    background: var(--bg-secondary);
+    background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: 30px;
     padding: 8px 8px 8px 24px;
     display: flex;
     align-items: center;
-    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.06);
     backdrop-filter: blur(20px);
 }
 

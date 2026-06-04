@@ -8,7 +8,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -20,6 +24,46 @@ import org.springframework.lang.NonNull;
 public class TransactionService {
 
     private final TransactionRepository transactionRepository;
+
+    /**
+     * Robustly parses a date string from the frontend.
+     * Handles all common formats:
+     *   2026-05-31T00:00:00.000Z  (ISO 8601 with Z suffix + millis)
+     *   2026-05-31T00:00:00Z      (ISO 8601 with Z suffix)
+     *   2026-05-31T09:10:02       (ISO 8601 no suffix)
+     *   2026-05-31                (date only)
+     *   31/05/2026 or 31-05-2026  (Indian format)
+     */
+    private static LocalDateTime parseDate(String raw) {
+        if (raw == null || raw.isBlank()) return LocalDateTime.now();
+        String s = raw.trim();
+        try {
+            // ISO 8601 with Z or offset (e.g. 2026-05-31T00:00:00.000Z)
+            return ZonedDateTime.parse(s).toLocalDateTime();
+        } catch (DateTimeParseException ignored) {}
+        try {
+            // ISO without timezone (e.g. 2026-05-31T09:10:02)
+            return LocalDateTime.parse(s);
+        } catch (DateTimeParseException ignored) {}
+        try {
+            // ISO without timezone, with millis (e.g. 2026-05-31T09:10:02.000)
+            return LocalDateTime.parse(s, DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS"));
+        } catch (DateTimeParseException ignored) {}
+        try {
+            // Date-only ISO (e.g. 2026-05-31)
+            return LocalDate.parse(s, DateTimeFormatter.ISO_LOCAL_DATE).atStartOfDay();
+        } catch (DateTimeParseException ignored) {}
+        try {
+            // Indian date format DD/MM/YYYY
+            return LocalDate.parse(s, DateTimeFormatter.ofPattern("dd/MM/yyyy")).atStartOfDay();
+        } catch (DateTimeParseException ignored) {}
+        try {
+            // Indian date format DD-MM-YYYY
+            return LocalDate.parse(s, DateTimeFormatter.ofPattern("dd-MM-yyyy")).atStartOfDay();
+        } catch (DateTimeParseException ignored) {}
+        // Last resort: return now
+        return LocalDateTime.now();
+    }
 
     public List<Transaction> getAll(@NonNull User restaurant) {
         return transactionRepository.findByRestaurantOrderByDateDesc(restaurant);
@@ -45,7 +89,7 @@ public class TransactionService {
         String referenceIdStr = (referenceIdObj != null) ? referenceIdObj.toString() : null;
 
         Object dateObj = data.get("date");
-        LocalDateTime dateVal = (dateObj != null) ? LocalDateTime.parse(dateObj.toString()) : LocalDateTime.now();
+        LocalDateTime dateVal = parseDate(dateObj != null ? dateObj.toString() : null);
 
         Object invoiceObj = data.get("invoiceNumber");
         String invoiceStr = (invoiceObj != null) ? invoiceObj.toString() : null;

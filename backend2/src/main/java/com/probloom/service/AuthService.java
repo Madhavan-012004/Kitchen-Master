@@ -90,6 +90,13 @@ public class AuthService {
             throw new BadRequestException("Invalid email or password");
         }
 
+        // Block offline/hardware-licensed users from logging in via the online endpoint.
+        // These accounts are bound to a physical machine license and are not valid for
+        // cloud/online authentication.
+        if ("hardware".equalsIgnoreCase(user.getLicenseType())) {
+            throw new BadRequestException("Invalid email or password");
+        }
+
         if (!Boolean.TRUE.equals(user.getIsProBloomAdmin())) {
             User owner = user.getRole() == User.Role.OWNER ? user : user.getParentOwner();
             if (owner != null && owner.getSubscriptionExpiresAt() != null) {
@@ -126,6 +133,7 @@ public class AuthService {
         if (updates.containsKey("address")) user.setAddress((String) updates.get("address"));
         if (updates.containsKey("currency")) user.setCurrency((String) updates.get("currency"));
         if (updates.containsKey("gstNumber")) user.setGstNumber((String) updates.get("gstNumber"));
+        if (updates.containsKey("cloudBackupPath")) user.setCloudBackupPath((String) updates.get("cloudBackupPath"));
         
         if (updates.containsKey("taxRate")) user.setTaxRate(parseOptionalDouble(updates, "taxRate", user.getTaxRate()));
         if (updates.containsKey("latitude")) user.setLatitude(parseOptionalDouble(updates, "latitude", user.getLatitude()));
@@ -368,6 +376,7 @@ public class AuthService {
         u.put("currency", owner != null ? owner.getCurrency() : user.getCurrency());
         u.put("gstNumber", owner != null ? owner.getGstNumber() : user.getGstNumber());
         u.put("taxRate", owner != null ? owner.getTaxRate() : user.getTaxRate());
+        u.put("cloudBackupPath", owner != null ? owner.getCloudBackupPath() : user.getCloudBackupPath());
         u.put("subscriptionPlan", owner != null ? owner.getSubscriptionPlan().name().toLowerCase() : user.getSubscriptionPlan().name().toLowerCase());
         u.put("subscriptionActive", owner != null ? owner.getSubscriptionActive() : user.getSubscriptionActive());
         u.put("subscriptionExpiresAt", owner != null ? owner.getSubscriptionExpiresAt() : user.getSubscriptionExpiresAt());

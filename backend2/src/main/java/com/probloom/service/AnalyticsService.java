@@ -152,19 +152,22 @@ public class AnalyticsService {
             }
 
             case "monthly-day-wise":
-                Map<String, Double> daily = new TreeMap<>();
+                Map<String, Double> dailyRev = new TreeMap<>();
+                Map<String, Integer> dailyCount = new TreeMap<>();
                 orders.stream().filter(o -> o.getStatus() != Orders.OrderStatus.CANCELLED).forEach(o -> {
                     String date = o.getCreatedAt().toLocalDate().toString();
-                    daily.put(date, daily.getOrDefault(date, 0.0) + o.getTotal());
+                    dailyRev.put(date, dailyRev.getOrDefault(date, 0.0) + o.getTotal());
+                    dailyCount.put(date, dailyCount.getOrDefault(date, 0) + 1);
                 });
-                List<Map<String, Object>> trend = new ArrayList<>();
-                daily.forEach((d, v) -> {
+                List<Map<String, Object>> dailySales = new ArrayList<>();
+                dailyRev.forEach((d, v) -> {
                     Map<String, Object> m = new LinkedHashMap<>();
                     m.put("date", d);
                     m.put("revenue", v);
-                    trend.add(m);
+                    m.put("orderCount", dailyCount.getOrDefault(d, 0));
+                    dailySales.add(m);
                 });
-                data.put("trend", trend);
+                data.put("dailySales", dailySales);
                 break;
 
             case "end-day-report":
@@ -208,16 +211,98 @@ public class AnalyticsService {
             case "stock-report":
             case "total-inventory-valuation":
                 List<InventoryItem> invItems = inventoryItemRepository.findByRestaurantAndIsActiveTrueOrderByNameAsc(restaurant);
-                double totalVal = invItems.stream().mapToDouble(i -> (i.getCurrentStock() != null ? i.getCurrentStock() : 0.0) * (i.getCostPerUnit() != null ? i.getCostPerUnit() : 0.0)).sum();
+                double totalVal = invItems.stream().mapToDouble(i -> (i.getCurrentStock() != null ? i.getCurrentStock() : 0.0) * (i.getPrice() != null ? i.getPrice() : 0.0)).sum();
                 data.put("items", invItems);
                 data.put("totalValue", totalVal);
                 data.put("count", invItems.size());
                 break;
 
             case "purchase-item-stock":
+            case "purchase-recipe-stock":
                 List<StockMovement> movements = stockMovementRepository.findByRestaurantAndTypeAndMovementTimestampBetweenOrderByMovementTimestampDesc(restaurant, StockMovement.MovementType.ADD, start, end);
                 data.put("purchases", movements);
                 break;
+
+            case "recipe-stock":
+                List<InventoryItem> recipeItems = inventoryItemRepository.findByRestaurantAndIsActiveTrueOrderByNameAsc(restaurant);
+                data.put("items", recipeItems);
+                data.put("totalValue", recipeItems.stream().mapToDouble(i -> (i.getCurrentStock() != null ? i.getCurrentStock() : 0.0) * (i.getPrice() != null ? i.getPrice() : 0.0)).sum());
+                data.put("count", recipeItems.size());
+                break;
+
+            case "expiry-date-wise": {
+                List<InventoryItem> allItems = inventoryItemRepository.findByRestaurantAndIsActiveTrueOrderByNameAsc(restaurant);
+                LocalDate today = LocalDate.now();
+                List<Map<String, Object>> expiryList = new ArrayList<>();
+                for (InventoryItem inv : allItems) {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("name", inv.getName());
+                    m.put("category", inv.getCategory());
+                    m.put("currentStock", inv.getCurrentStock());
+                    m.put("unit", inv.getUnit());
+                    m.put("batchNumber", inv.getBatchNo());
+                    String expDateStr = inv.getExpDate();
+                    if (expDateStr != null && !expDateStr.isBlank()) {
+                        try {
+                            LocalDate expDate = LocalDate.parse(expDateStr);
+                            long days = java.time.temporal.ChronoUnit.DAYS.between(today, expDate);
+                            m.put("expiryDate", expDateStr);
+                            m.put("daysUntilExpiry", (int) days);
+                        } catch (Exception ex) {
+                            m.put("expiryDate", expDateStr);
+                            m.put("daysUntilExpiry", null);
+                        }
+                    } else {
+                        m.put("expiryDate", null);
+                        m.put("daysUntilExpiry", null);
+                    }
+                    expiryList.add(m);
+                }
+                data.put("items", expiryList);
+                break;
+            }
+
+
+            case "hsn-summary": {
+                // Aggregate order items by HSN code
+                Map<String, Map<String, Object>> hsnMap = new LinkedHashMap<>();
+                for (Orders o : orders) {
+                    if (o.getStatus() == Orders.OrderStatus.CANCELLED) continue;
+                    if (o.getItems() == null) continue;
+                    for (OrderItem item : o.getItems()) {
+                        if (item.getStatus() == OrderItem.ItemStatus.CANCELLED) continue;
+                        String hsn = item.getHsnCode() != null && !item.getHsnCode().isBlank() ? item.getHsnCode() : "N/A";
+                        double taxRate = item.getTaxRate() != null ? item.getTaxRate() : 0.0;
+                        double lineTotal = item.getPrice() * item.getQuantity();
+                        double base = taxRate > 0 ? lineTotal / (1.0 + taxRate / 100.0) : lineTotal;
+                        double totalGst = lineTotal - base;
+                        double cgst = totalGst / 2.0;
+                        double sgst = totalGst / 2.0;
+
+                        hsnMap.computeIfAbsent(hsn, k -> {
+                            Map<String, Object> row = new LinkedHashMap<>();
+                            row.put("hsnCode", hsn);
+                            row.put("description", item.getName());
+                            row.put("qty", 0);
+                            row.put("taxableValue", 0.0);
+                            row.put("gstRate", taxRate);
+                            row.put("cgst", 0.0);
+                            row.put("sgst", 0.0);
+                            row.put("igst", 0.0);
+                            row.put("totalGst", 0.0);
+                            return row;
+                        });
+                        Map<String, Object> row = hsnMap.get(hsn);
+                        row.put("qty", (int) row.get("qty") + item.getQuantity());
+                        row.put("taxableValue", (double) row.get("taxableValue") + base);
+                        row.put("cgst", (double) row.get("cgst") + cgst);
+                        row.put("sgst", (double) row.get("sgst") + sgst);
+                        row.put("totalGst", (double) row.get("totalGst") + totalGst);
+                    }
+                }
+                data.put("hsnRows", new ArrayList<>(hsnMap.values()));
+                break;
+            }
 
             case "expenditure-report":
                 List<Transaction> expenses = transactionRepository.findByRestaurantAndDateBetweenOrderByDateDesc(restaurant, start, end)
@@ -365,6 +450,7 @@ public class AnalyticsService {
         Map<String, Double> dailyRevenue = new TreeMap<>();
         Map<String, Double> dailyExpense = new TreeMap<>();
         Map<String, Integer> itemSales = new HashMap<>();
+        Map<String, Double> itemRevenue = new HashMap<>();
         Map<String, Double> categoryExpenses = new HashMap<>();
 
         // Process Orders (Revenue)
@@ -382,6 +468,7 @@ public class AnalyticsService {
             
             for (OrderItem item : o.getItems()) {
                 itemSales.merge(item.getName(), item.getQuantity(), (a, b) -> a + b);
+                itemRevenue.merge(item.getName(), item.getPrice() * item.getQuantity(), (a, b) -> a + b);
             }
         }
 
@@ -413,15 +500,16 @@ public class AnalyticsService {
             revenueTrend.add(m);
         }
 
-        // Prepare topItems
+        // Prepare topItems — ALL products sold, sorted by qty desc, with revenue
         List<Map<String, Object>> topItemsList = new ArrayList<>();
         itemSales.entrySet().stream()
                 .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
-                .limit(5)
                 .forEach(e -> {
                     Map<String, Object> m = new LinkedHashMap<>();
                     m.put("_id", e.getKey());
+                    m.put("name", e.getKey());
                     m.put("totalQuantity", e.getValue());
+                    m.put("totalRevenue", itemRevenue.getOrDefault(e.getKey(), 0.0));
                     topItemsList.add(m);
                 });
 

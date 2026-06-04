@@ -13,6 +13,12 @@ import org.springframework.lang.NonNull;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/menu")
@@ -104,6 +110,37 @@ public class MenuController {
                 "message", "Import failed: " + e.getMessage(),
                 "details", e.getClass().getName()
             ));
+        }
+    }
+
+    @PostMapping("/{id}/image")
+    public ResponseEntity<?> uploadImage(
+            @PathVariable("id") @NonNull Long id,
+            @RequestParam("file") @NonNull MultipartFile file) {
+        try {
+            User restaurant = resolver.getRestaurantOwner();
+            // Ensure uploads directory exists
+            String uploadDir = "uploads/menu";
+            Path dirPath = Paths.get(uploadDir);
+            if (!Files.exists(dirPath)) {
+                Files.createDirectories(dirPath);
+            }
+            // Save file with unique name
+            String originalFilename = file.getOriginalFilename();
+            String ext = (originalFilename != null && originalFilename.contains("."))
+                    ? originalFilename.substring(originalFilename.lastIndexOf("."))
+                    : ".jpg";
+            String filename = "menu_" + id + "_" + UUID.randomUUID().toString().substring(0, 8) + ext;
+            Path filePath = dirPath.resolve(filename);
+            Files.write(filePath, file.getBytes());
+            // Update menu item imageUrl
+            String imageUrl = "/uploads/menu/" + filename;
+            MenuItem updated = menuService.setImageUrl(restaurant, id, imageUrl);
+            return ok("Image uploaded", Map.of("imageUrl", imageUrl, "item", updated));
+        } catch (IOException e) {
+            return ResponseEntity.status(500).body(Map.of("success", false, "message", "Image upload failed: " + e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("success", false, "message", e.getMessage()));
         }
     }
 

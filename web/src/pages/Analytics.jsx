@@ -726,10 +726,180 @@ export default function AnalyticsPage() {
                         {downloadBar}
                     </div>
                 )
+            case 'monthly-day-wise':
+                return (
+                    <div className="report-content-view">
+                        <div className="report-summary-grid mini">
+                            <div className="summary-val-card" style={{ background: 'rgba(198,245,61,0.08)' }}>
+                                <span className="label">Monthly Total</span>
+                                <span className="val">₹{(reportData?.dailySales || []).reduce((s, d) => s + (d.revenue || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="summary-val-card" style={{ background: 'rgba(45,212,121,0.07)' }}>
+                                <span className="label">Total Orders</span>
+                                <span className="val">{(reportData?.dailySales || []).reduce((s, d) => s + (d.orderCount || 0), 0)}</span>
+                            </div>
+                            <div className="summary-val-card" style={{ background: 'rgba(59,130,246,0.07)' }}>
+                                <span className="label">Active Days</span>
+                                <span className="val">{(reportData?.dailySales || []).filter(d => d.orderCount > 0).length}</span>
+                            </div>
+                        </div>
+                        <div className="report-table-wrapper">
+                            <table className="premium-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Day</th>
+                                        <th>Orders</th>
+                                        <th>Revenue</th>
+                                        <th>Avg Order Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {(reportData?.dailySales || []).map((d, i) => {
+                                        const dateObj = new Date(d.date || d.day);
+                                        const avgVal = d.orderCount > 0 ? (d.revenue / d.orderCount) : 0;
+                                        return (
+                                            <tr key={i} className={d.orderCount === 0 ? 'muted-row' : ''}>
+                                                <td>{isNaN(dateObj) ? (d.date || d.day) : dateObj.toLocaleDateString('en-IN')}</td>
+                                                <td>{isNaN(dateObj) ? '-' : dateObj.toLocaleDateString('en-IN', { weekday: 'short' })}</td>
+                                                <td><b>{d.orderCount || 0}</b></td>
+                                                <td><b style={{ color: '#C6F53D' }}>₹{(d.revenue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</b></td>
+                                                <td>₹{avgVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                        {downloadBar}
+                    </div>
+                )
+            case 'expiry-date-wise':
+                return (
+                    <div className="report-content-view">
+                        <div className="report-summary-grid mini">
+                            <div className="summary-val-card warning">
+                                <span className="label">Expiring Within 7 Days</span>
+                                <span className="val">{(reportData?.items || []).filter(i => i.daysUntilExpiry != null && i.daysUntilExpiry <= 7 && i.daysUntilExpiry >= 0).length}</span>
+                            </div>
+                            <div className="summary-val-card error">
+                                <span className="label">Already Expired</span>
+                                <span className="val">{(reportData?.items || []).filter(i => i.daysUntilExpiry != null && i.daysUntilExpiry < 0).length}</span>
+                            </div>
+                            <div className="summary-val-card" style={{ background: 'rgba(59,130,246,0.07)' }}>
+                                <span className="label">Total Items Tracked</span>
+                                <span className="val">{(reportData?.items || []).length}</span>
+                            </div>
+                        </div>
+                        <div className="report-table-wrapper">
+                            <table className="premium-table">
+                                <thead>
+                                    <tr>
+                                        <th>Item Name</th>
+                                        <th>Category</th>
+                                        <th>Batch / Lot</th>
+                                        <th>Stock</th>
+                                        <th>Expiry Date</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {(reportData?.items || [])
+                                        .sort((a, b) => (a.daysUntilExpiry ?? 999) - (b.daysUntilExpiry ?? 999))
+                                        .map((item, i) => {
+                                            const days = item.daysUntilExpiry;
+                                            let statusLabel, statusClass;
+                                            if (days == null) { statusLabel = 'No Expiry'; statusClass = 'muted'; }
+                                            else if (days < 0) { statusLabel = `Expired ${Math.abs(days)}d ago`; statusClass = 'error'; }
+                                            else if (days <= 3) { statusLabel = `Critical: ${days}d left`; statusClass = 'error'; }
+                                            else if (days <= 7) { statusLabel = `Warning: ${days}d left`; statusClass = 'warning'; }
+                                            else { statusLabel = `OK: ${days}d left`; statusClass = 'success'; }
+                                            return (
+                                                <tr key={i}>
+                                                    <td><b>{item.name}</b></td>
+                                                    <td>{item.category || '-'}</td>
+                                                    <td>{item.batchNumber || '-'}</td>
+                                                    <td>{item.currentStock} {item.unit}</td>
+                                                    <td>{item.expiryDate ? new Date(item.expiryDate).toLocaleDateString('en-IN') : '-'}</td>
+                                                    <td><span className={`status-pill ${statusClass}`}>{statusLabel}</span></td>
+                                                </tr>
+                                            );
+                                        })}
+                                </tbody>
+                            </table>
+                        </div>
+                        {downloadBar}
+                    </div>
+                )
+            case 'hsn-summary':
+                return (
+                    <div className="report-content-view">
+                        <div className="report-summary-grid mini">
+                            <div className="summary-val-card" style={{ background: 'rgba(198,245,61,0.08)' }}>
+                                <span className="label">Total Taxable Value</span>
+                                <span className="val">₹{(reportData?.hsnRows || []).reduce((s, r) => s + (r.taxableValue || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="summary-val-card" style={{ background: 'rgba(239,68,68,0.07)' }}>
+                                <span className="label">Total GST</span>
+                                <span className="val" style={{ color: '#ef4444' }}>₹{(reportData?.hsnRows || []).reduce((s, r) => s + (r.totalGst || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="summary-val-card" style={{ background: 'rgba(45,212,121,0.07)' }}>
+                                <span className="label">HSN Codes</span>
+                                <span className="val">{(reportData?.hsnRows || []).length}</span>
+                            </div>
+                        </div>
+                        <div className="report-table-wrapper">
+                            <table className="premium-table">
+                                <thead>
+                                    <tr>
+                                        <th>HSN Code</th>
+                                        <th>Description</th>
+                                        <th>Qty</th>
+                                        <th>Taxable Value</th>
+                                        <th>GST Rate</th>
+                                        <th>CGST</th>
+                                        <th>SGST</th>
+                                        <th>IGST</th>
+                                        <th>Total GST</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {(reportData?.hsnRows || []).map((row, i) => (
+                                        <tr key={i}>
+                                            <td><b>{row.hsnCode}</b></td>
+                                            <td>{row.description || '-'}</td>
+                                            <td>{row.qty || 0}</td>
+                                            <td>₹{(row.taxableValue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                            <td>{row.gstRate || 0}%</td>
+                                            <td>₹{(row.cgst || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                            <td>₹{(row.sgst || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                            <td>₹{(row.igst || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                            <td><b style={{ color: '#ef4444' }}>₹{(row.totalGst || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</b></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                                <tfoot>
+                                    <tr style={{ background: 'rgba(198,245,61,0.06)', fontWeight: 700 }}>
+                                        <td colSpan={3}>TOTAL</td>
+                                        <td>₹{(reportData?.hsnRows || []).reduce((s, r) => s + (r.taxableValue || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                        <td>-</td>
+                                        <td>₹{(reportData?.hsnRows || []).reduce((s, r) => s + (r.cgst || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                        <td>₹{(reportData?.hsnRows || []).reduce((s, r) => s + (r.sgst || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                        <td>₹{(reportData?.hsnRows || []).reduce((s, r) => s + (r.igst || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                        <td>₹{(reportData?.hsnRows || []).reduce((s, r) => s + (r.totalGst || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                        {downloadBar}
+                    </div>
+                )
             default:
                 return (
                     <div className="report-content-view">
-                        <p>Detailed view for <b>{selectedReport?.label}</b> is coming soon.</p>
+                        <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '40px 0' }}>
+                            No data available for <b>{selectedReport?.label}</b>.
+                        </p>
                         {downloadBar}
                     </div>
                 )
@@ -881,7 +1051,7 @@ export default function AnalyticsPage() {
                                                     <stop offset="95%" stopColor="#00D68F" stopOpacity={0}/>
                                                 </linearGradient>
                                             </defs>
-                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                                             <XAxis 
                                                 dataKey="date" 
                                                 axisLine={false}
@@ -937,24 +1107,6 @@ export default function AnalyticsPage() {
                             </div>
                         </div>
 
-                        {/* Popular Items */}
-                        <div className="dashboard-card">
-                            <h3 className="card-title">🏆 Popular Items</h3>
-                            <div className="top-items-list">
-                                {data?.topItems?.map((item, idx) => (
-                                    <div key={idx} className="top-item-row">
-                                        <div className="item-rank-name">
-                                            <div className="rank-badge" style={{
-                                                background: idx === 0 ? 'rgba(255, 215, 0, 0.2)' : idx === 1 ? 'rgba(192, 192, 192, 0.2)' : 'rgba(198, 245, 61, 0.1)'
-                                            }}>{idx + 1}</div>
-                                            <span className="rank-text">{item._id}</span>
-                                        </div>
-                                        <span className="sold-badge">{item.totalQuantity} Sold</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
                         {/* P&L Analysis */}
                         <div className="dashboard-card">
                             <h3 className="card-title">💡 Insight: Profitability</h3>
@@ -982,6 +1134,129 @@ export default function AnalyticsPage() {
                                     Gross Profit = Revenue - Material Cost (COGS). Net Profit = Revenue - All Expenses.
                                 </p>
                             </div>
+                        </div>
+
+                        {/* ── Product Sales Board ── */}
+                        <div className="dashboard-card" style={{ gridColumn: 'span 2' }}>
+                            <div className="card-custom-header" style={{ marginBottom: '16px' }}>
+                                <h3 className="card-title">🛒 Product Sales — What's Selling</h3>
+                                <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
+                                    {data?.topItems?.length || 0} products sold in this period
+                                </span>
+                            </div>
+
+                            {data?.topItems?.length > 0 ? (
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                                    {/* Left: Table with progress bars */}
+                                    <div style={{ overflowX: 'auto' }}>
+                                        <table className="premium-table" style={{ fontSize: '13px' }}>
+                                            <thead>
+                                                <tr>
+                                                    <th style={{ width: '32px' }}>#</th>
+                                                    <th>Product Name</th>
+                                                    <th style={{ textAlign: 'right' }}>Units Sold</th>
+                                                    <th style={{ textAlign: 'right' }}>Revenue</th>
+                                                    <th style={{ width: '120px' }}>Share</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {(() => {
+                                                    const maxQty = Math.max(...(data.topItems.map(i => i.totalQuantity || 0)));
+                                                    const totalQty = data.topItems.reduce((s, i) => s + (i.totalQuantity || 0), 0);
+                                                    const RANK_COLORS = ['#FFD700','#C0C0C0','#CD7F32','#C6F53D','#60a5fa','#a78bfa','#f472b6','#34d399','#fb923c','#e879f9'];
+                                                    return data.topItems.map((item, idx) => {
+                                                        const pct = maxQty > 0 ? (item.totalQuantity / maxQty) * 100 : 0;
+                                                        const sharePct = totalQty > 0 ? ((item.totalQuantity / totalQty) * 100).toFixed(1) : '0.0';
+                                                        const col = RANK_COLORS[idx % RANK_COLORS.length];
+                                                        return (
+                                                            <tr key={idx}>
+                                                                <td>
+                                                                    <div style={{
+                                                                        width: '24px', height: '24px', borderRadius: '6px',
+                                                                        background: idx < 3 ? `${col}22` : 'var(--bg-secondary)',
+                                                                        color: col, fontWeight: 700, fontSize: '11px',
+                                                                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                                                    }}>{idx + 1}</div>
+                                                                </td>
+                                                                <td>
+                                                                    <span style={{ fontWeight: idx < 3 ? 700 : 400, color: 'var(--text-primary)' }}>
+                                                                        {item._id || item.name}
+                                                                    </span>
+                                                                </td>
+                                                                <td style={{ textAlign: 'right' }}>
+                                                                    <b style={{ color: col }}>{item.totalQuantity}</b>
+                                                                </td>
+                                                                <td style={{ textAlign: 'right', color: '#C6F53D' }}>
+                                                                    ₹{(item.totalRevenue || 0).toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+                                                                </td>
+                                                                <td>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                        <div style={{ flex: 1, height: '6px', background: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
+                                                                            <div style={{ width: `${pct}%`, height: '100%', background: col, borderRadius: '3px', transition: 'width 0.6s ease' }} />
+                                                                        </div>
+                                                                        <span style={{ fontSize: '10px', color: 'var(--text-muted)', minWidth: '32px' }}>{sharePct}%</span>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    });
+                                                })()}
+                                            </tbody>
+                                            <tfoot>
+                                                <tr style={{ background: 'rgba(198,245,61,0.04)', fontWeight: 700 }}>
+                                                    <td colSpan={2} style={{ color: '#C6F53D' }}>TOTAL</td>
+                                                    <td style={{ textAlign: 'right', color: '#C6F53D' }}>
+                                                        {data.topItems.reduce((s, i) => s + (i.totalQuantity || 0), 0)}
+                                                    </td>
+                                                    <td style={{ textAlign: 'right', color: '#C6F53D' }}>
+                                                        ₹{data.topItems.reduce((s, i) => s + (i.totalRevenue || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+                                                    </td>
+                                                    <td />
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+
+                                    {/* Right: BarChart */}
+                                    <div>
+                                        <ResponsiveContainer width="100%" height={320}>
+                                            <BarChart
+                                                data={data.topItems.slice(0, 10).map(i => ({ name: (i._id || i.name || '').slice(0, 14), qty: i.totalQuantity, rev: i.totalRevenue || 0 }))}
+                                                layout="vertical"
+                                                margin={{ left: 10, right: 20, top: 0, bottom: 0 }}
+                                            >
+                                                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border)" />
+                                                <XAxis
+                                                    type="number"
+                                                    axisLine={false} tickLine={false}
+                                                    tick={{ fill: 'var(--text-muted)', fontSize: 10 }}
+                                                    tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v}
+                                                />
+                                                <YAxis
+                                                    type="category" dataKey="name"
+                                                    axisLine={false} tickLine={false}
+                                                    tick={{ fill: 'var(--text-secondary)', fontSize: 10 }}
+                                                    width={90}
+                                                />
+                                                <Tooltip
+                                                    contentStyle={{ background: 'var(--bg-card)', border: 'none', borderRadius: '8px', color: 'var(--text-primary)', fontSize: '12px' }}
+                                                    formatter={(val, name) => [val, name === 'qty' ? 'Units Sold' : 'Revenue ₹']}
+                                                />
+                                                <Bar dataKey="qty" name="Units Sold" radius={[0, 4, 4, 0]}>
+                                                    {data.topItems.slice(0, 10).map((_, idx) => {
+                                                        const COLORS = ['#FFD700','#C0C0C0','#CD7F32','#C6F53D','#60a5fa','#a78bfa','#f472b6','#34d399','#fb923c','#e879f9'];
+                                                        return <Cell key={idx} fill={COLORS[idx % COLORS.length]} />;
+                                                    })}
+                                                </Bar>
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="no-data-chart" style={{ padding: '40px 0' }}>
+                                    <span>No product sales found for this period</span>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </>

@@ -174,7 +174,7 @@
 
 .add-btn {
     background: var(--accent);
-    color: white;
+    color: var(--accent-text);
     border: none;
     padding: 8px 16px;
     border-radius: var(--radius-sm);

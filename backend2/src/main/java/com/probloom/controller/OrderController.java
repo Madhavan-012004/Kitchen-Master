@@ -53,9 +53,10 @@ public class OrderController {
     }
 
     @PatchMapping("/public/{id}/bill-request")
-    public ResponseEntity<?> requestBillPublic(@PathVariable("id") @NonNull Long id) {
+    public ResponseEntity<?> requestBillPublic(@PathVariable("id") @NonNull Long id, @RequestBody(required = false) Map<String, Object> body) {
         try {
-            return ok("Bill requested", orderService.requestBillPublic(id));
+            String paymentMethod = (body != null && body.get("paymentMethod") != null) ? body.get("paymentMethod").toString() : null;
+            return ok("Bill requested", orderService.requestBillPublic(id, paymentMethod));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(Map.of("success", false, "message", e.getMessage()));
         }
@@ -267,6 +268,17 @@ public class OrderController {
         User creator = resolver.getCurrentUser();
         Orders order = orderService.create(restaurant, creator, body);
         return ok("Order synced", Map.of("order", order, "synced", true));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteOrder(@PathVariable("id") @NonNull Long id) {
+        try {
+            User restaurant = resolver.getRestaurantOwner();
+            orderService.delete(restaurant, id);
+            return ok("Order deleted successfully", null);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("success", false, "message", e.getMessage()));
+        }
     }
 
     @DeleteMapping("/history/clear")

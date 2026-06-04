@@ -27,6 +27,9 @@ public class DatabaseBackupService {
     @Value("${spring.datasource.password}")
     private String dbPassword;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.probloom.repository.UserRepository userRepository;
+
     private static final String BACKUP_DIR = "database_dump";
     private static final DateTimeFormatter FILE_NAME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss");
 
@@ -79,6 +82,7 @@ public class DatabaseBackupService {
 
         if (exitCode == 0) {
             log.info("Database export successful: {}", fileName);
+            copyToCloudBackupPaths(outputFile, fileName);
             return fileName;
         } else {
             String error = new String(process.getErrorStream().readAllBytes());
@@ -181,5 +185,38 @@ public class DatabaseBackupService {
         // 5. Final Fallback
         log.warn("pg_dump not found in known locations, falling back to system PATH (last resort)");
         return "pg_dump";
+    }
+
+    private void copyToCloudBackupPaths(File outputFile, String fileName) {
+        try {
+            List<com.probloom.model.entity.User> activeUsers = userRepository.findActiveUsersWithCloudBackupPath();
+            if (activeUsers == null || activeUsers.isEmpty()) {
+                return;
+            }
+            log.info("Found {} active user(s) with cloud backup paths configured.", activeUsers.size());
+            for (com.probloom.model.entity.User u : activeUsers) {
+                String pathStr = u.getCloudBackupPath();
+                if (pathStr != null && !pathStr.trim().isEmpty()) {
+                    File cloudDir = new File(pathStr.trim());
+                    if (!cloudDir.exists()) {
+                        log.info("Creating cloud backup directory: {}", cloudDir.getAbsolutePath());
+                        cloudDir.mkdirs();
+                    }
+                    if (cloudDir.exists() && cloudDir.isDirectory()) {
+                        File destFile = new File(cloudDir, fileName);
+                        java.nio.file.Files.copy(
+                            outputFile.toPath(),
+                            destFile.toPath(),
+                            java.nio.file.StandardCopyOption.REPLACE_EXISTING
+                        );
+                        log.info("Copied backup successfully to cloud path: {} for user {}", destFile.getAbsolutePath(), u.getEmail());
+                    } else {
+                        log.warn("Cloud backup path could not be created or is not a directory: {}", pathStr);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed to copy database backup to cloud paths", e);
+        }
     }
 }

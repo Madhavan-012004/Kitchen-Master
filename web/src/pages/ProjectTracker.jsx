@@ -33,8 +33,9 @@ export default function ProjectTracker() {
 
     const fetchTasks = async () => {
         try {
-            const res = await api.get('tasks');
-            const fetchedTasks = res.data;
+            const res = await api.get('/api/project-tasks');
+            // Backend returns { success: true, data: [...] } envelope
+            const fetchedTasks = Array.isArray(res.data) ? res.data : (res.data?.data ?? []);
             setTasks(fetchedTasks);
             
             const newCols = {
@@ -54,11 +55,11 @@ export default function ProjectTracker() {
             setColumns(newCols);
         } catch (error) {
             console.error('Failed to fetch tasks', error);
-            console.error('Failed to fetch tasks', error);
         } finally {
             setIsLoading(false);
         }
     };
+
 
     useEffect(() => {
         fetchTasks();
@@ -83,7 +84,7 @@ export default function ProjectTracker() {
             });
 
             try {
-                await api.put(`/tasks/${removed.id}`, { status: destination.droppableId });
+                await api.put(`/api/project-tasks/${removed.id}`, { status: destination.droppableId });
                 // status updated silently
             } catch (err) {
                 alert('❌ Failed to update task status');
@@ -104,7 +105,7 @@ export default function ProjectTracker() {
     const handleCreateTask = async () => {
         if (!newTask.title) { alert('Title is required'); return; }
         try {
-            await api.post('/tasks', { ...newTask, status: 'todo' });
+            await api.post('/api/project-tasks', { ...newTask, status: 'todo' });
             // Task created
             setShowModal(false);
             setNewTask({ title: '', description: '', priority: 'medium', assigneeName: '' });
@@ -117,7 +118,7 @@ export default function ProjectTracker() {
     const handleDeleteTask = async (id) => {
         if (!window.confirm('Delete this task?')) return;
         try {
-            await api.delete(`/tasks/${id}`);
+            await api.delete(`/api/project-tasks/${id}`);
             // deleted
             fetchTasks();
         } catch (err) {
@@ -160,7 +161,7 @@ export default function ProjectTracker() {
                                                 >
                                                     {column.items.map((item, index) => {
                                                         return (
-                                                            <Draggable key={item.id} draggableId={item.id} index={index}>
+                                                            <Draggable key={String(item.id)} draggableId={String(item.id)} index={index}>
                                                                 {(provided, snapshot) => {
                                                                     return (
                                                                         <div

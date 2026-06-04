@@ -112,26 +112,59 @@ export default function BillingQueue() {
             const getBillBody = () => {
                 const items = order.items || [];
                 const totalItemsCount = items.reduce((acc, item) => acc + item.quantity, 0);
-                const originalSubtotal = items.reduce((s, item) => s + (parseFloat(item.price || 0) * (parseFloat(item.quantity) || 0)), 0);
+                const taxRate = typeof user?.taxRate === 'number' ? user.taxRate : 18;
+                const sgstPct = taxRate / 2;
+                const cgstPct = taxRate / 2;
+                const effectiveTaxType = order.taxType || user?.taxType || 'Inclusive';
+                const isPrintWithGst = order.taxAmount !== undefined ? order.taxAmount > 0 : true;
+                
+                const originalSubtotal = items.reduce((s, item) => {
+                    const price = parseFloat(item.price || 0);
+                    const qty = parseFloat(item.quantity || 0);
+                    let basePrice;
+                    if (isPrintWithGst) {
+                        if (effectiveTaxType === 'Exclusive') {
+                            basePrice = price;
+                        } else {
+                            const itemTaxRate = typeof item.taxRate === 'number' ? item.taxRate : taxRate;
+                            basePrice = price / (1 + itemTaxRate / 100);
+                        }
+                    } else {
+                        basePrice = price;
+                    }
+                    return s + (basePrice * qty);
+                }, 0);
                 
                 const discountRate = order.discountPct !== undefined 
                     ? (parseFloat(order.discountPct) || 0) 
                     : (originalSubtotal > 0 ? (parseFloat(order.discountAmount || 0) / originalSubtotal) * 100 : 0);
                 
-                const taxRate = typeof user?.taxRate === 'number' ? user.taxRate : 18;
-                const sgstPct = taxRate / 2;
-                const cgstPct = taxRate / 2;
-
                 const discountAmount = originalSubtotal * (discountRate / 100);
                 const netSubtotal = originalSubtotal - discountAmount;
-                const totalGstAmount = netSubtotal * (taxRate / 100);
+                const taxableSubtotal = netSubtotal;
+
+                let totalGstAmount = 0;
+                if (isPrintWithGst) {
+                    items.forEach(item => {
+                        const price = parseFloat(item.price || 0);
+                        const qty = parseFloat(item.quantity || 0);
+                        const itemTaxRate = typeof item.taxRate === 'number' ? item.taxRate : taxRate;
+                        const finalItemPrice = price * (1 - discountRate / 100);
+                        
+                        if (effectiveTaxType === 'Inclusive') {
+                            const itemBaseRate = finalItemPrice / (1 + itemTaxRate / 100);
+                            totalGstAmount += (finalItemPrice - itemBaseRate) * qty;
+                        } else {
+                            totalGstAmount += finalItemPrice * (itemTaxRate / 100) * qty;
+                        }
+                    });
+                }
+
                 const sgstAmount = totalGstAmount / 2;
                 const cgstAmount = totalGstAmount / 2;
-                const taxableSubtotal = netSubtotal - totalGstAmount;
                 
-                const isPrintWithGst = order.taxAmount !== undefined ? order.taxAmount > 0 : true;
-                const extraChargesTotal = order.extraCharges ? order.extraCharges.reduce((s,c) => s + c.amount, 0) : 0;
-                const grandTotal = (netSubtotal + extraChargesTotal).toFixed(2);
+                const extraChargesTotal = order.extraCharges ? order.extraCharges.reduce((s,c) => s + Number(c.amount || 0), 0) : 0;
+                const grandTotal = (netSubtotal + totalGstAmount + extraChargesTotal).toFixed(2);
 
                 return `
                 <div class="${isKot ? 'kot-section' : 'customer-section'}">
@@ -163,10 +196,16 @@ export default function BillingQueue() {
                                 let itemBaseRate, rowTotal;
                                 if (isPrintWithGst) {
                                     const finalItemPrice = parseFloat(c.price || 0) * (1 - discountRate / 100);
-                                    itemBaseRate = finalItemPrice / (1 + taxRate / 100);
+                                    const itemTaxRate = typeof c.taxRate === 'number' ? c.taxRate : taxRate;
+                                    if (effectiveTaxType === 'Exclusive') {
+                                        itemBaseRate = finalItemPrice;
+                                    } else {
+                                        itemBaseRate = finalItemPrice / (1 + itemTaxRate / 100);
+                                    }
                                     rowTotal = itemBaseRate * c.quantity;
                                 } else {
-                                    itemBaseRate = parseFloat(c.price || 0);
+                                    const finalItemPrice = parseFloat(c.price || 0) * (1 - discountRate / 100);
+                                    itemBaseRate = finalItemPrice;
                                     rowTotal = itemBaseRate * c.quantity;
                                 }
 

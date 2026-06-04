@@ -27,6 +27,10 @@ const LOG_FILE      = path.join(LOG_DIR, 'startup.log');
 const API_BASE      = 'http://localhost:8080/api';
 const PG_PORT       = 15432;
 
+// Fix for Windows bug where keyboard input stops working after some time
+app.disableHardwareAcceleration();
+app.commandLine.appendSwitch('disable-features', 'HardwareMediaKeyHandling');
+
 // ─── Resource Paths ────────────────────────────────────────────────────────────
 function resourcesPath() {
   return isDev
@@ -265,6 +269,7 @@ function openMainWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      backgroundThrottling: false, // Prevents background processes from pausing and losing focus
     },
   });
 
@@ -280,9 +285,28 @@ function openMainWindow() {
   }
 
   mainWindow.once('ready-to-show', () => {
-    if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();
+    if (splashWindow && !splashWindow.isDestroyed()) {
+        splashWindow.destroy(); // Ensure splash window is completely annihilated to prevent hidden focus stealing
+        splashWindow = null;
+    }
     mainWindow.show();
     mainWindow.maximize();
+    mainWindow.focus(); // Explicitly focus the main window
+  });
+
+  // Ensure keyboard focus is returned to the web view when the app gets focus
+  mainWindow.on('focus', () => {
+    if (mainWindow && mainWindow.webContents) {
+      mainWindow.webContents.focus();
+    }
+  });
+
+  // Ensure focus is returned when unminimized
+  mainWindow.on('restore', () => {
+    if (mainWindow && mainWindow.webContents) {
+      mainWindow.focus();
+      mainWindow.webContents.focus();
+    }
   });
 
   mainWindow.on('closed', () => { mainWindow = null; });

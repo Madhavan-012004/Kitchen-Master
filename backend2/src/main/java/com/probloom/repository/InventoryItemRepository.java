@@ -20,7 +20,7 @@ public interface InventoryItemRepository extends JpaRepository<InventoryItem, Lo
     @Query("SELECT i FROM InventoryItem i WHERE i.restaurant = :restaurant AND i.isActive = true AND i.currentStock <= i.lowStockThreshold")
     List<InventoryItem> findLowStockItems(@Param("restaurant") User restaurant);
 
-    Optional<InventoryItem> findByRestaurantAndNameAndIsActiveTrue(User restaurant, String name);
-    Optional<InventoryItem> findByRestaurantAndNameIgnoreCaseAndIsActiveTrue(User restaurant, String name);
-    Optional<InventoryItem> findByRestaurantAndNameIgnoreCaseAndBatchNoAndIsActiveTrue(User restaurant, String name, String batchNo);
+    List<InventoryItem> findByRestaurantAndNameAndIsActiveTrue(User restaurant, String name);
+    List<InventoryItem> findByRestaurantAndNameIgnoreCaseAndIsActiveTrue(User restaurant, String name);
+    List<InventoryItem> findByRestaurantAndNameIgnoreCaseAndBatchNoAndIsActiveTrue(User restaurant, String name, String batchNo);
 }

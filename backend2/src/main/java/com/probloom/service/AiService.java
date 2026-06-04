@@ -105,18 +105,67 @@ public class AiService {
     }
 
     public List<Map<String, Object>> analyzeInvoiceImage(byte[] imageBytes, String mimeType) {
-        String prompt = "Extract pharmacy invoice items into a JSON array. Each object should have: name, batchNo, expDate, hsnCode, qty, mrp, ptr, pack. Format: [{\"name\":\"...\", \"batchNo\":\"...\", \"expDate\":\"...\", \"hsnCode\":\"...\", \"qty\":0, \"mrp\":0, \"ptr\":0, \"pack\":\"...\"}]";
+        String prompt =
+            "You are an expert FMCG wholesale invoice data extraction engine. " +
+            "Carefully analyze the provided invoice image and extract every line item from the product table.\n\n" +
+
+            "The invoice table columns are (in order from left to right):\n" +
+            "  S.No | Material Description | HSN Code | Cas/EA (Cases = Box number) | Pcs (Pieces = Quantity) | MRP (Maximum Retail Price = Selling Rate) | Rate (Buying/Purchase Rate) | Free Qty (Free pieces given) | Dis. Amt (Discount Amount) | SGST (State GST amount) | CGST (Central GST amount) | Total Amt (Line total amount)\n\n" +
+
+            "Rules:\n" +
+            "- 'Cas' or 'Cases' or 'EA' = number of boxes/cases (field: cases)\n" +
+            "- 'Pcs' = number of individual pieces = quantity (field: qty)\n" +
+            "- 'MRP' = selling rate / maximum retail price (field: mrp)\n" +
+            "- 'Rate' = buying price / purchase cost per unit (field: costPerUnit)\n" +
+            "- 'Free Qty' or 'Free' = free pieces given at no cost (field: free)\n" +
+            "- 'Dis. Amt' or 'Discount' = monetary discount amount (field: discount)\n" +
+            "- 'SGST' = State GST tax amount in rupees (field: sgst)\n" +
+            "- 'CGST' = Central GST tax amount in rupees (field: cgst)\n" +
+            "- 'Total Amt' = final line total amount in rupees (field: totalAmount)\n" +
+            "- If any field is missing or zero, use 0 (number), not null.\n" +
+            "- Extract the supplier name, invoice number, invoice date, and grand total from the invoice header/footer.\n\n" +
+
+            "Return ONLY a valid JSON object in this exact structure — no markdown, no extra text:\n" +
+            "{\n" +
+            "  \"supplier\": \"supplier name here\",\n" +
+            "  \"invoiceNo\": \"invoice number here\",\n" +
+            "  \"invoiceDate\": \"date here\",\n" +
+            "  \"invoiceTotalAmount\": 0.00,\n" +
+            "  \"items\": [\n" +
+            "    {\n" +
+            "      \"sNo\": 1,\n" +
+            "      \"name\": \"Material Description\",\n" +
+            "      \"hsnCode\": \"21050000\",\n" +
+            "      \"cases\": 6,\n" +
+            "      \"qty\": 144,\n" +
+            "      \"mrp\": 10.00,\n" +
+            "      \"costPerUnit\": 8.38,\n" +
+            "      \"free\": 0,\n" +
+            "      \"discount\": 0.00,\n" +
+            "      \"sgst\": 30.17,\n" +
+            "      \"cgst\": 30.17,\n" +
+            "      \"totalAmount\": 1267.20\n" +
+            "    }\n" +
+            "  ]\n" +
+            "}";
+
         String base64Image = Base64.getEncoder().encodeToString(imageBytes);
         List<Map<String, Object>> parts = new ArrayList<>();
         parts.add(Map.of("text", prompt));
         parts.add(Map.of("inline_data", Map.of("mime_type", mimeType, "data", base64Image)));
 
         String text = callGemini(parts);
-        String json = extractJson(text, true);
+        String json = extractJson(text, false); // object-level extraction
         try {
-            return objectMapper.readValue(json, new TypeReference<List<Map<String, Object>>>() {});
+            Map<String, Object> result = objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+            // Return items list; wrap the full envelope as the first element for compatibility
+            // The controller returns List<Map> so we wrap the full response as a single-element list
+            // and let the frontend detect the 'items' key
+            List<Map<String, Object>> envelope = new ArrayList<>();
+            envelope.add(result);
+            return envelope;
         } catch (Exception e) {
-            throw new RuntimeException("Failed to parse invoice data from image.");
+            throw new RuntimeException("Failed to parse invoice data from image. Raw: " + text.substring(0, Math.min(200, text.length())));
         }
     }
 

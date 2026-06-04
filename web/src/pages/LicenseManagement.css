@@ -5,12 +5,13 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 .license-page {
+  height: 100%;
   min-height: 100vh;
+  overflow-y: auto;
   background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   padding: 2rem 1rem;
   font-family: 'Inter', sans-serif;
   color: #e2e8f0;
@@ -23,8 +24,9 @@
   border-radius: 24px;
   padding: 2.5rem;
   width: 100%;
-  max-width: 680px;
+  max-width: 1200px;
   box-shadow: 0 25px 50px rgba(0, 0, 0, 0.4);
+  margin: auto 0;
 }
 
 /* --- Header --- */
@@ -128,7 +130,7 @@
 /* --- Info Grid --- */
 .license-info-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(4, 1fr);
   gap: 1rem;
   margin-bottom: 2rem;
 }
@@ -163,7 +165,15 @@
 .license-divider {
   border: none;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
-  margin: 0 0 2rem;
+  margin: 0 0 1.5rem;
+}
+
+/* --- Layout Grid --- */
+.license-sections-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  margin-bottom: 1.5rem;
 }
 
 /* --- Section Titles --- */
@@ -392,6 +402,13 @@
 }
 
 /* Responsive */
+@media (max-width: 768px) {
+  .license-sections-grid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+}
+
 @media (max-width: 540px) {
   .license-info-grid {
     grid-template-columns: 1fr;

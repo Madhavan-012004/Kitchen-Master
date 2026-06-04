@@ -801,6 +801,7 @@ export default function POSPage() {
                         // Pharmacy / custom bill fields
                         billTemplate: user?.basicBillTemplate || order.billTemplate || 'standard',
                         printWithGst: order.printWithGst !== false,
+                        taxType: order.taxType || user?.taxType || 'Inclusive',
                         doctorName: order.doctorName || '',
                         numberOfDays: order.numberOfDays || '',
                         customerName: order.customerName || '',
@@ -933,38 +934,54 @@ export default function POSPage() {
                 const totalItemsCount = items.reduce((acc, item) => acc + item.quantity, 0);
                 const discountRate = parseFloat(jobDiscountPct) || 0;
                 const taxRate = typeof user?.taxRate === 'number' ? user.taxRate : 18;
+                const effectiveTaxType = orderData.taxType || user?.taxType || 'Inclusive';
                 
-                const originalSubtotal = isSupermarket && orderData.subtotal !== undefined
-                    ? orderData.subtotal
-                    : items.reduce((s, item) => s + (parseFloat(item.price || 0) * (parseFloat(item.quantity) || 0)), 0);
+                const originalSubtotal = items.reduce((s, item) => {
+                    const price = parseFloat(item.price || 0);
+                    const qty = parseFloat(item.quantity || 0);
+                    let basePrice;
+                    if (jobPrintWithGst !== false) {
+                        if (effectiveTaxType === 'Exclusive') {
+                            basePrice = price;
+                        } else {
+                            const itemTaxRate = typeof item.taxRate === 'number' ? item.taxRate : taxRate;
+                            basePrice = price / (1 + itemTaxRate / 100);
+                        }
+                    } else {
+                        basePrice = price;
+                    }
+                    return s + (basePrice * qty);
+                }, 0);
                 
-                const discountAmount = isSupermarket
-                    ? (discountRate > 0 ? originalSubtotal * (discountRate / 100) : (orderData.totalDiscount || 0))
-                    : originalSubtotal * (discountRate / 100);
-                
+                const discountAmount = originalSubtotal * (discountRate / 100);
                 const netSubtotal = originalSubtotal - discountAmount;
-                
-                const taxableSubtotal = isSupermarket
-                    ? (netSubtotal - (orderData.totalTax || 0))
-                    : (jobPrintWithGst !== false ? netSubtotal / (1 + taxRate / 100) : netSubtotal);
+                const taxableSubtotal = netSubtotal;
 
-                const totalGstAmount = isSupermarket && orderData.totalTax !== undefined
-                    ? orderData.totalTax
-                    : (jobPrintWithGst !== false ? netSubtotal - taxableSubtotal : 0);
+                let totalGstAmount = 0;
+                if (jobPrintWithGst !== false) {
+                    items.forEach(item => {
+                        const price = parseFloat(item.price || 0);
+                        const qty = parseFloat(item.quantity || 0);
+                        const itemTaxRate = typeof item.taxRate === 'number' ? item.taxRate : taxRate;
+                        const finalItemPrice = price * (1 - discountRate / 100);
+                        
+                        if (effectiveTaxType === 'Inclusive') {
+                            const itemBaseRate = finalItemPrice / (1 + itemTaxRate / 100);
+                            totalGstAmount += (finalItemPrice - itemBaseRate) * qty;
+                        } else {
+                            totalGstAmount += finalItemPrice * (itemTaxRate / 100) * qty;
+                        }
+                    });
+                }
                 
-                const sgstAmount = isSupermarket && orderData.totalSgst !== undefined
-                    ? orderData.totalSgst
-                    : totalGstAmount / 2;
-                
-                const cgstAmount = isSupermarket && orderData.totalCgst !== undefined
-                    ? orderData.totalCgst
-                    : totalGstAmount / 2;
+                const sgstAmount = totalGstAmount / 2;
+                const cgstAmount = totalGstAmount / 2;
                 
                 const extraTotal = extraCharges ? extraCharges.reduce((s,c) => s + Number(c.amount || 0), 0) : 0;
                 
                 const grandTotal = isSupermarket && orderData.total !== undefined
                     ? orderData.total.toFixed(2)
-                    : (netSubtotal + extraTotal).toFixed(2);
+                    : (netSubtotal + totalGstAmount + extraTotal).toFixed(2);
                 
                 const sgstPct = taxRate / 2;
                 const cgstPct = taxRate / 2;
@@ -1008,10 +1025,11 @@ export default function POSPage() {
                                 let itemBaseRate, rowTotal;
                                 if (jobPrintWithGst !== false) {
                                     const finalItemPrice = parseFloat(c.price || 0) * (1 - discountRate / 100);
-                                    if (taxType === 'Exclusive') {
+                                    const itemTaxRate = typeof c.taxRate === 'number' ? c.taxRate : taxRate;
+                                    if (effectiveTaxType === 'Exclusive') {
                                         itemBaseRate = finalItemPrice;
                                     } else {
-                                        itemBaseRate = finalItemPrice / (1 + taxRate / 100);
+                                        itemBaseRate = finalItemPrice / (1 + itemTaxRate / 100);
                                     }
                                     rowTotal = itemBaseRate * c.quantity;
                                 } else {
@@ -1961,7 +1979,7 @@ export default function POSPage() {
                                         className="compact-btn"
                                         onClick={handleA4Invoice}
                                         disabled={!orders[selectedTable] || savingOrder}
-                                        style={{ background: 'linear-gradient(135deg, #4f46e5, #3b82f6)' }}
+                                        style={{ background: 'linear-gradient(135deg, #4f46e5, #3b82f6)', color: '#fff' }}
                                     >
                                         📄 A4 PDF
                                     </button>
@@ -1969,7 +1987,7 @@ export default function POSPage() {
                                         className="compact-btn"
                                         onClick={handleWhatsApp}
                                         disabled={!orders[selectedTable] || savingOrder}
-                                        style={{ background: 'linear-gradient(135deg, #25D366, #128C7E)' }}
+                                        style={{ background: 'linear-gradient(135deg, #25D366, #128C7E)', color: '#fff' }}
                                     >
                                         💬 WhatsApp
                                     </button>

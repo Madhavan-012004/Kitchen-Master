@@ -278,6 +278,9 @@ public class User {
     @Column(name = "accent_color")
     private String accentColor = "#C6F53D";
 
+    @Column(name = "cloud_backup_path")
+    private String cloudBackupPath;
+
     @Column(name = "stock_categories", columnDefinition = "TEXT")
     private String stockCategories = "General,Grocery,Clothing,Pharmacy,Others";
 
@@ -342,7 +345,10 @@ public class User {
     public void setPrintLanguage(String printLanguage) { this.printLanguage = printLanguage; }
 
     public String getAccentColor() { return accentColor; }
-    public void setAccentColor(String accentColor) { this.accentColor = accentColor; }
+    public void setAccentColor(String a) { this.accentColor = a; }
+
+    public String getCloudBackupPath() { return cloudBackupPath; }
+    public void setCloudBackupPath(String path) { this.cloudBackupPath = path; }
 
     public Boolean getOnboardingCompleted() { return onboardingCompleted; }
     public void setOnboardingCompleted(Boolean onboardingCompleted) { this.onboardingCompleted = onboardingCompleted; }
@@ -535,6 +541,7 @@ public class User {
         public UserBuilder preferredLanguage(String l) { u.setPreferredLanguage(l); return this; }
         public UserBuilder printLanguage(String l) { u.setPrintLanguage(l); return this; }
         public UserBuilder accentColor(String a) { u.setAccentColor(a); return this; }
+        public UserBuilder cloudBackupPath(String p) { u.setCloudBackupPath(p); return this; }
         public UserBuilder stockCategories(String c) { u.setStockCategories(c); return this; }
     }
 }

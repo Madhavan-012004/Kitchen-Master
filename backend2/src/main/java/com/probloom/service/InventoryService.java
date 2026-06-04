@@ -50,8 +50,11 @@ public class InventoryService {
     }
 
     public InventoryItem getByName(@NonNull User restaurant, @NonNull String name) {
-        return inventoryItemRepository.findByRestaurantAndNameIgnoreCaseAndIsActiveTrue(restaurant, name)
-                .orElseThrow(() -> new ResourceNotFoundException("Inventory item not found with name: " + name));
+        List<InventoryItem> items = inventoryItemRepository.findByRestaurantAndNameIgnoreCaseAndIsActiveTrue(restaurant, name);
+        if (items.isEmpty()) {
+            throw new ResourceNotFoundException("Inventory item not found with name: " + name);
+        }
+        return items.get(0);
     }
 
     @Transactional
@@ -469,11 +472,17 @@ public class InventoryService {
                     }
                 }
 
-                // Check for duplicates (Name + Batch)
+                // Check for duplicates (Name + Batch + Price)
                 String batch = (String) data.get("batchNo");
-                java.util.Optional<InventoryItem> existing = (batch != null && !batch.isEmpty())
+                List<InventoryItem> existingList = (batch != null && !batch.isEmpty())
                     ? inventoryItemRepository.findByRestaurantAndNameIgnoreCaseAndBatchNoAndIsActiveTrue(restaurant, itemName, batch)
                     : inventoryItemRepository.findByRestaurantAndNameIgnoreCaseAndIsActiveTrue(restaurant, itemName);
+
+                double incomingPrice = data.containsKey("price") ? (double) data.get("price") : 0.0;
+
+                java.util.Optional<InventoryItem> existing = existingList.stream()
+                    .filter(item -> Math.abs((item.getPrice() != null ? item.getPrice() : 0.0) - incomingPrice) < 0.001)
+                    .findFirst();
 
                 if (existing.isPresent()) {
                     // Update existing — add total pieces (paid + free)
@@ -642,6 +651,11 @@ public class InventoryService {
     }
 
     @Transactional
+    public void clearMovements(@NonNull User restaurant) {
+        stockMovementRepository.deleteByRestaurant(restaurant);
+    }
+
+    @Transactional
     @SuppressWarnings("unchecked")
     public void bulkAdd(@NonNull User restaurant, @NonNull Map<String, Object> body) {
         String invoiceNo = (String) body.getOrDefault("invoiceNo", "");
@@ -654,10 +668,12 @@ public class InventoryService {
         double totalDiscount = 0;
         double totalAmount = 0;
         int itemCount = 0;
+        List<String> itemNames = new java.util.ArrayList<>();
 
         for (Map<String, Object> itemData : itemsList) {
             String itemName = (String) itemData.get("name");
             if (itemName == null || itemName.trim().isEmpty()) continue;
+            itemNames.add(itemName);
 
             String batch = itemData.get("batchNo") != null ? itemData.get("batchNo").toString() : "";
             double qty = safeParseDouble(itemData.getOrDefault("qty", "0").toString());
@@ -675,15 +691,24 @@ public class InventoryService {
             String packSize = (String) itemData.getOrDefault("packSize", "1x1");
             int multiplier = parsePackMultiplier(packSize);
 
-            double paidPieces = qty * multiplier;
-            double freePieces = free * multiplier;
+            double paidPieces = qty;
+            double freePieces = free;
             double totalPieces = paidPieces + freePieces;
 
-            double ratePerPiece = multiplier > 0 ? costPerUnit / multiplier : costPerUnit;
-            double pricePerPiece = multiplier > 0 ? price / multiplier : price;
+            double ratePerPiece = costPerUnit;
+            double pricePerPiece = price;
 
             double lineBase = costPerUnit * qty;
             double lineGst = lineBase * gstPct / 100.0;
+            
+            if (itemData.containsKey("sgst") || itemData.containsKey("cgst")) {
+                double sgst = safeParseDouble(itemData.getOrDefault("sgst", "0").toString());
+                double cgst = safeParseDouble(itemData.getOrDefault("cgst", "0").toString());
+                if (sgst + cgst > 0) {
+                    lineGst = sgst + cgst;
+                }
+            }
+
             double lineTotal = lineBase + lineGst - discountAmt;
 
             totalGst += lineGst;
@@ -696,9 +721,13 @@ public class InventoryService {
                 reason += " (Inv #" + invoiceNo + ")";
             }
 
-            java.util.Optional<InventoryItem> existing = (!batch.isEmpty())
+            List<InventoryItem> existingList = (!batch.isEmpty())
                 ? inventoryItemRepository.findByRestaurantAndNameIgnoreCaseAndBatchNoAndIsActiveTrue(restaurant, itemName, batch)
                 : inventoryItemRepository.findByRestaurantAndNameIgnoreCaseAndIsActiveTrue(restaurant, itemName);
+
+            java.util.Optional<InventoryItem> existing = existingList.stream()
+                .filter(item -> Math.abs((item.getPrice() != null ? item.getPrice() : 0.0) - pricePerPiece) < 0.001)
+                .findFirst();
 
             if (existing.isPresent()) {
                 InventoryItem item = existing.get();
@@ -741,6 +770,9 @@ public class InventoryService {
 
         if (totalAmount > 0 && !invoiceNo.isEmpty()) {
             String finalDesc = "Invoice Import - " + itemCount + " item(s)";
+            if (!itemNames.isEmpty()) {
+                finalDesc += " (" + String.join(", ", itemNames) + ")";
+            }
             if (!supplierName.isEmpty()) finalDesc = supplierName + " - " + finalDesc;
 
             transactionService.createOrUpdateByInvoice(
