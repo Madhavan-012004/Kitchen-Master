@@ -1,0 +1,248 @@
+server:
+  port: 8080
+  address: 0.0.0.0
+
+# ─────────────────────────────────────────────────
+# Default profile (development) — uses cloud PostgreSQL
+# ─────────────────────────────────────────────────
+spring:
+  devtools:
+    restart:
+      enabled: false
+  config:
+    import: optional:file:.env[.properties]
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:kitchen_master_db}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:root}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 15
+      minimum-idle: 3
+      connection-timeout: 20000        # fail fast if no connection in 20s
+      idle-timeout: 300000             # release idle connections after 5 min
+      max-lifetime: 1200000            # recycle connections after 20 min
+      keepalive-time: 60000            # ping DB every 60s to keep connection alive
+      leak-detection-threshold: 30000  # warn if connection held > 30s (bug detection)
+      connection-test-query: SELECT 1  # validate connection before use
+      validation-timeout: 5000
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        jdbc:
+          time_zone: UTC
+          batch_size: 25
+        order_inserts: true
+        order_updates: true
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 15MB
+      max-request-size: 16MB
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:kitchen_master_super_secret_jwt_key_2024}
+    expiration: 2592000000   # 30 days in ms
+  gemini:
+    api-key: ${GEMINI_API_KEY:AIzaSyCBd_MdqR-3qIYgDt2iD3XnzyeyBtt11hA}
+    model: ${GEMINI_MODEL:gemini-1.5-flash}
+    api-url: https://generativelanguage.googleapis.com/v1beta/models
+  upload:
+    path: ${UPLOAD_PATH:./uploads}
+    max-size: 15728640   # 15MB
+
+offline:
+  cloud:
+    # Cloud fallback DB — used by OfflineFirstLoginService when user is not found locally
+    # In dev/cloud mode this points to the same DB, so login is always direct.
+    url: ${OFFLINE_CLOUD_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:kitchen_master_db}}
+    username: ${OFFLINE_CLOUD_USERNAME:${DB_USER:postgres}}
+    password: ${OFFLINE_CLOUD_PASSWORD:${DB_PASSWORD:root}}
+
+logging:
+  level:
+    com.probloom: DEBUG
+    org.springframework.security: WARN
+
+---
+# ─────────────────────────────────────────────────
+# Standalone profile — kept for backward compatibility
+# ─────────────────────────────────────────────────
+spring:
+  config:
+    activate:
+      on-profile: standalone
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://127.0.0.1:5432/postgres}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+      initialization-fail-timeout: -1
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 15MB
+      max-request-size: 16MB
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:kitchen_master_super_secret_jwt_key_2024}
+    expiration: 2592000000
+  gemini:
+    api-key: ${GEMINI_API_KEY:AIzaSyCBd_MdqR-3qIYgDt2iD3XnzyeyBtt11hA}
+    model: ${GEMINI_MODEL:gemini-1.5-flash}
+    api-url: https://generativelanguage.googleapis.com/v1beta/models
+  upload:
+    path: ${UPLOAD_PATH:./uploads}
+    max-size: 15728640
+
+---
+# ─────────────────────────────────────────────────
+# Electron profile — activated by the Electron EXE
+# Simple standard datasource — NO custom DataSource
+# beans (bypasses DataSourceConfig/EmbeddedPostgresConfig).
+# Electron starts portable PostgreSQL on 5432 first,
+# then passes connection details via -D JVM args.
+# ─────────────────────────────────────────────────
+spring:
+  config:
+    activate:
+      on-profile: electron
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://127.0.0.1:15432/postgres}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 15
+      minimum-idle: 3
+      connection-timeout: 20000
+      idle-timeout: 300000
+      max-lifetime: 1200000
+      keepalive-time: 60000
+      leak-detection-threshold: 30000
+      connection-test-query: SELECT 1
+      validation-timeout: 5000
+      initialization-fail-timeout: -1
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 15MB
+      max-request-size: 16MB
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:kitchen_master_super_secret_jwt_key_2024}
+    expiration: 2592000000
+  gemini:
+    api-key: ${GEMINI_API_KEY:AIzaSyCBd_MdqR-3qIYgDt2iD3XnzyeyBtt11hA}
+    model: ${GEMINI_MODEL:gemini-1.5-flash}
+    api-url: https://generativelanguage.googleapis.com/v1beta/models
+  upload:
+    path: ${UPLOAD_PATH:./uploads}
+    max-size: 15728640
+
+offline:
+  cloud:
+    # Cloud DB credentials — passed via JVM args from main.cjs or via .env file
+    # Example: -Doffline.cloud.url=jdbc:postgresql://your-cloud-host:5432/kitchen_master_db
+    #          -Doffline.cloud.username=postgres
+    #          -Doffline.cloud.password=your_password
+    url: ${OFFLINE_CLOUD_URL:#{null}}
+    username: ${OFFLINE_CLOUD_USERNAME:#{null}}
+    password: ${OFFLINE_CLOUD_PASSWORD:#{null}}
+
+logging:
+  level:
+    com.probloom: INFO
+    org.springframework.security: WARN
+
+---
+# ─────────────────────────────────────────────────
+# Render profile — activated on Render cloud hosting
+# DATABASE_URL is injected by Render as a full
+# postgresql:// connection string (with credentials).
+# ─────────────────────────────────────────────────
+spring:
+  config:
+    activate:
+      on-profile: render
+  datasource:
+    # Render provides DATABASE_URL as:
+    # postgresql://user:pass@host:5432/dbname
+    # Spring JDBC needs the jdbc: prefix
+    url: jdbc:${DATABASE_URL}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+      connection-timeout: 20000
+      idle-timeout: 300000
+      max-lifetime: 900000
+      keepalive-time: 60000
+      connection-test-query: SELECT 1
+      validation-timeout: 5000
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+        jdbc:
+          time_zone: UTC
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 15MB
+      max-request-size: 16MB
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:render_fallback_secret_change_me}
+    expiration: 2592000000
+  gemini:
+    api-key: ${GEMINI_API_KEY:}
+    model: ${GEMINI_MODEL:gemini-1.5-flash}
+    api-url: https://generativelanguage.googleapis.com/v1beta/models
+  upload:
+    path: ${UPLOAD_PATH:./uploads}
+    max-size: 15728640
+
+offline:
+  cloud:
+    url: ${OFFLINE_CLOUD_URL:#{null}}
+    username: ${OFFLINE_CLOUD_USERNAME:#{null}}
+    password: ${OFFLINE_CLOUD_PASSWORD:#{null}}
+
+logging:
+  level:
+    com.probloom: INFO
+    org.springframework.security: WARN

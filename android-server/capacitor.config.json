@@ -1,0 +1,10 @@
+{
+    "appId": "com.probloom.pos",
+    "appName": "ProBloom",
+    "webDir": "www",
+    "bundledWebRuntime": false,
+    "server": {
+        "url": "https://probloom-backend.onrender.com",
+        "cleartext": false
+    }
+}
