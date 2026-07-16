@@ -1,0 +1,7 @@
+easyocr
+pdfplumber
+pypdfium2
+Pillow
+numpy
+pandas
+openpyxl
