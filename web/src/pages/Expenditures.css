@@ -30,8 +30,8 @@
 }
 
 .add-exp-btn {
-    background: linear-gradient(135deg, var(--accent), var(--accent-dark));
-    color: #000;
+    background: var(--text-primary);
+    color: var(--bg-primary);
     border: none;
     padding: 10px 20px;
     border-radius: 8px;

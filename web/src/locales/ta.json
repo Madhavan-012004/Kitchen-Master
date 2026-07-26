@@ -2,13 +2,14 @@
   "nav": {
     "pos": "விற்பனை / பில்லிங்",
     "kitchen": "சமையலறை காட்சி",
-    "billing": "விற்பனை",
+    "billing": "தற்போதைய ஆர்டர்கள்",
     "orders": "விற்பனை வரலாறு",
     "menu": "மெனு",
     "staff": "ஊழியர்கள்",
     "analytics": "பகுப்பாய்வு",
     "attendance": "வருகைப்பதிவு",
     "assistant": "ProBloom உதவியாளர்",
+    "whatsapp": "WhatsApp மையம்",
     "inventory": "சரக்கு",
     "expenditures": "செலவுகள்",
     "settings": "அமைப்புகள் & சுயவிவரம்",
@@ -18,7 +19,8 @@
     "history_short": "வரலாறு",
     "settings_short": "அமைப்புகள்",
     "restaurant": "உணவகம்",
-    "market": "சந்தை"
+    "market": "சந்தை",
+    "customers": "வாடிக்கையாளர்கள்"
   },
   "common": {
     "save": "சேமி",

@@ -1,0 +1,6 @@
+{
+    "appId": "com.probloom.pos",
+    "appName": "ProBloom",
+    "webDir": "www",
+    "bundledWebRuntime": false
+}

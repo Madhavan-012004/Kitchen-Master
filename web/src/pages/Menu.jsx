@@ -199,7 +199,7 @@ export default function MenuPage() {
                     <span className="page-count">{items.length} {t('pos.items')}</span>
                 </div>
                 {isManagerOrOwner && (
-                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                    <div className="menu-header-actions">
                         <input
                             type="file"
                             id="menuCsvImport"
@@ -208,27 +208,29 @@ export default function MenuPage() {
                             onChange={handleImport}
                         />
                         <button
-                            className="add-btn"
+                            className="menu-secondary-btn tooltip-btn"
                             onClick={handleDownloadTemplate}
                             title={t('menu.download_template_hint', 'Download a sample CSV with Tamil names and image_url column')}
                         >
-                            📄 {t('menu.download_template', 'Download CSV Template')}
+                            📄 <span className="btn-text">{t('menu.download_template', 'Template')}</span>
                         </button>
                         <button
-                            className="add-btn"
+                            className="menu-secondary-btn"
                             onClick={() => document.getElementById('menuCsvImport').click()}
                             disabled={importing}
                         >
-                            {importing ? t('menu.importing', 'Importing...') : `📥 ${t('menu.import_csv', 'Import CSV')}`}
+                            {importing ? t('menu.importing', 'Importing...') : (
+                                <>📥 <span className="btn-text">{t('menu.import_csv', 'Import')}</span></>
+                            )}
                         </button>
                         <button
-                            className="add-btn"
+                            className="menu-danger-btn"
                             onClick={handleDeleteAll}
                             disabled={loading}
                         >
-                            🗑️ {t('menu.delete_all', 'Delete All')}
+                            🗑️ <span className="btn-text">{t('menu.delete_all', 'Delete All')}</span>
                         </button>
-                        <button className="add-btn" onClick={handleAdd}>+ {t('menu.add_item')}</button>
+                        <button className="menu-primary-btn" onClick={handleAdd}>+ <span className="btn-text">{t('menu.add_item')}</span></button>
                     </div>
                 )}
             </div>

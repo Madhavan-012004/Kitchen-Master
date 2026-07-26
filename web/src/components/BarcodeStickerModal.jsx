@@ -3,6 +3,7 @@ import api from '../api/client';
 import JsBarcode from 'jsbarcode';
 import { generateTSPL } from '../utils/tsplHelper';
 import { useAuth } from '../context/AuthContext';
+import { assignLabelCodes, generateAndDownloadA4Labels } from '../utils/labelPdfGenerator';
 
 const BarcodeStickerModal = ({ show, onClose, items }) => {
     const [printItems, setPrintItems] = useState([]);
@@ -33,13 +34,13 @@ const BarcodeStickerModal = ({ show, onClose, items }) => {
         try {
             const shopName = user?.restaurantName || "ProBloom";
             const tsplData = generateTSPL(printItems, shopName, labelHeight, gapHeight);
-            
+
             // Send to backend bridge
             const res = await api.post('/print/raw', {
                 data: tsplData,
                 printerName: printerName || "TSC"
             });
-            
+
             if (res.data.success) {
                 alert("Thermal print job sent to printer!");
             } else {
@@ -58,7 +59,7 @@ const BarcodeStickerModal = ({ show, onClose, items }) => {
         try {
             const shopName = user?.restaurantName || "ProBloom";
             let tsplData = generateTSPL(printItems, shopName, { height: labelHeight, gap: gapHeight });
-            
+
             if (!navigator.bluetooth) {
                 throw new Error("Web Bluetooth API is not supported in this browser. Please use Chrome/Edge on Android, Mac, or Windows.");
             }
@@ -71,7 +72,7 @@ const BarcodeStickerModal = ({ show, onClose, items }) => {
             const server = await device.gatt.connect();
             const services = await server.getPrimaryServices();
             let writeCharacteristic = null;
-            
+
             for (const service of services) {
                 const characteristics = await service.getCharacteristics();
                 for (const char of characteristics) {
@@ -90,7 +91,7 @@ const BarcodeStickerModal = ({ show, onClose, items }) => {
             const encoder = new TextEncoder();
             const data = encoder.encode(tsplData);
             const CHUNK_SIZE = 512;
-            
+
             for (let i = 0; i < data.length; i += CHUNK_SIZE) {
                 const chunk = data.slice(i, i + CHUNK_SIZE);
                 if (writeCharacteristic.properties.writeWithoutResponse) {
@@ -99,7 +100,7 @@ const BarcodeStickerModal = ({ show, onClose, items }) => {
                     await writeCharacteristic.writeValue(chunk);
                 }
             }
-            
+
             alert("Sent to Bluetooth printer successfully!");
         } catch (err) {
             console.error('Bluetooth print failed:', err);
@@ -114,20 +115,20 @@ const BarcodeStickerModal = ({ show, onClose, items }) => {
         try {
             const shopName = user?.restaurantName || "ProBloom";
             let tsplData = generateTSPL(printItems, shopName, { height: labelHeight, gap: gapHeight });
-            
+
             if (!("serial" in navigator)) {
                 throw new Error("Web Serial API not supported in this browser.");
             }
 
             const port = await navigator.serial.requestPort();
             await port.open({ baudRate: 9600 });
-            
+
             const encoder = new TextEncoder();
             const writer = port.writable.getWriter();
             await writer.write(encoder.encode(tsplData));
             writer.releaseLock();
             await port.close();
-            
+
             alert("Sent to Serial/USB printer successfully!");
         } catch (err) {
             console.error('Serial print failed:', err);
@@ -149,6 +150,26 @@ const BarcodeStickerModal = ({ show, onClose, items }) => {
         URL.revokeObjectURL(url);
     };
 
+    const handleDownloadA4Pdf = () => {
+        setIsPrinting(true);
+        setTimeout(() => {
+            try {
+                const shopName = user?.restaurantName || 'ProBloom';
+                const itemsWithCodes = assignLabelCodes(printItems);
+                // carry over the printQty chosen by user
+                const mapped = itemsWithCodes.map((item, i) => ({
+                    ...item,
+                    printQty: printItems[i]?.printQty ?? item.printQty
+                })).filter(i => (parseInt(i.printQty) || 0) > 0);
+                generateAndDownloadA4Labels(mapped, shopName);
+            } catch (e) {
+                alert('PDF generation failed: ' + e.message);
+            } finally {
+                setIsPrinting(false);
+            }
+        }, 50);
+    };
+
     const updateQty = (idx, val) => {
         const next = [...printItems];
         next[idx].printQty = parseInt(val) || 0;
@@ -162,20 +183,20 @@ const BarcodeStickerModal = ({ show, onClose, items }) => {
                     <h2>🖨️ Barcode Sticker Labels</h2>
                     <button className="close-x" onClick={onClose}>&times;</button>
                 </div>
-                
+
                 <div className="modal-form">
                     <p style={{ color: '#666', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
                         Set the number of copies for each item. These labels are optimized for standard 50mm x 25mm or 38mm x 25mm sticker rolls.
                     </p>
-                    
+
                     <div className="sticker-preview-list">
                         {/* Printer Settings */}
                         <div className="printer-config-row" style={{ padding: '1rem', borderBottom: '1px solid var(--border)', background: '#f8fafc', display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
                             <div style={{ flex: 1, minWidth: '150px' }}>
                                 <label style={{ margin: 0, fontSize: '0.85rem', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>🖨️ Printer Name:</label>
-                                <input 
-                                    type="text" 
-                                    value={printerName} 
+                                <input
+                                    type="text"
+                                    value={printerName}
                                     onChange={(e) => setPrinterName(e.target.value)}
                                     placeholder="e.g. TSC TE244"
                                     style={{ width: '100%', padding: '0.4rem 0.8rem', borderRadius: '6px', border: '1px solid #cbd5e1' }}
@@ -183,9 +204,9 @@ const BarcodeStickerModal = ({ show, onClose, items }) => {
                             </div>
                             <div style={{ width: '100px' }}>
                                 <label style={{ margin: 0, fontSize: '0.85rem', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>Height (mm):</label>
-                                <input 
-                                    type="number" 
-                                    value={labelHeight} 
+                                <input
+                                    type="number"
+                                    value={labelHeight}
                                     onChange={(e) => setLabelHeight(parseFloat(e.target.value) || 0)}
                                     step="0.1"
                                     style={{ width: '100%', padding: '0.4rem 0.8rem', borderRadius: '6px', border: '1px solid #cbd5e1' }}
@@ -193,16 +214,16 @@ const BarcodeStickerModal = ({ show, onClose, items }) => {
                             </div>
                             <div style={{ width: '100px' }}>
                                 <label style={{ margin: 0, fontSize: '0.85rem', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>Gap (mm):</label>
-                                <input 
-                                    type="number" 
-                                    value={gapHeight} 
+                                <input
+                                    type="number"
+                                    value={gapHeight}
                                     onChange={(e) => setGapHeight(parseFloat(e.target.value) || 0)}
                                     step="0.1"
                                     style={{ width: '100%', padding: '0.4rem 0.8rem', borderRadius: '6px', border: '1px solid #cbd5e1' }}
                                 />
                             </div>
                         </div>
-                        
+
                         {printItems.map((item, idx) => (
                             <div key={idx} className="sticker-entry-row">
                                 <div className="entry-info">
@@ -211,9 +232,9 @@ const BarcodeStickerModal = ({ show, onClose, items }) => {
                                 </div>
                                 <div className="entry-controls">
                                     <label>Copies:</label>
-                                    <input 
-                                        type="number" 
-                                        value={item.printQty} 
+                                    <input
+                                        type="number"
+                                        value={item.printQty}
                                         onChange={(e) => updateQty(idx, e.target.value)}
                                         min="0"
                                     />
@@ -228,6 +249,9 @@ const BarcodeStickerModal = ({ show, onClose, items }) => {
 
                 <div className="modal-footer" style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', justifyContent: 'center' }}>
                     <button className="cancel-btn" onClick={onClose}>Cancel</button>
+                    <button className="save-btn" onClick={handleDownloadA4Pdf} disabled={printItems.length === 0 || isPrinting} style={{ background: '#0f172a', flex: 2, minWidth: '80px', padding: '10px 8px', fontWeight: 700 }} title="Download A4 label sheet PDF">
+                        {isPrinting ? '⏳...' : '📄 A4 PDF'}
+                    </button>
                     <button className="save-btn" onClick={handleDownloadPRN} style={{ background: '#10b981', flex: 1, minWidth: '40px', padding: '10px 5px' }} title="Download .PRN">
                         📥
                     </button>

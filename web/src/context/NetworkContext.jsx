@@ -2,104 +2,149 @@ import React, { createContext, useContext, useState, useCallback, useRef, useEff
 
 const NetworkContext = createContext(null)
 
-// The health endpoint to poll — uses the same base as all other requests
 const isElectron = window.location.protocol === 'file:';
-const HEALTH_URL = isElectron ? 'http://localhost:8080/api/status' : '/api/status';
-const POLL_INTERVAL_MS = 8000
-const RETRY_COUNTDOWN_SEC = 5
+const isAndroid = /android/i.test(navigator.userAgent);
+const BASE = 'https://kitchen-master.onrender.com/api';
+const HEALTH_URL = `${BASE}/status`;
+const PING_URL = `${BASE}/status/ping`;   // ultra-fast liveness check (no DB query)
+
+// Timing constants — tuned for Render free tier which cold-starts in 30-60s
+const BG_CHECK_INTERVAL_MS = 30_000   // background liveness check every 30s
+const RECOVERY_POLL_MS = 5_000   // when offline, re-check every 5s for fast recovery
+const PING_TIMEOUT_MS = 70_000   // allow 70s for cold start wake-up
+const HEALTH_TIMEOUT_MS = 90_000   // allow 90s for full health check on cold start
+const RECHECK_DELAY_MS = 5_000   // wait before confirming a failure (avoid flash)
+const RETRY_COUNTDOWN_SEC = 5       // countdown shown on overlay
 
 export function NetworkProvider({ children }) {
     const [isOffline, setIsOffline] = useState(false)
-    const [errorType, setErrorType] = useState(null) // 'no_internet' | 'timeout' | 'server_error' | 'server_down'
+    const [errorType, setErrorType] = useState(null)
     const [statusCode, setStatusCode] = useState(null)
-    const pollTimerRef = useRef(null)
-    const bgCheckRef = useRef(null)     // ← background periodic check (always running)
+
+    const recoveryPollRef = useRef(null)
+    const bgCheckRef = useRef(null)
     const isOfflineRef = useRef(false)
+    const pendingRecheckRef = useRef(false)
 
-    // Keep ref in sync so the interceptor (outside React) can read it
-    useEffect(() => {
-        isOfflineRef.current = isOffline
-    }, [isOffline])
+    // Keep ref in sync so non-React code (interceptor) can read it
+    useEffect(() => { isOfflineRef.current = isOffline }, [isOffline])
 
-    const stopPolling = useCallback(() => {
-        if (pollTimerRef.current) {
-            clearInterval(pollTimerRef.current)
-            pollTimerRef.current = null
+    // ── Go online ─────────────────────────────────────────────────────────────
+    const goOnline = useCallback(() => {
+        setIsOffline(false)
+        setErrorType(null)
+        setStatusCode(null)
+        // Stop the aggressive recovery polling — background check takes over
+        if (recoveryPollRef.current) {
+            clearInterval(recoveryPollRef.current)
+            recoveryPollRef.current = null
         }
     }, [])
 
+    // ── Start aggressive recovery polling ────────────────────────────────────
+    const startRecoveryPolling = useCallback((checkFn) => {
+        if (recoveryPollRef.current) return // already polling
+        recoveryPollRef.current = setInterval(checkFn, RECOVERY_POLL_MS)
+    }, [])
+
+    // ── Fast ping: just checks server liveness (no DB) ────────────────────────
+    const ping = useCallback(async () => {
+        try {
+            const res = await fetch(PING_URL, {
+                method: 'GET',
+                signal: AbortSignal.timeout(PING_TIMEOUT_MS),
+                cache: 'no-store',
+            })
+            return res.ok
+        } catch {
+            return false
+        }
+    }, [])
+
+    // ── Full health check with DB validation ─────────────────────────────────
     const checkHealth = useCallback(async (isRecheck = false) => {
         try {
             const token = sessionStorage.getItem('km_token')
             const res = await fetch(HEALTH_URL, {
                 method: 'GET',
                 headers: token ? { Authorization: `Bearer ${token}` } : {},
-                signal: AbortSignal.timeout(5000),
+                signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
+                cache: 'no-store',
             })
+
+            // Any real HTTP response (even auth errors) means server is reachable
             if (res.ok || res.status === 401 || res.status === 403 || res.status === 404) {
-                // Any real HTTP response (even auth errors) means server is UP
-                setIsOffline(false)
-                setErrorType(null)
-                setStatusCode(null)
-                stopPolling()
-                return true  // server reachable
+                if (isOfflineRef.current) goOnline()
+                return true
             }
-            // 5xx from health endpoint — confirm with a re-check before showing overlay
-            // to avoid flashing on a single transient failure
-            if (!isRecheck) {
-                setTimeout(() => checkHealth(true), 2000)
+
+            // 5xx — double-check before showing overlay to avoid false positives
+            if (!isRecheck && !pendingRecheckRef.current) {
+                pendingRecheckRef.current = true
+                setTimeout(() => {
+                    pendingRecheckRef.current = false
+                    checkHealth(true)
+                }, RECHECK_DELAY_MS)
                 return false
             }
+
             if (!isOfflineRef.current) {
                 setIsOffline(true)
                 setErrorType('server_error')
                 setStatusCode(res.status)
+                startRecoveryPolling(() => checkHealth())
             }
             return false
+
         } catch (e) {
-            // Fetch failed = local backend is not running or not reachable
+            // No response at all — backend is down or unreachable
             if (!isOfflineRef.current) {
                 const isTimeout = e?.name === 'TimeoutError' || e?.message?.includes('timeout')
                 setIsOffline(true)
                 setErrorType(isTimeout ? 'timeout' : 'server_down')
                 setStatusCode(null)
-                startPolling()
+                startRecoveryPolling(() => checkHealth())
             }
             return false
         }
-    }, [stopPolling])
+    }, [goOnline, startRecoveryPolling])
 
-    const startPolling = useCallback(() => {
-        stopPolling()
-        pollTimerRef.current = setInterval(checkHealth, POLL_INTERVAL_MS)
-    }, [checkHealth, stopPolling])
+    // ── Background liveness check (always running) ───────────────────────────
+    // Uses the fast /ping endpoint to avoid hammering the DB every 10s
+    const bgCheck = useCallback(async () => {
+        // Skip if offline (recovery poll handles this)
+        if (isOfflineRef.current) return
 
-    // ── Proactive background check (runs always, every 12s) ──────────────────────
-    // This is what makes the overlay appear on the LOGIN page without any user action.
+        const alive = await ping()
+        if (!alive) {
+            // Ping failed — do a full health check to confirm and get error type
+            await checkHealth()
+        }
+    }, [ping, checkHealth])
+
     useEffect(() => {
-        // Run immediately on mount
-        checkHealth()
-        // Then poll every 12s (slower background check — only escalates if down)
-        bgCheckRef.current = setInterval(checkHealth, 12000)
+        // Skip blocking health check on startup — UI shows immediately
+        // Background check detects server going down during use
+        bgCheckRef.current = setInterval(bgCheck, BG_CHECK_INTERVAL_MS)
         return () => {
             clearInterval(bgCheckRef.current)
+            if (recoveryPollRef.current) clearInterval(recoveryPollRef.current)
         }
-    }, [checkHealth])
+    }, [checkHealth, bgCheck])
 
-    // Called by the Axios interceptor
+    // ── Called by the Axios interceptor when a request fails ─────────────────
     const triggerOffline = useCallback((type, code = null) => {
+        if (isOfflineRef.current) return // already handling it
         setIsOffline(true)
         setErrorType(type)
         setStatusCode(code)
-        startPolling()
-    }, [startPolling])
+        startRecoveryPolling(() => checkHealth())
+    }, [checkHealth, startRecoveryPolling])
 
+    // ── Manual retry button on the overlay ───────────────────────────────────
     const retryNow = useCallback(() => {
         checkHealth()
     }, [checkHealth])
-
-    // Clean up on unmount
-    useEffect(() => () => stopPolling(), [stopPolling])
 
     return (
         <NetworkContext.Provider value={{ isOffline, errorType, statusCode, triggerOffline, retryNow, RETRY_COUNTDOWN_SEC }}>
@@ -114,7 +159,7 @@ export function useNetwork() {
     return ctx
 }
 
-// Singleton ref — so client.js (non-React) can call triggerOffline
+// Singleton bridge — so client.js (non-React) can call triggerOffline
 let _triggerOfflineGlobal = null
 export function setGlobalTriggerOffline(fn) { _triggerOfflineGlobal = fn }
 export function globalTriggerOffline(type, code) { _triggerOfflineGlobal?.(type, code) }

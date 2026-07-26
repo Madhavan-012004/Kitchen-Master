@@ -5,9 +5,11 @@ import './Inventory.css';
 import BarcodeStickerModal from '../components/BarcodeStickerModal';
 import WeightLabelModal from '../components/WeightLabelModal';
 import InvoiceOcrModal from '../components/InvoiceOcrModal';
+import A4LabelPrintModal from '../components/A4LabelPrintModal';
 import { useAuth } from '../context/AuthContext.jsx';
+import { usePOSMode } from '../context/POSModeContext.jsx';
 
-const UNITS = ['KG', 'G', 'LITRE', 'ML', 'PIECE', 'DOZEN', 'PACK', 'BOTTLE'];
+const UNITS = ['KG', 'G', 'LITRE', 'ML', 'PIECE', 'DOZEN', 'PACK', 'BOTTLE', 'METER', 'SET', 'ROLL'];
 
 export default function Inventory() {
     const [activeTab, setActiveTab] = useState('stock'); // 'stock' or 'activity'
@@ -20,24 +22,49 @@ export default function Inventory() {
     const [categoryFilter, setCategoryFilter] = useState('All');
     const [showLowStockOnly, setShowLowStockOnly] = useState(false);
     const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
-    
+
     // Modal states
     const [showItemModal, setShowItemModal] = useState(false);
     const [showAdjustModal, setShowAdjustModal] = useState(false);
     const [showOcrModal, setShowOcrModal] = useState(false);
     const [selectedItem, setSelectedItem] = useState(null);
     const [isEditing, setIsEditing] = useState(false);
-    
+
     // Sticker Modal states
     const [showStickerModal, setShowStickerModal] = useState(false);
     const [stickerItems, setStickerItems] = useState([]);
     const [showWeightLabelModal, setShowWeightLabelModal] = useState(false);
+    const [showA4LabelModal, setShowA4LabelModal] = useState(false);
 
     // Operation modes
     const [scannerMode, setScannerMode] = useState(false);
     const [bulkEditMode, setBulkEditMode] = useState(false);
     const [bulkChanges, setBulkChanges] = useState({}); // { itemId: { currentStock, price, name } }
+    const { isClothing, isMarket } = usePOSMode();
+    const { user } = useAuth();
     const [toastMsg, setToastMsg] = useState('');
+    const [selectedA4StockIds, setSelectedA4StockIds] = useState(new Set());
+
+    const toggleSelection = (id) => {
+        setSelectedA4StockIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const handleSelectAll = (filteredItems, isSelected) => {
+        setSelectedA4StockIds(prev => {
+            const next = new Set(prev);
+            filteredItems.forEach(i => {
+                const id = i._id || i.id;
+                if (isSelected) next.add(id);
+                else next.delete(id);
+            });
+            return next;
+        });
+    };
 
     const toast = {
         success: (msg) => { setToastMsg('✅ ' + msg); setTimeout(() => setToastMsg(''), 3000); },
@@ -131,7 +158,7 @@ export default function Inventory() {
         try {
             // Ensure any old port is closed first
             if (port) {
-                try { await port.close(); } catch(e) {}
+                try { await port.close(); } catch (e) { }
             }
 
             const newPort = await navigator.serial.requestPort();
@@ -149,10 +176,10 @@ export default function Inventory() {
                 while (keepReadingRef.current) {
                     const { value, done } = await reader.read();
                     if (done) break;
-                    
+
                     const chunk = decoder.decode(value, { stream: true });
                     buffer += chunk;
-                    
+
                     if (buffer.includes('\n') || buffer.includes('\r')) {
                         const lines = buffer.split(/[\r\n]+/);
                         buffer = lines.pop();
@@ -190,11 +217,11 @@ export default function Inventory() {
     const disconnectScale = async () => {
         setIsScaleConnected(false);
         keepReadingRef.current = false;
-        
+
         if (readerRef.current) {
             await readerRef.current.cancel();
         }
-        
+
         if (port) {
             try {
                 await port.close();
@@ -226,7 +253,7 @@ export default function Inventory() {
                 id,
                 ...bulkChanges[id]
             }));
-            
+
             if (changes.length === 0) {
                 setBulkEditMode(false);
                 setLoading(false);
@@ -308,7 +335,7 @@ export default function Inventory() {
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.setAttribute("href", url);
-        link.setAttribute("download", `activity_log_${new Date().toISOString().slice(0,10)}.csv`);
+        link.setAttribute("download", `activity_log_${new Date().toISOString().slice(0, 10)}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -327,6 +354,64 @@ export default function Inventory() {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleDownloadTemplate = () => {
+        let headers, rows, filename;
+
+        if (isClothing) {
+            headers = [
+                "name", "barcode", "category", "subCategory", "unit", "brand", "itemType",
+                "storageLocation", "costPerUnit", "price", "gstPercent", "discountPercent",
+                "hsnCode", "purchaseInvoiceNo", "purchaseDate", "supplierName", "supplierPhone",
+                "fabricType", "color", "pattern", "widthInches", "gsm", "materialComposition",
+                "rollNumber", "gender", "size", "fitType", "season", "QTY"
+            ].join(',');
+
+            rows = [
+                "Cotton Plain Shirt,SHR001,Clothing,Men,PIECE,AAVASA,READYMADE,Rack A,500,999,5,10,6105,INV-101,2023-10-01,Supplier X,9876543210,Cotton,Blue,Plain,,,,Men,L,Slim Fit,Summer,50",
+                "Silk Fabric Material,FAB001,Clothing,Fabric,METER,,FABRIC,Shelf 2,200,450,5,0,5007,INV-102,2023-10-05,Supplier Y,9876543211,Silk,Red,Floral,44,120,100% Silk,ROLL-55,,,,,,100"
+            ];
+            filename = "clothing_inventory_template.csv";
+        } else if (isMarket) {
+            headers = "name,category,barcode,unit,currentStock,lowStockThreshold,costPerUnit,price,batchNo,expDate,hsnCode";
+
+            rows = [
+                "Paracetamol 500mg (Strip of 10),Pharmacy,8901234567890,PIECE,50,10,12.50,15.00,BATCH-P001,12-25,3004",
+                "Amoxicillin 250mg Capsules,Pharmacy,8901234567891,PIECE,100,20,45.00,55.00,BATCH-A002,10-25,3004",
+                "Cetirizine 10mg Tablets,Pharmacy,8901234567892,PIECE,200,30,8.00,10.00,BATCH-C003,08-25,3004",
+                "Metformin 500mg,Pharmacy,8901234567893,PIECE,150,25,25.00,32.00,BATCH-M004,11-25,3004",
+                "Omeprazole 20mg Capsules,Pharmacy,8901234567894,PIECE,80,15,60.00,75.00,BATCH-O005,09-25,3004",
+                "Dolo 650 Tablets,Pharmacy,8901234567895,PIECE,300,50,28.00,30.00,BATCH-D006,01-26,3004",
+                "Azithromycin 500mg,Pharmacy,8901234567896,PIECE,40,10,120.00,150.00,BATCH-Z007,05-25,3004",
+                "Vicks VapoRub 50g,Pharmacy,8901234567897,BOTTLE,20,5,110.00,135.00,BATCH-V008,03-26,3004",
+                "Betadine Ointment 20g,Pharmacy,8901234567898,PIECE,15,5,85.00,105.00,BATCH-B009,12-25,3004",
+                "Electral Powder Sachet,Pharmacy,8901234567899,PACK,50,10,18.00,22.00,BATCH-E010,07-25,3004"
+            ];
+            filename = "market_inventory_template.csv";
+        } else {
+            headers = [
+                "name", "barcode", "category", "unit", "costPerUnit", "price", "gstPercent",
+                "hsnCode", "supplierName", "supplierPhone", "manufacturer", "packSize",
+                "batchNo", "expDate", "QTY"
+            ].join(',');
+
+            rows = [
+                "Basmati Rice,RICE01,Grocery,KG,80,120,5,1001,Supplier A,9999999999,,,,,50",
+                "Paracetamol 500mg,MED01,Pharmacy,PACK,10,25,12,3004,Pharma Dist,,ABC Pharma,10*10,B-456,12/2025,100"
+            ];
+            filename = "inventory_template.csv";
+        }
+
+        const blob = new Blob([headers + '\n' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", filename);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     };
 
     const handleCsvImport = async (e) => {
@@ -356,7 +441,7 @@ export default function Inventory() {
 
     const handleClearAllItems = async () => {
         if (!window.confirm('⚠️ WARNING: Are you absolutely sure you want to completely WIPE out ALL inventory items? This action cannot be reversed!')) return;
-        
+
         setLoading(true);
         let deletedCount = 0;
         try {
@@ -385,7 +470,7 @@ export default function Inventory() {
                         <div className="inv-title-icon">📦</div>
                         <div>
                             <h1 className="inv-title">Inventory Management</h1>
-                            <p className="inv-subtitle">{items.length} items · Manage stock levels, batches &amp; pricing</p>
+                            <p className="inv-subtitle">{items.filter(i => i.currentStock > 0).length} items in stock · Manage stock levels, batches &amp; pricing</p>
                         </div>
                     </div>
                     <div className="inv-header-badges">
@@ -468,12 +553,30 @@ export default function Inventory() {
                         🏷️ Label
                     </button>
 
-                    <input type="file" accept=".csv" id="csv-upload" style={{display:'none'}} onChange={handleCsvImport} />
+                    <button
+                        className="inv-action-btn btn-csv"
+                        onClick={() => setShowA4LabelModal(true)}
+                        title="Download A4 label sheet PDF for all stock"
+                        style={{ background: '#0f172a', color: '#fff', border: 'none' }}
+                    >
+                        📄 Print Labels {selectedA4StockIds.size > 0 ? `(${selectedA4StockIds.size})` : ''}
+                    </button>
+
+                    <input type="file" accept=".csv" id="csv-upload" style={{ display: 'none' }} onChange={handleCsvImport} />
                     <button
                         className="inv-action-btn btn-csv"
                         onClick={() => document.getElementById('csv-upload').click()}
+                        title="Upload CSV to import items"
                     >
-                        📂 CSV
+                        📂 Import CSV
+                    </button>
+                    <button
+                        className="inv-action-btn btn-csv"
+                        onClick={handleDownloadTemplate}
+                        title="Download sample CSV format"
+                        style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-color)' }}
+                    >
+                        📄 Template
                     </button>
 
                     <button
@@ -506,41 +609,41 @@ export default function Inventory() {
             {activeTab === 'stock' ? (
                 <div className="tab-content animate-fade">
                     <section className="inventory-stats">
-                        <StatsCard 
-                            icon="📦" 
-                            label="Total Items" 
-                            value={items.length} 
-                            color="rgba(255, 107, 0, 0.1)" 
+                        <StatsCard
+                            icon="📦"
+                            label="Total Items"
+                            value={items.filter(i => i.currentStock > 0).length}
+                            color="rgba(255, 107, 0, 0.1)"
                         />
-                        <StatsCard 
-                            icon="⚠️" 
-                            label="Low Stock" 
-                            value={items.filter(i => i.currentStock > 0 && i.currentStock <= i.lowStockThreshold).length} 
-                            color="rgba(255, 193, 7, 0.1)" 
-                            textStyle={{color: '#FFB300'}} 
+                        <StatsCard
+                            icon="⚠️"
+                            label="Low Stock"
+                            value={items.filter(i => i.currentStock > 0 && i.currentStock <= i.lowStockThreshold).length}
+                            color="rgba(255, 193, 7, 0.1)"
+                            textStyle={{ color: '#FFB300' }}
                         />
-                        <StatsCard 
-                            icon="🚨" 
-                            label="Critical" 
-                            value={items.filter(i => i.currentStock === 0).length} 
-                            color="rgba(244, 67, 54, 0.1)" 
-                            textStyle={{color: '#F44336'}} 
+                        <StatsCard
+                            icon="🚨"
+                            label="Empty Stock"
+                            value={items.filter(i => i.currentStock === 0).length}
+                            color="rgba(244, 67, 54, 0.1)"
+                            textStyle={{ color: '#F44336' }}
                         />
-                        <StatsCard 
-                            icon="💰" 
-                            label="Inv. Value" 
-                            value={`₹${items.reduce((acc, i) => acc + (i.currentStock * (i.price || 0)), 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
-                            color="rgba(0, 200, 83, 0.1)" 
-                            textStyle={{color: '#00C853'}} 
+                        <StatsCard
+                            icon="💰"
+                            label="Inv. Value"
+                            value={`₹${items.reduce((acc, i) => acc + (i.currentStock * (i.price || 0)), 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                            color="rgba(0, 200, 83, 0.1)"
+                            textStyle={{ color: '#00C853' }}
                         />
                     </section>
 
                     <section className="inventory-filters">
                         <div className="search-wrapper">
                             <span className="search-icon">🔍</span>
-                            <input 
-                                type="text" 
-                                placeholder="Search materials (e.g. Milk, Flour...)" 
+                            <input
+                                type="text"
+                                placeholder="Search materials (e.g. Milk, Flour...)"
                                 className="search-input"
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
@@ -555,13 +658,13 @@ export default function Inventory() {
                                 <span>Low Stock Only</span>
                             </div>
                             <div className="view-mode-toggle">
-                                <button 
+                                <button
                                     className={`view-mode-btn ${viewMode === 'grid' ? 'active' : ''}`}
                                     onClick={() => setViewMode('grid')}
                                 >
                                     Grid
                                 </button>
-                                <button 
+                                <button
                                     className={`view-mode-btn ${viewMode === 'list' ? 'active' : ''}`}
                                     onClick={() => setViewMode('list')}
                                 >
@@ -573,7 +676,7 @@ export default function Inventory() {
 
                     {loading ? (
                         <div className="loading-grid">
-                            {[1,2,3,4,5,6].map(i => <div key={i} className="skeleton-card"></div>)}
+                            {[1, 2, 3, 4, 5, 6].map(i => <div key={i} className="skeleton-card"></div>)}
                         </div>
                     ) : !bulkEditMode ? (
                         viewMode === 'grid' ? (
@@ -584,9 +687,11 @@ export default function Inventory() {
                                     const matchesLowStock = !showLowStockOnly || (item.currentStock <= item.lowStockThreshold);
                                     return matchesSearch && matchesCategory && matchesLowStock;
                                 }).map(item => (
-                                    <InventoryCard 
-                                        key={item._id || item.id} 
-                                        item={item} 
+                                    <InventoryCard
+                                        key={item._id || item.id}
+                                        item={item}
+                                        isSelected={selectedA4StockIds.has(item._id || item.id)}
+                                        onToggleSelect={() => toggleSelection(item._id || item.id)}
                                         onEdit={() => { setSelectedItem(item); setIsEditing(true); setShowItemModal(true); }}
                                         onDelete={() => handleDeleteItem(item._id || item.id)}
                                         onAdjust={() => { setSelectedItem(item); setShowAdjustModal(true); }}
@@ -600,6 +705,21 @@ export default function Inventory() {
                                 <table className="inventory-list-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                                     <thead>
                                         <tr style={{ background: 'var(--bg-hover)', borderBottom: '1px solid var(--border)' }}>
+                                            <th style={{ padding: '12px', width: '40px' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    onChange={(e) => {
+                                                        const currentFiltered = items.filter(item => {
+                                                            const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase());
+                                                            const matchesCategory = categoryFilter === 'All' || item.category === categoryFilter;
+                                                            const matchesLowStock = !showLowStockOnly || (item.currentStock <= item.lowStockThreshold);
+                                                            return matchesSearch && matchesCategory && matchesLowStock;
+                                                        });
+                                                        handleSelectAll(currentFiltered, e.target.checked);
+                                                    }}
+                                                    style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#3b82f6' }}
+                                                />
+                                            </th>
                                             <th style={{ padding: '12px', color: 'var(--text-secondary)', fontSize: '13px' }}>Item Name</th>
                                             <th style={{ padding: '12px', color: 'var(--text-secondary)', fontSize: '13px' }}>Category</th>
                                             <th style={{ padding: '12px', color: 'var(--text-secondary)', fontSize: '13px' }}>Current Stock</th>
@@ -616,7 +736,15 @@ export default function Inventory() {
                                             const matchesLowStock = !showLowStockOnly || (item.currentStock <= item.lowStockThreshold);
                                             return matchesSearch && matchesCategory && matchesLowStock;
                                         }).map(item => (
-                                            <tr key={item._id || item.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                                            <tr key={item._id || item.id} style={{ borderBottom: '1px solid var(--border)', background: selectedA4StockIds.has(item._id || item.id) ? 'rgba(59, 130, 246, 0.05)' : '' }}>
+                                                <td style={{ padding: '12px' }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedA4StockIds.has(item._id || item.id)}
+                                                        onChange={() => toggleSelection(item._id || item.id)}
+                                                        style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#3b82f6' }}
+                                                    />
+                                                </td>
                                                 <td style={{ padding: '12px', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-primary)' }}>
                                                     {item.currentStock <= item.lowStockThreshold && <span style={{ color: '#ef4444', fontSize: '16px' }} title="Low Stock">⚠️</span>}
                                                     <span style={{ fontWeight: 'bold' }}>{item.name}</span>
@@ -671,11 +799,11 @@ export default function Inventory() {
                                             const val = changes.currentStock !== undefined ? changes.currentStock : item.currentStock;
                                             const price = changes.price !== undefined ? changes.price : item.price;
                                             const name = changes.name !== undefined ? changes.name : item.name;
-                                            
+
                                             return (
                                                 <tr key={id}>
                                                     <td>
-                                                        <input 
+                                                        <input
                                                             className="bulk-inline-input name"
                                                             value={name}
                                                             onChange={(e) => handleBulkChange(id, 'name', e.target.value)}
@@ -684,7 +812,7 @@ export default function Inventory() {
                                                     </td>
                                                     <td className="barcode-cell">{item.barcode || '---'}</td>
                                                     <td>
-                                                        <input 
+                                                        <input
                                                             type="number"
                                                             className="bulk-inline-input"
                                                             value={price}
@@ -692,7 +820,7 @@ export default function Inventory() {
                                                         />
                                                     </td>
                                                     <td>
-                                                        <input 
+                                                        <input
                                                             type="number"
                                                             className={`bulk-inline-input qty ${val < item.lowStockThreshold ? 'low' : ''}`}
                                                             value={val}
@@ -715,26 +843,27 @@ export default function Inventory() {
                 </div>
             ) : (
                 <div className="tab-content animate-fade">
-                    <ActivityLog 
-                        movements={movements} 
-                        onExport={handleExportActivityLog} 
-                        onClear={handleClearActivityLog} 
+                    <ActivityLog
+                        movements={movements}
+                        onExport={handleExportActivityLog}
+                        onClear={handleClearActivityLog}
                     />
                 </div>
             )}
 
             {showItemModal && (
-                <ItemModal 
-                    onSubmit={handleSaveItem} 
-                    onClose={() => setShowItemModal(false)} 
+                <ItemModal
+                    onSubmit={handleSaveItem}
+                    onClose={() => setShowItemModal(false)}
                     initialData={isEditing ? selectedItem : null}
                     isEditing={isEditing}
                     scaleValue={scaleData}
+                    allItems={items}
                 />
             )}
 
             {showAdjustModal && (
-                <AdjustModal 
+                <AdjustModal
                     item={selectedItem}
                     onSubmit={handleAdjustStock}
                     onClose={() => setShowAdjustModal(false)}
@@ -742,13 +871,20 @@ export default function Inventory() {
                 />
             )}
 
-            <BarcodeStickerModal 
-                show={showStickerModal} 
-                onClose={() => setShowStickerModal(false)} 
+            <BarcodeStickerModal
+                show={showStickerModal}
+                onClose={() => setShowStickerModal(false)}
                 items={stickerItems}
             />
 
-            <WeightLabelModal 
+            <A4LabelPrintModal
+                show={showA4LabelModal}
+                onClose={() => setShowA4LabelModal(false)}
+                items={selectedA4StockIds.size > 0 ? items.filter(i => selectedA4StockIds.has(i._id || i.id)) : items}
+                onSuccess={fetchData}
+            />
+
+            <WeightLabelModal
                 show={showWeightLabelModal}
                 onClose={() => setShowWeightLabelModal(false)}
                 item={selectedItem}
@@ -757,7 +893,7 @@ export default function Inventory() {
             />
 
             {showOcrModal && (
-                <InvoiceOcrModal 
+                <InvoiceOcrModal
                     onClose={() => setShowOcrModal(false)}
                     toast={toast}
                     onComplete={() => {
@@ -770,13 +906,13 @@ export default function Inventory() {
     );
 }
 
-function InventoryCard({ item, onEdit, onDelete, onAdjust, onPrint, onWeighPrint }) {
+function InventoryCard({ item, onEdit, onDelete, onAdjust, onPrint, onWeighPrint, isSelected, onToggleSelect }) {
     const isLow = item.currentStock <= item.lowStockThreshold && item.currentStock > 0;
     const isCritical = item.currentStock === 0;
-    
+
     const max = item.lowStockThreshold * 4 || 10;
     const pct = Math.min(100, (item.currentStock / max) * 100);
-    
+
     let statusClass = 'good';
     if (isCritical) statusClass = 'critical';
     else if (isLow) statusClass = 'low';
@@ -784,7 +920,7 @@ function InventoryCard({ item, onEdit, onDelete, onAdjust, onPrint, onWeighPrint
     const accentColor = isCritical ? '#ef4444' : isLow ? '#f59e0b' : '#22c55e';
 
     return (
-        <div className={`inv-card ${statusClass}`}>
+        <div className={`inv-card ${statusClass}`} style={{ position: 'relative', border: isSelected ? '2px solid #3b82f6' : '', boxShadow: isSelected ? '0 4px 15px rgba(59, 130, 246, 0.2)' : '' }}>
             {/* Status Strip */}
             <div className="inv-card-strip" style={{ background: accentColor }} />
 
@@ -798,17 +934,21 @@ function InventoryCard({ item, onEdit, onDelete, onAdjust, onPrint, onWeighPrint
                             {item.packSize && <span className="inv-pack-badge">Pack: {item.packSize}</span>}
                             {item.manufacturer && <span className="inv-mfr-badge">{item.manufacturer}</span>}
                             {item.batchNo && <span className="inv-batch-badge">Batch: {item.batchNo}</span>}
+                            {item.color && <span className="inv-color-badge" style={{ background: 'rgba(139,92,246,0.12)', color: '#7c3aed', border: '1px solid rgba(139,92,246,0.25)' }}>🎨 {item.color}</span>}
+                            {item.size && <span className="inv-size-badge" style={{ background: 'rgba(59,130,246,0.12)', color: '#2563eb', border: '1px solid rgba(59,130,246,0.25)', padding: '2px 7px', borderRadius: '5px', fontSize: '11px', fontWeight: 700 }}>Size: {item.size}</span>}
                         </div>
                     </div>
                     <div className="inv-stock-display">
                         <div className="inv-stock-number" style={{ color: accentColor }}>
-                            {item.currentStock}
+                            {Number.isInteger(item.currentStock)
+                                ? item.currentStock
+                                : parseFloat(item.currentStock.toFixed(3))}
                         </div>
                         <div className="inv-stock-unit">
                             {item.unit || 'Units'}
                             {item.packMultiplier > 1 && (
-                                <span style={{display:'block', fontSize:'11px', opacity:0.75, marginTop:'1px'}}>
-                                    {Math.floor(item.currentStock / item.packMultiplier)} Packs
+                                <span style={{ display: 'block', fontSize: '11px', opacity: 0.75, marginTop: '1px' }}>
+                                    {(item.currentStock / item.packMultiplier).toFixed(2)} Packs
                                 </span>
                             )}
                         </div>
@@ -818,9 +958,9 @@ function InventoryCard({ item, onEdit, onDelete, onAdjust, onPrint, onWeighPrint
                 {/* Progress Bar */}
                 <div className="inv-progress-wrap">
                     <div className="inv-progress-bar">
-                        <div 
-                            className={`inv-progress-fill ${statusClass}`} 
-                            style={{ width: `${pct}%` }} 
+                        <div
+                            className={`inv-progress-fill ${statusClass}`}
+                            style={{ width: `${pct}%` }}
                         />
                     </div>
                     <div className="inv-progress-labels">
@@ -837,7 +977,7 @@ function InventoryCard({ item, onEdit, onDelete, onAdjust, onPrint, onWeighPrint
                         <span className="inv-price-label">MRP</span>
                         <span className="inv-price-val">
                             ₹{item.price?.toFixed(2) || 0}
-                            {item.packMultiplier > 1 && <small style={{fontSize: '10px', display: 'block', opacity: 0.7}}>₹{(item.price * item.packMultiplier).toFixed(2)}/Pack</small>}
+                            {item.packMultiplier > 1 && <small style={{ fontSize: '10px', display: 'block', opacity: 0.7 }}>₹{(item.price * item.packMultiplier).toFixed(2)}/Pack</small>}
                         </span>
                     </div>
                     {item.costPerUnit > 0 && (
@@ -865,6 +1005,17 @@ function InventoryCard({ item, onEdit, onDelete, onAdjust, onPrint, onWeighPrint
                     <span className="inv-supplier-name">{item.supplierName || '—'}</span>
                 </div>
                 <div className="inv-card-actions">
+                    {onToggleSelect && (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: isSelected ? 'rgba(59,130,246,0.1)' : 'var(--bg-primary)', border: `1px solid ${isSelected ? '#3b82f6' : 'var(--border)'}`, cursor: 'pointer' }} onClick={onToggleSelect} title="Select this item">
+                            <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={onToggleSelect}
+                                onClick={(e) => e.stopPropagation()}
+                                style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#3b82f6', margin: 0 }}
+                            />
+                        </div>
+                    )}
                     <button className="inv-icon-btn btn-weigh" onClick={onWeighPrint} title="Weigh & Print">⚖️</button>
                     <button className="inv-icon-btn btn-print" onClick={onPrint} title="Print Labels">🖨️</button>
                     <button className="inv-icon-btn btn-edit" onClick={onEdit} title="Edit">✏️</button>
@@ -875,21 +1026,65 @@ function InventoryCard({ item, onEdit, onDelete, onAdjust, onPrint, onWeighPrint
     );
 }
 
-function ItemModal({ onSubmit, onClose, initialData, isEditing, scaleValue }) {
+
+// ─── Stable module-level helpers (MUST be outside ItemModal to prevent focus loss on keystroke) ─────
+function SectionHeader({ icon, label, color }) {
+    return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '24px 0 16px', padding: '10px 14px', background: `${color}10`, borderRadius: '8px', borderLeft: `4px solid ${color}` }}>
+            <span style={{ fontSize: '18px' }}>{icon}</span>
+            <span style={{ fontWeight: 700, fontSize: '14px', color: color, letterSpacing: '0.5px', textTransform: 'uppercase' }}>{label}</span>
+        </div>
+    );
+}
+
+function Field({ label, subLabel, children }) {
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <span style={{ fontSize: '11px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</span>
+            {subLabel
+                ? <span style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '2px' }}>{subLabel}</span>
+                : <span style={{ fontSize: '11px', marginBottom: '2px' }}>&nbsp;</span>
+            }
+            <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>{children}</div>
+        </div>
+    );
+}
+
+function ItemModal({ onSubmit, onClose, initialData, isEditing, scaleValue, allItems }) {
     const { user } = useAuth();
-    const categories = user?.stockCategories 
+    const { isClothing, supermarketMode } = usePOSMode();
+
+    // Use categories strictly defined in Settings (Stock Categories Manager)
+    const configuredCats = user?.stockCategories
         ? user.stockCategories.split(',').map(c => c.trim()).filter(Boolean)
         : ['General', 'Grocery', 'Clothing', 'Pharmacy', 'Others'];
 
+    // Include current item category if editing so it doesn't vanish
+    const categories = [...new Set([...configuredCats, initialData?.category])].filter(Boolean);
+
+    const itemCats = [...new Set((allItems || []).map(i => i.category).filter(Boolean))];
+    const allColors = [...new Set((allItems || []).map(i => i.color).filter(Boolean))];
+    const allBrands = [...new Set((allItems || []).map(i => i.brand).filter(Boolean))];
+    const allSizes = [...new Set((allItems || []).map(i => i.size).filter(Boolean))];
+    const allPatterns = [...new Set((allItems || []).map(i => i.pattern).filter(Boolean))];
+    const allFabrics = [...new Set((allItems || []).map(i => i.fabricType).filter(Boolean))];
+
     const defaultGst = typeof user?.taxRate === 'number' ? user.taxRate : 0;
 
-    const [formData, setFormData] = useState(initialData || {
+    // Detect if item is clothing from category or context
+    const isClothingItem = (cat) => {
+        if (isClothing) return true;
+        const clothingKeywords = ['cloth', 'fabric', 'shirt', 'saree', 'jeans', 'kurti', 'dress', 'cotton', 'silk', 'linen', 'polyester', 'denim', 't-shirt', 'wear', 'garment', 'textile'];
+        return clothingKeywords.some(k => (cat || '').toLowerCase().includes(k));
+    };
+
+    const [formData, setFormData] = useState(() => ({
         name: '',
-        category: categories[0] || 'General',
+        category: isClothing ? 'Clothing' : (categories[0] || 'General'),
         barcode: '',
-        unit: 'KG',
+        unit: isClothing ? 'PIECE' : 'KG',
         currentStock: 0,
-        lowStockThreshold: 1,
+        lowStockThreshold: isClothing ? 2 : 1,
         costPerUnit: 0,
         price: 0,
         isBilliable: true,
@@ -904,12 +1099,47 @@ function ItemModal({ onSubmit, onClose, initialData, isEditing, scaleValue }) {
         packMultiplier: 1,
         gstPercent: defaultGst,
         paidStock: 0,
-        freeStock: 0
-    });
+        freeStock: 0,
+        // Clothing ERP fields
+        brand: '',
+        subCategory: '',
+        itemType: isClothing ? 'READYMADE' : '',
+        purchaseInvoiceNo: '',
+        purchaseDate: '',
+        storageLocation: '',
+        fabricType: '',
+        color: '',
+        pattern: '',
+        widthInches: '',
+        gsm: '',
+        materialComposition: '',
+        rollNumber: '',
+        gender: '',
+        size: '',
+        fitType: '',
+        season: '',
+        discountPercent: 0,
+        openingStock: 0,
+        damagedQty: 0,
+        returnedQty: 0,
+        reservedQty: 0,
+        ...(initialData || {})
+    }));
+
+    // When itemType changes, auto-set unit
+    useEffect(() => {
+        if (formData.itemType === 'FABRIC' && formData.unit === 'PIECE') {
+            setFormData(prev => ({ ...prev, unit: 'METER' }));
+        } else if (formData.itemType === 'READYMADE' && formData.unit === 'METER') {
+            setFormData(prev => ({ ...prev, unit: 'PIECE' }));
+        }
+    }, [formData.itemType]);
+
+    const f = (key, val) => setFormData(prev => ({ ...prev, [key]: val }));
 
     const updateTotals = (paid, free) => {
         const total = (parseFloat(paid) || 0) + (parseFloat(free) || 0);
-        setFormData(prev => ({...prev, paidStock: paid, freeStock: free, currentStock: total}));
+        setFormData(prev => ({ ...prev, paidStock: paid, freeStock: free, currentStock: total }));
     };
 
     const handleSubmit = (e) => {
@@ -918,119 +1148,336 @@ function ItemModal({ onSubmit, onClose, initialData, isEditing, scaleValue }) {
     };
 
     const handleCaptureScale = () => {
-        setFormData({ ...formData, currentStock: scaleValue });
+        setFormData(prev => ({ ...prev, currentStock: scaleValue }));
     };
+
+    // ─── Store-mode-aware visibility flags ───────────────────────────────────
+    const isPharmacyCategory = (formData.category || '').toLowerCase().includes('pharmacy');
+    const showClothingFields = isClothingItem(formData.category);
+    const isFabric = formData.itemType === 'FABRIC';
+    const isReadyMade = formData.itemType === 'READYMADE';
+
+    // Section-level visibility — store-mode-driven
+    const showBrandStorageItemType = isClothing;           // brand/rack/itemType only for clothing shops
+    const showSubCategory = isClothing;           // sub-cat (men/women/kids) clothing only
+    const showDiscount = isClothing || supermarketMode;
+    const showFabricDetails = isClothing && showClothingFields && isFabric;
+    const showGarmentDetails = isClothing && showClothingFields && isReadyMade;
+    // Pharma/batch: always in market, Pharmacy-category in restaurant, never in clothing
+    const showPharmaSection = !isClothing && (supermarketMode || isPharmacyCategory || !!formData.manufacturer || !!formData.batchNo);
+    // Damaged/Returned Qty — clothing & market track these
+    const showDamagedReturned = isClothing || supermarketMode;
+    // Free/bonus stock — clothing & market give free samples/bonus
+    const showFreeStock = !isEditing && (isClothing || supermarketMode);
+
+    const modalTitle = isEditing
+        ? '✏️ Edit Item'
+        : isClothing
+            ? '👗 New Clothing Stock Entry'
+            : supermarketMode
+                ? '🛒 New Market Stock Entry'
+                : '🍽️ New Restaurant Item Entry';
 
     return (
         <div className="inventory-modal-overlay animate-fade">
             <div className="inventory-modal scale-in">
                 <div className="modal-header">
-                    <h2>{isEditing ? '✏️ Edit Material' : '📥 New Stock Intake'}</h2>
+                    <h2>{modalTitle}</h2>
                     <button className="close-x" onClick={onClose}>✕</button>
                 </div>
                 <form className="modal-form" onSubmit={handleSubmit}>
-                    <div className="form-group">
-                        <label>Item Name</label>
-                        <input 
-                            className="inventory-input" 
-                            required 
-                            placeholder="e.g. Buffalo Milk, Basmati Rice"
-                            value={formData.name}
-                            onChange={(e) => setFormData({...formData, name: e.target.value})}
-                        />
-                    </div>
-                    
-                    <div className="form-row">
-                        <div className="form-group">
-                            <label>Barcode</label>
-                            <input 
-                                type="text" 
-                                className="inventory-input barcode-capture" 
-                                placeholder="Scan or type barcode"
-                                value={formData.barcode}
-                                onChange={(e) => setFormData({...formData, barcode: e.target.value})}
+
+                    {/* ══ SECTION 1: ITEM DETAILS — All Stores ══ */}
+                    <SectionHeader icon="📋" label="Item Details" color="#6366f1" />
+
+                    <div style={{ marginBottom: '16px' }}>
+                        <Field
+                            label="Item Name / Product Name"
+                            subLabel={
+                                isClothing
+                                    ? (isFabric ? 'e.g. Cotton Fabric Blue Plain' : "e.g. Men's Casual Shirt")
+                                    : supermarketMode
+                                        ? 'e.g. Paracetamol 500mg, Basmati Rice'
+                                        : 'e.g. Butter Chicken, Masala Dosa'
+                            }
+                        >
+                            <input
+                                className="inventory-input"
+                                required
+                                placeholder="Enter item name..."
+                                value={formData.name}
+                                onChange={(e) => f('name', e.target.value)}
+                                style={{ margin: 0 }}
                             />
-                        </div>
-                        <div className="form-group">
-                            <label>Category</label>
-                            <select 
-                                className="inventory-input" 
+                        </Field>
+                    </div>
+
+                    {/* Row: Barcode | Category | [SubCategory — Clothing only] | Unit */}
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: showSubCategory ? '1fr 1fr 1fr 1fr' : '1fr 1fr 1fr',
+                        gap: '12px', alignItems: 'end', marginBottom: '16px'
+                    }}>
+                        <Field label="Barcode / SKU Code" subLabel="Scan or type SKU">
+                            <input
+                                type="text"
+                                className="inventory-input barcode-capture"
+                                placeholder="e.g. SKU001"
+                                value={formData.barcode}
+                                onChange={(e) => f('barcode', e.target.value)}
+                                style={{ margin: 0 }}
+                            />
+                        </Field>
+                        <Field label="Category" subLabel={
+                            isClothing ? 'Clothing / Fabric' :
+                                supermarketMode ? 'e.g. Grocery, Pharmacy, FMCG' :
+                                    'e.g. Starters, Beverages, Desserts'
+                        }>
+                            <select
+                                className="inventory-input"
                                 value={formData.category}
-                                onChange={(e) => setFormData({...formData, category: e.target.value})}
+                                onChange={(e) => f('category', e.target.value)}
+                                style={{ margin: 0 }}
+                                required
                             >
-                                {categories.map(cat => (
-                                    <option key={cat} value={cat}>{cat}</option>
-                                ))}
+                                <option value="" disabled>Select category</option>
+                                {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                             </select>
-                        </div>
-                        <div className="form-group">
-                            <label>Unit</label>
-                            <select 
+                        </Field>
+                        {showSubCategory && (
+                            <Field label="Sub-Category" subLabel="Men / Women / Kids">
+                                <input
+                                    className="inventory-input"
+                                    list="inv-subcat-list"
+                                    placeholder="Sub-Category"
+                                    value={formData.subCategory}
+                                    onChange={(e) => f('subCategory', e.target.value)}
+                                    style={{ margin: 0 }}
+                                />
+                                <datalist id="inv-subcat-list">
+                                    {['Men', 'Women', 'Kids', 'Unisex', 'Fabric / Raw Material'].map(v => <option key={v} value={v} />)}
+                                </datalist>
+                            </Field>
+                        )}
+                        <Field label="Unit" subLabel="Measurement Unit">
+                            <select
                                 className="inventory-input"
                                 value={formData.unit}
-                                onChange={(e) => setFormData({...formData, unit: e.target.value})}
+                                onChange={(e) => f('unit', e.target.value)}
+                                style={{ margin: 0 }}
                             >
                                 {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                             </select>
-                        </div>
+                        </Field>
                     </div>
 
-                    <div className="form-row">
-                        <div className="form-group">
-                            <label>Buying Price / Cost (₹)</label>
-                            <input 
-                                type="number" 
-                                className="inventory-input" 
-                                step="0.01"
-                                placeholder="Purchase Price"
-                                value={formData.costPerUnit || 0}
-                                onChange={(e) => setFormData({...formData, costPerUnit: parseFloat(e.target.value) || 0})}
-                            />
-                        </div>
-                        <div className="form-group">
-                            <label>Selling Price (₹)</label>
-                            <input 
-                                type="number" 
-                                className="inventory-input" 
-                                step="0.01"
-                                placeholder="Retail Price"
-                                value={formData.price || 0}
-                                onChange={(e) => setFormData({...formData, price: parseFloat(e.target.value) || 0})}
-                            />
-                        </div>
-                        <div className="form-group">
-                            <label>GST (%)</label>
-                            <input 
-                                type="number" 
-                                className="inventory-input" 
-                                placeholder="GST %"
-                                value={formData.gstPercent || 0}
-                                onChange={(e) => setFormData({...formData, gstPercent: parseFloat(e.target.value) || 0})}
-                            />
-                        </div>
-                        <div className="form-group">
-                            <label>HSN Code</label>
-                            <input 
-                                type="text"
-                                className="inventory-input" 
-                                placeholder="HSN Number"
-                                value={formData.hsnCode || ''}
-                                onChange={(e) => setFormData({...formData, hsnCode: e.target.value})}
-                            />
-                        </div>
-                        <div className="form-group">
-                            <label>&nbsp;</label>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', background: formData.isBilliable !== false ? 'rgba(16, 185, 129, 0.1)' : 'var(--bg-secondary)', padding: '10px 14px', borderRadius: '8px', border: `1px solid ${formData.isBilliable !== false ? 'rgba(16, 185, 129, 0.3)' : 'var(--border)'}`, width: '100%', transition: 'all 0.2s', margin: 0, boxSizing: 'border-box' }}>
-                                <input 
-                                    type="checkbox" 
-                                    checked={formData.isBilliable !== false}
-                                    onChange={(e) => setFormData({...formData, isBilliable: e.target.checked})}
-                                    style={{ width: '16px', height: '16px', accentColor: '#10b981', cursor: 'pointer', margin: 0 }}
+                    {/* Brand / Storage / Item-Type — Clothing Only */}
+                    {showBrandStorageItemType && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', alignItems: 'end', marginBottom: '16px' }}>
+                            <Field label="Brand" subLabel="Manufacturer Brand">
+                                <input
+                                    className="inventory-input"
+                                    list="inv-brand-list"
+                                    placeholder="e.g. Raymond, AAVASA"
+                                    value={formData.brand}
+                                    onChange={(e) => f('brand', e.target.value)}
+                                    style={{ margin: 0 }}
                                 />
-                                <span style={{ margin: 0, fontWeight: '600', color: formData.isBilliable !== false ? '#10b981' : 'var(--text-muted)', fontSize: '0.85rem' }}>Available for Billing (POS)</span>
-                            </label>
+                                <datalist id="inv-brand-list">
+                                    {allBrands.map(b => <option key={b} value={b} />)}
+                                </datalist>
+                            </Field>
+                            <Field label="Storage Location" subLabel="Physical Position">
+                                <input
+                                    className="inventory-input"
+                                    placeholder="Rack A / Shelf 2"
+                                    value={formData.storageLocation}
+                                    onChange={(e) => f('storageLocation', e.target.value)}
+                                    style={{ margin: 0 }}
+                                />
+                            </Field>
+                            <Field label="Item Type" subLabel="Garment Type">
+                                <select
+                                    className="inventory-input"
+                                    value={formData.itemType}
+                                    onChange={(e) => f('itemType', e.target.value)}
+                                    style={{ margin: 0 }}
+                                >
+                                    <option value="READYMADE">👕 Ready-Made Garment</option>
+                                    <option value="FABRIC">🧵 Fabric / Raw Material</option>
+                                    <option value="GENERAL">📦 General Clothing</option>
+                                </select>
+                            </Field>
                         </div>
+                    )}
+
+                    {/* ══ SECTION 2: PRICING & PURCHASE — All Stores ══ */}
+                    <SectionHeader icon="💰" label="Pricing & Purchase Details" color="#10b981" />
+
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: showDiscount ? '1fr 1fr 1fr 1fr 1fr' : '1fr 1fr 1fr 1fr',
+                        gap: '12px', alignItems: 'end', marginBottom: '16px'
+                    }}>
+                        <Field label="Purchase / Cost (₹)" subLabel={isFabric ? 'Per Meter' : 'Buying Price'}>
+                            <input type="number" className="inventory-input" step="0.01" placeholder="0.00"
+                                value={formData.costPerUnit || 0} onChange={(e) => f('costPerUnit', parseFloat(e.target.value) || 0)} style={{ margin: 0 }} />
+                        </Field>
+                        <Field label="Selling / MRP (₹)" subLabel="Retail Price">
+                            <input type="number" className="inventory-input" step="0.01" placeholder="0.00"
+                                value={formData.price || 0} onChange={(e) => f('price', parseFloat(e.target.value) || 0)} style={{ margin: 0 }} />
+                        </Field>
+                        <Field label="GST (%)" subLabel="Tax Rate">
+                            <input type="number" className="inventory-input" placeholder="0"
+                                value={formData.gstPercent || 0} onChange={(e) => f('gstPercent', parseFloat(e.target.value) || 0)} style={{ margin: 0 }} />
+                        </Field>
+                        {showDiscount && (
+                            <Field label="Discount (%)" subLabel="Offer Rate">
+                                <input type="number" className="inventory-input" placeholder="0"
+                                    value={formData.discountPercent || 0} onChange={(e) => f('discountPercent', parseFloat(e.target.value) || 0)} style={{ margin: 0 }} />
+                            </Field>
+                        )}
+                        <Field label="HSN Code" subLabel="Tax Code">
+                            <input type="text" className="inventory-input" placeholder="HSN No."
+                                value={formData.hsnCode || ''} onChange={(e) => f('hsnCode', e.target.value)} style={{ margin: 0 }} />
+                        </Field>
                     </div>
+
+                    {/* Invoice / Date / Supplier row */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr', gap: '12px', alignItems: 'end', marginBottom: '16px' }}>
+                        <Field label="Purchase Invoice No." subLabel="Bill Reference">
+                            <input className="inventory-input" placeholder="INV-XXXX"
+                                value={formData.purchaseInvoiceNo} onChange={(e) => f('purchaseInvoiceNo', e.target.value)} style={{ margin: 0 }} />
+                        </Field>
+                        <Field label="Purchase Date" subLabel="Date of Entry">
+                            <input type="date" className="inventory-input"
+                                value={formData.purchaseDate} onChange={(e) => f('purchaseDate', e.target.value)} style={{ margin: 0 }} />
+                        </Field>
+                        <Field label="Supplier Details" subLabel="Name & Phone">
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <input placeholder="Supplier Name" className="inventory-input"
+                                    value={formData.supplierName} onChange={(e) => f('supplierName', e.target.value)} style={{ margin: 0, flex: 2 }} />
+                                <input placeholder="Phone" className="inventory-input"
+                                    value={formData.supplierPhone} onChange={(e) => f('supplierPhone', e.target.value)} style={{ margin: 0, flex: 1 }} />
+                            </div>
+                        </Field>
+                    </div>
+
+                    {/* ══ SECTION 3: FABRIC DETAILS — Clothing + FABRIC type only ══ */}
+                    {showFabricDetails && (
+                        <>
+                            <SectionHeader icon="🧵" label="Fabric / Material Details" color="#8b5cf6" />
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', alignItems: 'end', marginBottom: '16px' }}>
+                                <Field label="Fabric Type" subLabel="Material Base">
+                                    <input className="inventory-input" list="inv-fabric-list" placeholder="Cotton, Silk, Denim..."
+                                        value={formData.fabricType} onChange={(e) => f('fabricType', e.target.value)} style={{ margin: 0 }} />
+                                    <datalist id="inv-fabric-list">
+                                        {['Cotton', 'Silk', 'Linen', 'Polyester', 'Denim', 'Wool', 'Rayon', 'Chiffon', 'Georgette', 'Velvet', 'Net', ...allFabrics].filter((v, i, a) => a.indexOf(v) === i).map(v => <option key={v} value={v} />)}
+                                    </datalist>
+                                </Field>
+                                <Field label="Color" subLabel="Primary Color">
+                                    <input className="inventory-input" list="inv-color-list" placeholder="Blue, Red, White..."
+                                        value={formData.color} onChange={(e) => f('color', e.target.value)} style={{ margin: 0 }} />
+                                    <datalist id="inv-color-list">
+                                        {['Red', 'Blue', 'Green', 'White', 'Black', 'Navy', 'Maroon', 'Yellow', 'Pink', 'Orange', 'Grey', 'Brown', 'Beige', 'Cream', 'Purple', ...allColors].filter((v, i, a) => a.indexOf(v) === i).map(v => <option key={v} value={v} />)}
+                                    </datalist>
+                                </Field>
+                                <Field label="Design / Pattern" subLabel="Print Style">
+                                    <input className="inventory-input" list="inv-pattern-list" placeholder="Plain, Printed..."
+                                        value={formData.pattern} onChange={(e) => f('pattern', e.target.value)} style={{ margin: 0 }} />
+                                    <datalist id="inv-pattern-list">
+                                        {['Plain', 'Printed', 'Checked', 'Striped', 'Floral', 'Geometric', 'Embroidered', 'Jacquard', 'Tie-Dye', ...allPatterns].filter((v, i, a) => a.indexOf(v) === i).map(v => <option key={v} value={v} />)}
+                                    </datalist>
+                                </Field>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.5fr 1fr', gap: '12px', alignItems: 'end', marginBottom: '16px' }}>
+                                <Field label="Width (inches)" subLabel="Panna">
+                                    <input className="inventory-input" list="inv-width-list" placeholder="36, 44, 58..."
+                                        value={formData.widthInches} onChange={(e) => f('widthInches', e.target.value)} style={{ margin: 0 }} />
+                                    <datalist id="inv-width-list">
+                                        {['36"', '44"', '54"', '58"', '60"', '72"'].map(v => <option key={v} value={v} />)}
+                                    </datalist>
+                                </Field>
+                                <Field label="GSM" subLabel="Fabric Weight">
+                                    <input className="inventory-input" placeholder="e.g. 180, 220"
+                                        value={formData.gsm} onChange={(e) => f('gsm', e.target.value)} style={{ margin: 0 }} />
+                                </Field>
+                                <Field label="Material Composition" subLabel="Blend Info">
+                                    <input className="inventory-input" placeholder="100% Cotton..."
+                                        value={formData.materialComposition} onChange={(e) => f('materialComposition', e.target.value)} style={{ margin: 0 }} />
+                                </Field>
+                                <Field label="Roll Number" subLabel="Physical ID">
+                                    <input className="inventory-input" placeholder="Roll ID"
+                                        value={formData.rollNumber} onChange={(e) => f('rollNumber', e.target.value)} style={{ margin: 0 }} />
+                                </Field>
+                            </div>
+                        </>
+                    )}
+
+                    {/* ══ SECTION 4: GARMENT DETAILS — Clothing + READYMADE type only ══ */}
+                    {showGarmentDetails && (
+                        <>
+                            <SectionHeader icon="👕" label="Garment Details" color="#f59e0b" />
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', alignItems: 'end', marginBottom: '16px' }}>
+                                <Field label="Color" subLabel="Primary Shade">
+                                    <input className="inventory-input" list="inv-color-list2" placeholder="Black, White, Navy..."
+                                        value={formData.color} onChange={(e) => f('color', e.target.value)} style={{ margin: 0 }} />
+                                    <datalist id="inv-color-list2">
+                                        {['Red', 'Blue', 'Green', 'White', 'Black', 'Navy', 'Maroon', 'Yellow', 'Pink', 'Orange', 'Grey', 'Brown', 'Beige', 'Cream', 'Purple', ...allColors].filter((v, i, a) => a.indexOf(v) === i).map(v => <option key={v} value={v} />)}
+                                    </datalist>
+                                </Field>
+                                <Field label="Size" subLabel="Garment Size">
+                                    <input className="inventory-input" list="inv-size-list" placeholder="S, M, L, XL..."
+                                        value={formData.size} onChange={(e) => f('size', e.target.value)} style={{ margin: 0 }} />
+                                    <datalist id="inv-size-list">
+                                        {['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '28', '30', '32', '34', '36', '38', '40', '42', '44', ...allSizes].filter((v, i, a) => a.indexOf(v) === i).map(v => <option key={v} value={v} />)}
+                                    </datalist>
+                                </Field>
+                                <Field label="Gender" subLabel="Target Audience">
+                                    <select className="inventory-input" value={formData.gender} onChange={(e) => f('gender', e.target.value)} style={{ margin: 0 }}>
+                                        <option value="">Select Gender</option>
+                                        <option value="Men">Men</option>
+                                        <option value="Women">Women</option>
+                                        <option value="Kids">Kids</option>
+                                        <option value="Unisex">Unisex</option>
+                                    </select>
+                                </Field>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', alignItems: 'end', marginBottom: '16px' }}>
+                                <Field label="Material" subLabel="Fabric Blend">
+                                    <input className="inventory-input" list="inv-material-list" placeholder="Cotton, Denim, Silk..."
+                                        value={formData.fabricType} onChange={(e) => f('fabricType', e.target.value)} style={{ margin: 0 }} />
+                                    <datalist id="inv-material-list">
+                                        {['Cotton', 'Silk', 'Linen', 'Polyester', 'Denim', 'Wool', 'Rayon', 'Blended', ...allFabrics].filter((v, i, a) => a.indexOf(v) === i).map(v => <option key={v} value={v} />)}
+                                    </datalist>
+                                </Field>
+                                <Field label="Fit Type" subLabel="Silhouette">
+                                    <select className="inventory-input" value={formData.fitType} onChange={(e) => f('fitType', e.target.value)} style={{ margin: 0 }}>
+                                        <option value="">Select Fit</option>
+                                        <option value="Regular">Regular</option>
+                                        <option value="Slim">Slim Fit</option>
+                                        <option value="Oversized">Oversized</option>
+                                        <option value="Relaxed">Relaxed</option>
+                                        <option value="Straight">Straight</option>
+                                        <option value="Tapered">Tapered</option>
+                                    </select>
+                                </Field>
+                                <Field label="Season" subLabel="Collection">
+                                    <select className="inventory-input" value={formData.season} onChange={(e) => f('season', e.target.value)} style={{ margin: 0 }}>
+                                        <option value="">Select Season</option>
+                                        <option value="All Season">All Season</option>
+                                        <option value="Summer">Summer</option>
+                                        <option value="Winter">Winter</option>
+                                        <option value="Festive">Festive</option>
+                                        <option value="Monsoon">Monsoon</option>
+                                    </select>
+                                </Field>
+                            </div>
+                        </>
+                    )}
+
+                    {/* ══ SECTION 5: STOCK QUANTITIES — All Stores, fields vary ══ */}
+                    <SectionHeader icon="📊" label="Stock Quantities & Control" color="#ef4444" />
 
                     {!isEditing && (
                         <div className="scale-capture-area">
@@ -1039,174 +1486,116 @@ function ItemModal({ onSubmit, onClose, initialData, isEditing, scaleValue }) {
                                 <div className="value">{scaleValue} <span className="unit">{formData.unit}</span></div>
                             </div>
                             <button type="button" className="capture-btn" onClick={handleCaptureScale}>
-                                ⚖️ Capture Current Weight
+                                ⚖️ Capture Weight
                             </button>
                         </div>
                     )}
 
-                    <div className="form-row">
-                        <div className="form-group">
-                            <label>{isEditing ? 'Stock Weight' : 'Paid Stock'} ({formData.unit})</label>
-                            <input 
-                                type="number" 
-                                className="inventory-input" 
-                                step="0.01"
-                                min="0"
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: showDamagedReturned
+                            ? (showFreeStock ? '1fr 1fr 1fr 1fr 1fr' : '1fr 1fr 1fr 1fr')
+                            : (showFreeStock ? '1fr 1fr 1fr' : '1fr 1fr'),
+                        gap: '12px', alignItems: 'end', marginBottom: '16px'
+                    }}>
+                        <Field label={isEditing ? 'Current Stock' : 'Paid Quantity'} subLabel={`In ${formData.unit}`}>
+                            <input
+                                type="number" className="inventory-input" step="0.01" min="0" placeholder="0"
                                 value={isEditing ? (formData.currentStock === 0 ? '' : formData.currentStock) : (formData.paidStock === 0 ? '' : formData.paidStock)}
                                 onChange={(e) => {
                                     const val = parseFloat(e.target.value) || 0;
-                                    if (isEditing) {
-                                        setFormData({...formData, currentStock: Math.abs(val)});
-                                    } else {
-                                        updateTotals(Math.abs(val), formData.freeStock);
-                                    }
+                                    if (isEditing) f('currentStock', Math.abs(val));
+                                    else updateTotals(Math.abs(val), formData.freeStock);
                                 }}
+                                style={{ margin: 0 }}
                             />
-                        </div>
-                        {!isEditing && (
-                            <div className="form-group">
-                                <label style={{color: '#10b981'}}>Free Stock ({formData.unit})</label>
-                                <input 
-                                    type="number" 
-                                    className="inventory-input" 
-                                    step="0.01"
-                                    min="0"
-                                    placeholder="0"
+                        </Field>
+                        {showFreeStock && (
+                            <Field label="Free / Bonus Stock" subLabel={`In ${formData.unit}`}>
+                                <input type="number" className="inventory-input" step="0.01" min="0" placeholder="0"
                                     value={formData.freeStock === 0 ? '' : formData.freeStock}
-                                    onChange={(e) => {
-                                        const val = parseFloat(e.target.value) || 0;
-                                        updateTotals(formData.paidStock, Math.abs(val));
-                                    }}
-                                />
-                            </div>
+                                    onChange={(e) => updateTotals(formData.paidStock, Math.abs(parseFloat(e.target.value) || 0))}
+                                    style={{ margin: 0 }} />
+                            </Field>
                         )}
-                        <div className="form-group">
-                            <label>Low Stock Alert</label>
-                            <input 
-                                type="number" 
-                                className="inventory-input" 
-                                step="0.01"
+                        <Field label="Reorder Level" subLabel="Low Stock Alert">
+                            <input type="number" className="inventory-input" step="0.01" placeholder="1"
                                 value={formData.lowStockThreshold || 0}
-                                onChange={(e) => {
-                                    const val = parseFloat(e.target.value);
-                                    setFormData({...formData, lowStockThreshold: isNaN(val) ? 0 : val});
-                                }}
-                            />
-                        </div>
+                                onChange={(e) => { const v = parseFloat(e.target.value); f('lowStockThreshold', isNaN(v) ? 0 : v); }}
+                                style={{ margin: 0 }} />
+                        </Field>
+                        {showDamagedReturned && (
+                            <Field label="Damaged Qty" subLabel="Unsalable">
+                                <input type="number" className="inventory-input" min="0" step="1" placeholder="0"
+                                    value={formData.damagedQty || 0} onChange={(e) => f('damagedQty', parseFloat(e.target.value) || 0)} style={{ margin: 0 }} />
+                            </Field>
+                        )}
+                        {showDamagedReturned && (
+                            <Field label="Returned Qty" subLabel="From Customer">
+                                <input type="number" className="inventory-input" min="0" step="1" placeholder="0"
+                                    value={formData.returnedQty || 0} onChange={(e) => f('returnedQty', parseFloat(e.target.value) || 0)} style={{ margin: 0 }} />
+                            </Field>
+                        )}
                     </div>
 
                     {!isEditing && (formData.paidStock > 0 || formData.freeStock > 0) && (
-                        <div style={{background:'rgba(34,197,94,0.07)',borderRadius:'8px',padding:'8px 16px',fontSize:'13px',color:'#15803d',marginBottom:'16px',borderLeft:'4px solid #10b981'}}>
+                        <div style={{ background: 'rgba(34,197,94,0.07)', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', color: '#15803d', marginBottom: '16px', borderLeft: '4px solid #10b981' }}>
                             📦 Total Initial Stock: <b>{formData.currentStock} {formData.unit}</b>
-                            {formData.packMultiplier > 1 && <span style={{opacity:0.75,marginLeft:8}}> ({Math.floor(formData.currentStock/formData.packMultiplier)} Packs)</span>}
                         </div>
                     )}
 
+                    {/* Billing Toggle */}
                     <div className="form-group">
-                        <label>Supplier Details</label>
-                        <div className="form-row">
-                            <input 
-                                placeholder="Supplier Name" 
-                                className="inventory-input" 
-                                value={formData.supplierName}
-                                onChange={(e) => setFormData({...formData, supplierName: e.target.value})}
-                            />
-                            <input 
-                                placeholder="Phone" 
-                                className="inventory-input" 
-                                value={formData.supplierPhone}
-                                onChange={(e) => setFormData({...formData, supplierPhone: e.target.value})}
-                            />
-                        </div>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', background: formData.isBilliable !== false ? 'rgba(16, 185, 129, 0.1)' : 'var(--bg-secondary)', padding: '10px 14px', borderRadius: '8px', border: `1px solid ${formData.isBilliable !== false ? 'rgba(16, 185, 129, 0.3)' : 'var(--border)'}`, transition: 'all 0.2s', margin: 0 }}>
+                            <input type="checkbox" checked={formData.isBilliable !== false} onChange={(e) => f('isBilliable', e.target.checked)}
+                                style={{ width: '16px', height: '16px', accentColor: '#10b981', cursor: 'pointer', margin: 0 }} />
+                            <span style={{ margin: 0, fontWeight: '600', color: formData.isBilliable !== false ? '#10b981' : 'var(--text-muted)', fontSize: '0.85rem' }}>✅ Available for Billing (POS)</span>
+                        </label>
                     </div>
 
-                    {(formData.category === 'Pharmacy' || formData.manufacturer || formData.batchNo) && (
-                        <div className="pharmacy-batch-section animate-fade-in" style={{
-                            background: 'var(--bg-secondary)', 
-                            border: '1px solid rgba(16, 185, 129, 0.3)', 
-                            padding: '16px', 
-                            borderRadius: '8px', 
-                            marginTop: '16px',
-                            borderLeft: '4px solid #10b981'
-                        }}>
-                            <h4 style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                💊 Professional / Pharma Details
+                    {/* ══ SECTION 6: PHARMA / BATCH DETAILS ══
+                        - Supermarket: ALWAYS shown (perishables, batch tracking)
+                        - Restaurant: Only if category = Pharmacy
+                        - Clothing: NEVER shown
+                    */}
+                    {showPharmaSection && (
+                        <div className="pharmacy-batch-section animate-fade-in" style={{ background: 'var(--bg-secondary)', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '16px', borderRadius: '8px', marginTop: '16px', borderLeft: '4px solid #10b981' }}>
+                            <h4 style={{ margin: '0 0 16px 0', fontSize: '13px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                {supermarketMode ? '🏪 Product / Batch Details' : '💊 Pharmacy / Batch Details'}
                             </h4>
-                            <div className="form-row">
-                                <div className="form-group">
-                                    <label>Manufacturer (MFR)</label>
-                                    <input 
-                                        className="inventory-input" 
-                                        placeholder="Manufacturer Name"
-                                        value={formData.manufacturer || ''}
-                                        onChange={(e) => setFormData({...formData, manufacturer: e.target.value})}
-                                    />
-                                </div>
-                                <div className="form-group">
-                                    <label>Pack Size</label>
-                                    <input 
-                                        className="inventory-input" 
-                                        placeholder="e.g. 10*5, 15 tabs"
-                                        value={formData.packSize || ''}
-                                        onChange={(e) => {
-                                            const val = e.target.value;
-                                            // Auto-calculate multiplier if user types 10*5
-                                            let mult = 1;
-                                            const parts = val.toLowerCase().replace(/[^0-9*x]/g, '').split(/[x*]/);
-                                            if (parts.length > 1) {
-                                                mult = parts.reduce((acc, p) => acc * (parseInt(p) || 1), 1);
-                                            } else {
-                                                mult = parseInt(val.replace(/[^0-9]/g, '')) || 1;
-                                            }
-                                            setFormData({...formData, packSize: val, packMultiplier: mult});
-                                        }}
-                                    />
-                                </div>
-                                <div className="form-group">
-                                    <label>Multiplier (Pieces/Pack)</label>
-                                    <input 
-                                        type="number"
-                                        className="inventory-input" 
-                                        value={formData.packMultiplier || 1}
-                                        onChange={(e) => setFormData({...formData, packMultiplier: parseInt(e.target.value) || 1})}
-                                    />
-                                </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '12px', alignItems: 'end', marginBottom: '16px' }}>
+                                <Field label="Manufacturer (MFR)" subLabel="Brand / Maker">
+                                    <input className="inventory-input" placeholder="Manufacturer Name" value={formData.manufacturer || ''} onChange={(e) => f('manufacturer', e.target.value)} style={{ margin: 0 }} />
+                                </Field>
+                                <Field label="Pack Size" subLabel="e.g. 10*10, 500ml">
+                                    <input className="inventory-input" placeholder="Pack Size" value={formData.packSize || ''} onChange={(e) => {
+                                        const val = e.target.value;
+                                        let mult = 1;
+                                        const parts = val.toLowerCase().replace(/[^0-9*x]/g, '').split(/[x*]/);
+                                        if (parts.length > 1) mult = parts.reduce((acc, p) => acc * (parseInt(p) || 1), 1);
+                                        else mult = parseInt(val.replace(/[^0-9]/g, '')) || 1;
+                                        setFormData(prev => ({ ...prev, packSize: val, packMultiplier: mult }));
+                                    }} style={{ margin: 0 }} />
+                                </Field>
+                                <Field label="Pieces/Pack" subLabel="Multiplier">
+                                    <input type="number" className="inventory-input" value={formData.packMultiplier || 1} onChange={(e) => f('packMultiplier', parseInt(e.target.value) || 1)} style={{ margin: 0 }} />
+                                </Field>
                             </div>
-                            <div className="form-row" style={{ marginTop: '12px' }}>
-                                <div className="form-group">
-                                    <label>Batch No.</label>
-                                    <input 
-                                        className="inventory-input" 
-                                        placeholder="Enter Batch"
-                                        value={formData.batchNo}
-                                        onChange={(e) => setFormData({...formData, batchNo: e.target.value})}
-                                    />
-                                </div>
-                            </div>
-                            <div className="form-row" style={{ marginTop: '12px' }}>
-                                <div className="form-group">
-                                    <label>Mfg Date</label>
-                                    <input 
-                                        className="inventory-input" 
-                                        placeholder="MM/YYYY"
-                                        value={formData.mfgDate}
-                                        onChange={(e) => setFormData({...formData, mfgDate: e.target.value})}
-                                    />
-                                </div>
-                                <div className="form-group">
-                                    <label>Exp Date</label>
-                                    <input 
-                                        className="inventory-input" 
-                                        placeholder="MM/YYYY"
-                                        value={formData.expDate}
-                                        onChange={(e) => setFormData({...formData, expDate: e.target.value})}
-                                    />
-                                </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', alignItems: 'end' }}>
+                                <Field label="Batch No." subLabel="Manufacturing Batch">
+                                    <input className="inventory-input" placeholder="Enter Batch No." value={formData.batchNo} onChange={(e) => f('batchNo', e.target.value)} style={{ margin: 0 }} />
+                                </Field>
+                                <Field label="Mfg Date" subLabel="MM/YYYY">
+                                    <input className="inventory-input" placeholder="MM/YYYY" value={formData.mfgDate} onChange={(e) => f('mfgDate', e.target.value)} style={{ margin: 0 }} />
+                                </Field>
+                                <Field label="Exp Date" subLabel="MM/YYYY">
+                                    <input className="inventory-input" placeholder="MM/YYYY" value={formData.expDate} onChange={(e) => f('expDate', e.target.value)} style={{ margin: 0 }} />
+                                </Field>
                             </div>
                         </div>
                     )}
 
-                    <div className="modal-footer" style={{margin: '1.25rem -1.5rem -1.25rem -1.5rem', borderBottomLeftRadius: '20px', borderBottomRightRadius: '20px'}}>
+                    <div className="modal-footer" style={{ margin: '1.25rem -1.5rem -1.25rem -1.5rem', borderBottomLeftRadius: '20px', borderBottomRightRadius: '20px' }}>
                         <button type="button" className="cancel-btn" onClick={onClose}>Discard</button>
                         <button type="submit" className="save-btn">{isEditing ? 'Update Item' : 'Add to Inventory'}</button>
                     </div>
@@ -1215,7 +1604,6 @@ function ItemModal({ onSubmit, onClose, initialData, isEditing, scaleValue }) {
         </div>
     );
 }
-
 
 function AdjustModal({ item, onSubmit, onClose, scaleValue }) {
     const { user } = useAuth();
@@ -1251,7 +1639,7 @@ function AdjustModal({ item, onSubmit, onClose, scaleValue }) {
 
     return (
         <div className="inventory-modal-overlay animate-fade">
-            <div className="inventory-modal scale-in" style={{maxWidth: '560px'}}>
+            <div className="inventory-modal scale-in" style={{ maxWidth: '560px' }}>
                 <div className="modal-header">
                     <h2>⚡ Stock Adjustment</h2>
                     <button className="close-x" onClick={onClose}>✕</button>
@@ -1260,24 +1648,24 @@ function AdjustModal({ item, onSubmit, onClose, scaleValue }) {
                     <span className="item-name">{item.name}</span>
                     <span className="current-stock">
                         Current: <b>{item.currentStock}</b> {item.unit}
-                        {packMultiplier > 1 && <small style={{marginLeft:6,opacity:0.7}}>({Math.floor(item.currentStock/packMultiplier)} Packs)</small>}
+                        {packMultiplier > 1 && <small style={{ marginLeft: 6, opacity: 0.7 }}>({Math.floor(item.currentStock / packMultiplier)} Packs)</small>}
                     </span>
                 </div>
                 <form className="modal-form" onSubmit={handleSubmit}>
                     <div className="form-group">
                         <label>Action</label>
                         <div className="adjustment-type-toggle">
-                            <button 
+                            <button
                                 type="button"
                                 className={`type-toggle-btn add ${adjustment.type === 'add' ? 'active' : ''}`}
-                                onClick={() => setAdjustment({...adjustment, type: 'add'})}
+                                onClick={() => setAdjustment({ ...adjustment, type: 'add' })}
                             >
                                 ➕ Receive Stock
                             </button>
-                            <button 
+                            <button
                                 type="button"
                                 className={`type-toggle-btn remove ${adjustment.type === 'remove' ? 'active' : ''}`}
-                                onClick={() => setAdjustment({...adjustment, type: 'remove'})}
+                                onClick={() => setAdjustment({ ...adjustment, type: 'remove' })}
                             >
                                 ➖ Consume / Remove
                             </button>
@@ -1295,16 +1683,16 @@ function AdjustModal({ item, onSubmit, onClose, scaleValue }) {
                     </div>
 
                     {/* Paid Qty + Free Qty row */}
-                    <div className="form-row" style={{marginTop:'8px'}}>
+                    <div className="form-row" style={{ marginTop: '8px' }}>
                         <div className="form-group">
                             <label>
                                 {adjustment.type === 'add' ? 'Paid Quantity' : 'Quantity'} ({item.unit})
-                                {packMultiplier > 1 && <span style={{fontWeight:'normal',opacity:0.65}}> — 1 Pack = {packMultiplier} {item.unit}</span>}
+                                {packMultiplier > 1 && <span style={{ fontWeight: 'normal', opacity: 0.65 }}> — 1 Pack = {packMultiplier} {item.unit}</span>}
                             </label>
-                            <input 
-                                type="number" 
-                                className="inventory-input" 
-                                step="0.01" 
+                            <input
+                                type="number"
+                                className="inventory-input"
+                                step="0.01"
                                 min="0"
                                 required
                                 placeholder="0"
@@ -1312,7 +1700,7 @@ function AdjustModal({ item, onSubmit, onClose, scaleValue }) {
                                 onChange={(e) => {
                                     const val = parseFloat(e.target.value) || 0;
                                     setAdjustment(prev => ({
-                                        ...prev, 
+                                        ...prev,
                                         quantity: Math.abs(val),
                                         totalCost: prev.recordAsExpense ? +(Math.abs(val) * (item.costPerUnit || 0)).toFixed(2) : prev.totalCost
                                     }));
@@ -1321,19 +1709,19 @@ function AdjustModal({ item, onSubmit, onClose, scaleValue }) {
                         </div>
                         {adjustment.type === 'add' && (
                             <div className="form-group">
-                                <label style={{color:'#16a34a'}}>🎁 Free Quantity ({item.unit})
-                                    <span style={{fontWeight:'normal',opacity:0.7,fontSize:'11px'}}> (no cost)</span>
+                                <label style={{ color: '#16a34a' }}>🎁 Free Quantity ({item.unit})
+                                    <span style={{ fontWeight: 'normal', opacity: 0.7, fontSize: '11px' }}> (no cost)</span>
                                 </label>
-                                <input 
-                                    type="number" 
-                                    className="inventory-input" 
-                                    step="0.01" 
+                                <input
+                                    type="number"
+                                    className="inventory-input"
+                                    step="0.01"
                                     min="0"
                                     placeholder="0"
                                     value={adjustment.freeQuantity === 0 ? '' : adjustment.freeQuantity}
                                     onChange={(e) => {
                                         const val = parseFloat(e.target.value);
-                                        setAdjustment({...adjustment, freeQuantity: isNaN(val) ? 0 : Math.abs(val)});
+                                        setAdjustment({ ...adjustment, freeQuantity: isNaN(val) ? 0 : Math.abs(val) });
                                     }}
                                 />
                             </div>
@@ -1341,9 +1729,9 @@ function AdjustModal({ item, onSubmit, onClose, scaleValue }) {
                     </div>
 
                     {adjustment.type === 'add' && (adjustment.quantity > 0 || adjustment.freeQuantity > 0) && (
-                        <div style={{background:'rgba(34,197,94,0.07)',borderRadius:'8px',padding:'6px 12px',fontSize:'12px',color:'#15803d',marginBottom:'4px'}}>
+                        <div style={{ background: 'rgba(34,197,94,0.07)', borderRadius: '8px', padding: '6px 12px', fontSize: '12px', color: '#15803d', marginBottom: '4px' }}>
                             📦 Total Stock to Add: <b>{(adjustment.quantity || 0) + (adjustment.freeQuantity || 0)} {item.unit}</b>
-                            {packMultiplier > 1 && <span style={{opacity:0.75}}> ({Math.floor(((adjustment.quantity||0)+(adjustment.freeQuantity||0))/packMultiplier)} Packs)</span>}
+                            {packMultiplier > 1 && <span style={{ opacity: 0.75 }}> ({Math.floor(((adjustment.quantity || 0) + (adjustment.freeQuantity || 0)) / packMultiplier)} Packs)</span>}
                         </div>
                     )}
 
@@ -1353,16 +1741,16 @@ function AdjustModal({ item, onSubmit, onClose, scaleValue }) {
                             <div className="form-field">
                                 <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>🧮 Calculate by Packs (1 Pack = {packMultiplier} {item.unit})</label>
                                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '5px' }}>
-                                    <input 
-                                        type="number" 
-                                        className="form-input small" 
+                                    <input
+                                        type="number"
+                                        className="form-input small"
                                         placeholder="Paid Packs"
                                         onChange={(e) => {
                                             const packs = parseFloat(e.target.value);
                                             if (!isNaN(packs)) {
                                                 const newQty = packs * packMultiplier;
                                                 setAdjustment(prev => ({
-                                                    ...prev, 
+                                                    ...prev,
                                                     quantity: newQty,
                                                     totalCost: prev.recordAsExpense ? +(newQty * (item.costPerUnit || 0)).toFixed(2) : prev.totalCost
                                                 }));
@@ -1370,17 +1758,17 @@ function AdjustModal({ item, onSubmit, onClose, scaleValue }) {
                                         }}
                                     />
                                     {adjustment.type === 'add' && (
-                                    <input 
-                                        type="number" 
-                                        className="form-input small" 
-                                        placeholder="Free Packs"
-                                        onChange={(e) => {
-                                            const packs = parseFloat(e.target.value);
-                                            if (!isNaN(packs)) {
-                                                setAdjustment(prev => ({...prev, freeQuantity: packs * packMultiplier}));
-                                            }
-                                        }}
-                                    />
+                                        <input
+                                            type="number"
+                                            className="form-input small"
+                                            placeholder="Free Packs"
+                                            onChange={(e) => {
+                                                const packs = parseFloat(e.target.value);
+                                                if (!isNaN(packs)) {
+                                                    setAdjustment(prev => ({ ...prev, freeQuantity: packs * packMultiplier }));
+                                                }
+                                            }}
+                                        />
                                     )}
                                 </div>
                                 <small style={{ display: 'block', marginTop: '4px', color: 'var(--accent)' }}>Typing here automatically calculates the base {item.unit} above.</small>
@@ -1390,50 +1778,57 @@ function AdjustModal({ item, onSubmit, onClose, scaleValue }) {
 
                     <div className="form-group">
                         <label>Reason / Note</label>
-                        <textarea 
-                            className="inventory-textarea" 
+                        <textarea
+                            className="inventory-textarea"
                             placeholder="Why is this stock moving? (e.g. Spillage, Usage in Dish, Restock from Supplier)"
                             required
                             value={adjustment.reason}
-                            onChange={(e) => setAdjustment({...adjustment, reason: e.target.value})}
+                            onChange={(e) => setAdjustment({ ...adjustment, reason: e.target.value })}
                         />
                     </div>
 
                     {adjustment.type === 'add' && (
-                        <div className="expense-recording-section" style={{ background: '#f8fafc', padding: '15px', borderRadius: '10px', border: '1px solid #e2e8f0', marginTop: '10px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                                <input 
-                                    type="checkbox" 
-                                    id="recordExpense" 
+                        <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '10px', border: '1px solid #e2e8f0', marginTop: '10px' }}>
+
+                            {/* Checkbox header row */}
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', marginBottom: '14px', userSelect: 'none' }}>
+                                <input
+                                    type="checkbox"
+                                    id="recordExpense"
                                     checked={adjustment.recordAsExpense}
+                                    style={{ width: '18px', height: '18px', flexShrink: 0, accentColor: '#22c55e', cursor: 'pointer' }}
                                     onChange={(e) => setAdjustment({
-                                        ...adjustment, 
-                                        recordAsExpense: e.target.checked, 
-                                        totalCost: e.target.checked ? +(adjustment.quantity * (item.costPerUnit || 0)).toFixed(2) : 0
+                                        ...adjustment,
+                                        recordAsExpense: e.target.checked,
+                                        totalCost: e.target.checked ? +(adjustment.quantity * (selectedItem?.costPerUnit || 0)).toFixed(2) : 0
                                     })}
                                 />
-                                <label htmlFor="recordExpense" style={{ fontWeight: 'bold', margin: 0, color: '#0f172a' }}>💰 Record as Purchase Expenditure</label>
-                            </div>
+                                <span style={{ fontWeight: '700', fontSize: '14px', color: '#0f172a' }}>💰 Record as Purchase Expenditure</span>
+                            </label>
 
                             {adjustment.recordAsExpense && (
-                                <div className="animate-fade-in">
-                                    {/* Invoice No + Payment Method */}
-                                    <div className="form-row" style={{marginBottom:'8px'}}>
-                                        <div className="form-group">
-                                            <label>Invoice Number <span style={{opacity:0.6,fontWeight:'normal'}}>(groups in Expenditure)</span></label>
-                                            <input 
+                                <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
+                                    {/* Row 1: Invoice + Payment Method — inputs aligned at bottom */}
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', alignItems: 'end' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                            <span style={{ fontSize: '11px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Invoice Number</span>
+                                            <span style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '2px' }}>Groups in Expenditure</span>
+                                            <input
                                                 className="inventory-input"
                                                 placeholder="e.g. INV-2024-001"
                                                 value={adjustment.invoiceNumber}
-                                                onChange={(e) => setAdjustment({...adjustment, invoiceNumber: e.target.value})}
+                                                onChange={(e) => setAdjustment({ ...adjustment, invoiceNumber: e.target.value })}
+                                                style={{ margin: 0 }}
                                             />
                                         </div>
-                                        <div className="form-group">
-                                            <label>Payment Method</label>
-                                            <select 
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                            <span style={{ fontSize: '11px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Payment Method</span>
+                                            <select
                                                 className="inventory-input"
                                                 value={adjustment.paymentMethod}
-                                                onChange={(e) => setAdjustment({...adjustment, paymentMethod: e.target.value})}
+                                                onChange={(e) => setAdjustment({ ...adjustment, paymentMethod: e.target.value })}
+                                                style={{ margin: 0, marginTop: 'auto' }}
                                             >
                                                 <option value="Cash">Cash</option>
                                                 <option value="UPI">UPI / Scanner</option>
@@ -1443,44 +1838,50 @@ function AdjustModal({ item, onSubmit, onClose, scaleValue }) {
                                         </div>
                                     </div>
 
-                                    {/* Cost + GST + Discount */}
-                                    <div className="form-row">
-                                        <div className="form-group">
-                                            <label>Base Cost (₹) <span style={{opacity:0.6,fontWeight:'normal'}}>(paid qty only)</span></label>
-                                            <input 
+                                    {/* Row 2: Base Cost + GST + Discount */}
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                            <span style={{ fontSize: '11px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Base Cost (₹)</span>
+                                            <span style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '2px' }}>Paid qty only</span>
+                                            <input
                                                 type="number"
                                                 className="inventory-input"
                                                 placeholder="0.00"
                                                 value={adjustment.totalCost || ''}
-                                                onChange={(e) => setAdjustment({...adjustment, totalCost: parseFloat(e.target.value) || 0})}
+                                                onChange={(e) => setAdjustment({ ...adjustment, totalCost: parseFloat(e.target.value) || 0 })}
+                                                style={{ margin: 0 }}
                                             />
                                         </div>
-                                        <div className="form-group">
-                                            <label>GST (%)</label>
-                                            <input 
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                            <span style={{ fontSize: '11px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>GST (%)</span>
+                                            <span style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '2px' }}>&nbsp;</span>
+                                            <input
                                                 type="number"
                                                 className="inventory-input"
                                                 placeholder="0"
                                                 value={adjustment.gstPercent !== undefined ? adjustment.gstPercent : ''}
-                                                onChange={(e) => setAdjustment({...adjustment, gstPercent: parseFloat(e.target.value) || 0})}
+                                                onChange={(e) => setAdjustment({ ...adjustment, gstPercent: parseFloat(e.target.value) || 0 })}
+                                                style={{ margin: 0 }}
                                             />
                                         </div>
-                                        <div className="form-group">
-                                            <label>Discount (₹)</label>
-                                            <input 
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                            <span style={{ fontSize: '11px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Discount (₹)</span>
+                                            <span style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '2px' }}>&nbsp;</span>
+                                            <input
                                                 type="number"
                                                 className="inventory-input"
                                                 placeholder="0.00"
                                                 value={adjustment.discountAmount || ''}
-                                                onChange={(e) => setAdjustment({...adjustment, discountAmount: parseFloat(e.target.value) || 0})}
+                                                onChange={(e) => setAdjustment({ ...adjustment, discountAmount: parseFloat(e.target.value) || 0 })}
+                                                style={{ margin: 0 }}
                                             />
                                         </div>
                                     </div>
 
                                     {/* Net total preview */}
-                                    <div style={{background:'rgba(99,102,241,0.07)',borderRadius:'8px',padding:'6px 12px',fontSize:'13px',color:'#4f46e5',fontWeight:'600'}}>
-                                        Net Total: ₹{((adjustment.totalCost||0) + ((adjustment.totalCost || 0) * (adjustment.gstPercent || 0) / 100) - (adjustment.discountAmount||0)).toFixed(2)} (calculated GST: ₹{((adjustment.totalCost || 0) * (adjustment.gstPercent || 0) / 100).toFixed(2)})
-                                        {adjustment.freeQuantity > 0 && <span style={{fontWeight:'normal',opacity:0.75,marginLeft:8}}>({adjustment.freeQuantity} {item.unit} free, not charged)</span>}
+                                    <div style={{ background: 'rgba(99,102,241,0.07)', borderRadius: '8px', padding: '8px 12px', fontSize: '13px', color: '#4f46e5', fontWeight: '600' }}>
+                                        Net Total: ₹{((adjustment.totalCost || 0) + ((adjustment.totalCost || 0) * (adjustment.gstPercent || 0) / 100) - (adjustment.discountAmount || 0)).toFixed(2)}&nbsp;&nbsp;
+                                        <span style={{ fontWeight: '400', opacity: 0.8 }}>(GST: ₹{((adjustment.totalCost || 0) * (adjustment.gstPercent || 0) / 100).toFixed(2)})</span>
                                     </div>
                                 </div>
                             )}
@@ -1502,7 +1903,7 @@ function StatsCard({ icon, label, value, color, textStyle }) {
     return (
         <div className="stat-item">
             <div className="stat-left">
-                <div className="stat-icon-bg" style={{background: color}}>{icon}</div>
+                <div className="stat-icon-bg" style={{ background: color }}>{icon}</div>
                 <label className="stat-label">{label}</label>
             </div>
             <div className="stat-value" style={textStyle}>{value}</div>
@@ -1520,7 +1921,7 @@ function ActivityLog({ movements, onExport, onClear }) {
                     <button className="wipe-btn" onClick={onClear}>🗑️ Wipe Activity Log</button>
                 </div>
             </div>
-            
+
             <div className="activity-table-wrapper">
                 <table className="activity-table">
                     <thead>

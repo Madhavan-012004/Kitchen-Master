@@ -2,13 +2,14 @@
   "nav": {
     "pos": "POS / Billing",
     "kitchen": "Kitchen Display",
-    "billing": "Sale",
+    "billing": "Active Orders",
     "orders": "Sales History",
     "menu": "Menu",
     "staff": "Staff",
     "analytics": "Analytics",
     "attendance": "Attendance",
     "assistant": "ProBloom Assistant",
+    "whatsapp": "WhatsApp Center",
     "inventory": "Inventory",
     "expenditures": "Expenditures",
     "settings": "Settings & Profile",
@@ -19,7 +20,8 @@
     "history_short": "HISTORY",
     "settings_short": "SETTINGS",
     "restaurant": "Restaurant",
-    "market": "Market"
+    "market": "Market",
+    "customers": "Customers"
   },
   "common": {
     "save": "Save",

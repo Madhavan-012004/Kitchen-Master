@@ -21,28 +21,71 @@ import BillingQueue from './pages/BillingQueue.jsx'
 import CustomerMenu from './pages/CustomerMenu.jsx'
 import AIAssistant from './pages/AIAssistant.jsx'
 import InventoryPage from './pages/Inventory.jsx'
+import TailoringJobsPage from './pages/TailoringJobs.jsx'
 import ExpendituresPage from './pages/Expenditures.jsx'
+import CustomersPage from './pages/Customers.jsx'
 import ProjectTracker from './pages/ProjectTracker.jsx'
 import MasterBackoffice from './pages/MasterBackoffice.jsx'
+import WhatsAppDashboard from './pages/WhatsAppDashboard.jsx'
 import ProBloomProvisionClient from './pages/ProBloomProvisionClient.jsx'
 import WaitlistRegistration from './pages/WaitlistRegistration.jsx'
 import WaitlistMonitor from './pages/WaitlistMonitor.jsx'
 import LicenseManagement from './pages/LicenseManagement.jsx'
 import api from './api/client.js'
 
+// ─── cous_web: Customer Ordering App (merged) ────────────────────────────────
+import { NetworkProvider as CousNetworkProvider, useNetwork as useCousNetwork, setGlobalTriggerOffline as setCousGlobalTriggerOffline } from './cous/context/NetworkContext.jsx'
+import { ThemeProvider as CousThemeProvider } from './cous/context/ThemeContext.jsx'
+import CousNetworkErrorOverlay from './cous/components/NetworkErrorOverlay.jsx'
+import CousWelcome from './cous/pages/Welcome.jsx'
+import CousHome from './cous/pages/Home.jsx'
+import CousLogin from './cous/pages/Login.jsx'
+import CousOtpLogs from './cous/pages/OtpLogs.jsx'
+import './cous/index.css'
+import './cous/i18n.js'
+
 // ─── Guards ───────────────────────────────────────────────────────────────────
 
 function ProtectedRoute({ children, section }) {
-  const { isAuthenticated, canAccess, user } = useAuth()
+  const { isAuthenticated, canAccess, user, attendance } = useAuth()
   if (!isAuthenticated) return <Navigate to="/login" replace />
   if (user?.isProBloomAdmin) return <Navigate to="/probloom-hq" replace />
   // Stakeholders go to analytics as their home
   if (user?.role === 'stakeholder' && section && !['analytics', 'attendance', 'inventory', 'employees', 'orders', 'menu'].includes(section)) {
     return <Navigate to="/analytics" replace />
   }
-  if (section && user?.role !== 'stakeholder' && !canAccess(section)) return <Navigate to="/pos" replace />
+  if (section && user?.role !== 'stakeholder' && !canAccess(section)) {
+    if (user?.role === 'waiter' && !attendance?.isActive) {
+      return <Navigate to="/profile" replace />
+    }
+    return <Navigate to="/pos" replace />
+  }
   return children
 }
+
+// ─── cous_web Helpers ──────────────────────────────────────────────────────────
+
+// Protects the customer menu — redirects to /order if not logged in via cous
+function CousProtectedMenu({ element }) {
+  const token = localStorage.getItem('km_token');
+  const user = JSON.parse(localStorage.getItem('km_user') || '{}');
+  if (!token || !user?.phone) {
+    // Redirect back to the order/login screen (Welcome page)
+    const path = window.location.hash.replace('#', '') || '/';
+    return <Navigate to={path.replace('/menu/', '/order/')} replace />;
+  }
+  return element;
+}
+
+// Bridges the cous NetworkContext to its Axios singleton
+function CousNetworkBridge() {
+  const { triggerOffline, isOffline, errorType, statusCode, retryNow } = useCousNetwork();
+  React.useEffect(() => {
+    setCousGlobalTriggerOffline(triggerOffline);
+  }, [triggerOffline]);
+  return <CousNetworkErrorOverlay isOffline={isOffline} errorType={errorType} statusCode={statusCode} retryNow={retryNow} />;
+}
+
 
 // Guard: only the ProBloom Super Admin can access /probloom-hq
 function ProBloomAdminRoute({ children }) {
@@ -69,14 +112,13 @@ function ThemeSync() {
 
 function POSModeSync() {
   const { user } = useAuth();
-  const { setSupermarketMode } = usePOSMode();
+  const { setStoreMode } = usePOSMode();
 
   React.useEffect(() => {
     if (user && user.preferredPosMode) {
-      const shouldBeMarket = user.preferredPosMode === 'supermarket';
-      setSupermarketMode(shouldBeMarket);
+      setStoreMode(user.preferredPosMode);
     }
-  }, [user?.preferredPosMode, setSupermarketMode]);
+  }, [user?.preferredPosMode, setStoreMode]);
 
   return null;
 }
@@ -166,69 +208,96 @@ export default function App() {
     <NetworkProvider>
       <ThemeProvider>
         <LanguageProvider>
-        <POSModeProvider>
-          <AuthProvider>
-            <StakeholderProvider>
-              <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-                <ThemeSync />
-                <POSModeSync />
-                <LicenseWarningBanner />
-                <Routes>
-                  {/* Public */}
-                  <Route path="/login" element={<LoginPage />} />
-                  <Route path="/license" element={<LicenseManagement />} />
-                  <Route path="/menu/:restaurantId/:tableNumber" element={<CustomerMenu />} />
-                  <Route path="/join-waitlist/:restaurantId" element={<WaitlistRegistration />} />
-                  <Route path="/waitlist-monitor/:restaurantId" element={<WaitlistMonitor />} />
-                  <Route path="/waitlist-monitor/:restaurantId/" element={<WaitlistMonitor />} />
+          <POSModeProvider>
+            <AuthProvider>
+              <StakeholderProvider>
+                <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+                  <ThemeSync />
+                  <POSModeSync />
+                  <LicenseWarningBanner />
+                  <Routes>
+                    <Route path="/login" element={<LoginPage />} />
+                    <Route path="/license" element={<LicenseManagement />} />
+                    <Route path="/join-waitlist/:restaurantId" element={<WaitlistRegistration />} />
+                    <Route path="/waitlist-monitor/:restaurantId" element={<WaitlistMonitor />} />
+                    <Route path="/waitlist-monitor/:restaurantId/" element={<WaitlistMonitor />} />
 
-                  {/* ── ProBloom HQ — Secret Master Admin Dashboard ── */}
-                  <Route
-                    path="/probloom-hq"
-                    element={
-                      <ProBloomAdminRoute>
-                        <MasterBackoffice />
-                      </ProBloomAdminRoute>
-                    }
-                  />
-                  <Route
-                    path="/probloom-hq/provision"
-                    element={
-                      <ProBloomAdminRoute>
-                        <ProBloomProvisionClient />
-                      </ProBloomAdminRoute>
-                    }
-                  />
+                    {/* ── cous_web: Customer Ordering App (replaces old CustomerMenu) ── */}
+                    <Route path="/order/:restaurantId/:tableNumber" element={
+                      <CousNetworkProvider>
+                        <CousThemeProvider>
+                          <CousNetworkBridge />
+                          <CousWelcome />
+                        </CousThemeProvider>
+                      </CousNetworkProvider>
+                    } />
+                    <Route path="/menu/:restaurantId/:tableNumber" element={
+                      <CousNetworkProvider>
+                        <CousThemeProvider>
+                          <CousNetworkBridge />
+                          <CousProtectedMenu element={<CousHome />} />
+                        </CousThemeProvider>
+                      </CousNetworkProvider>
+                    } />
+                    <Route path="/otp-logs" element={
+                      <CousNetworkProvider>
+                        <CousThemeProvider>
+                          <CousOtpLogs />
+                        </CousThemeProvider>
+                      </CousNetworkProvider>
+                    } />
 
-                  {/* ── ProBloom App (for restaurant clients) ── */}
-                  <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-                    <Route index element={<Navigate to="/pos" replace />} />
-                    <Route path="pos" element={<ProtectedRoute section="pos"><POSPage /></ProtectedRoute>} />
-                    <Route path="orders" element={<ProtectedRoute section="orders"><OrdersPage /></ProtectedRoute>} />
-                    <Route path="menu" element={<ProtectedRoute section="menu"><MenuPage /></ProtectedRoute>} />
-                    <Route path="employees" element={<ProtectedRoute section="employees"><EmployeesPage /></ProtectedRoute>} />
-                    <Route path="kitchen" element={<ProtectedRoute section="kitchen"><KitchenPage /></ProtectedRoute>} />
-                    <Route path="billing-queue" element={<ProtectedRoute section="billing"><BillingQueue /></ProtectedRoute>} />
-                    <Route path="analytics" element={<ProtectedRoute section="analytics"><AnalyticsPage /></ProtectedRoute>} />
-                    <Route path="attendance" element={<ProtectedRoute section="attendance"><AttendancePage /></ProtectedRoute>} />
-                    <Route path="ai-assistant" element={<ProtectedRoute><AIAssistant /></ProtectedRoute>} />
-                    <Route path="inventory" element={<ProtectedRoute section="inventory"><InventoryPage /></ProtectedRoute>} />
-                    <Route path="expenditures" element={<ProtectedRoute section="expenditures"><ExpendituresPage /></ProtectedRoute>} />
-                    <Route path="kanban" element={<ProtectedRoute><ProjectTracker /></ProtectedRoute>} />
-                    <Route path="profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-                  </Route>
+                    {/* ── ProBloom HQ — Secret Master Admin Dashboard ── */}
+                    <Route
+                      path="/probloom-hq"
+                      element={
+                        <ProBloomAdminRoute>
+                          <MasterBackoffice />
+                        </ProBloomAdminRoute>
+                      }
+                    />
+                    <Route
+                      path="/probloom-hq/provision"
+                      element={
+                        <ProBloomAdminRoute>
+                          <ProBloomProvisionClient />
+                        </ProBloomAdminRoute>
+                      }
+                    />
 
-                  <Route path="*" element={<Navigate to="/pos" replace />} />
-                </Routes>
-              </HashRouter>
-            </StakeholderProvider>
-          </AuthProvider>
-        </POSModeProvider>
-      </LanguageProvider>
-    </ThemeProvider>
-    {/* Network Error Overlay — above all routes, outside Router */}
-    <NetworkGlobalBridge />
-    <NetworkErrorOverlay />
-  </NetworkProvider>
+                    {/* ── ProBloom App (for restaurant clients) ── */}
+                    <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+                      <Route index element={<Navigate to="/pos" replace />} />
+                      <Route path="pos" element={<ProtectedRoute section="pos"><POSPage /></ProtectedRoute>} />
+                      <Route path="orders" element={<ProtectedRoute section="orders"><OrdersPage /></ProtectedRoute>} />
+                      <Route path="menu" element={<ProtectedRoute section="menu"><MenuPage /></ProtectedRoute>} />
+                      <Route path="employees" element={<ProtectedRoute section="employees"><EmployeesPage /></ProtectedRoute>} />
+                      <Route path="kitchen" element={<ProtectedRoute section="kitchen"><KitchenPage /></ProtectedRoute>} />
+                      <Route path="billing-queue" element={<ProtectedRoute section="billing"><BillingQueue /></ProtectedRoute>} />
+                      <Route path="analytics" element={<ProtectedRoute section="analytics"><AnalyticsPage /></ProtectedRoute>} />
+                      <Route path="attendance" element={<ProtectedRoute section="attendance"><AttendancePage /></ProtectedRoute>} />
+                      <Route path="ai-assistant" element={<ProtectedRoute><AIAssistant /></ProtectedRoute>} />
+                      <Route path="inventory" element={<ProtectedRoute section="inventory"><InventoryPage /></ProtectedRoute>} />
+                      <Route path="clothing-stock" element={<Navigate to="/inventory" replace />} />
+                      <Route path="tailoring-jobs" element={<ProtectedRoute section="tailoring"><TailoringJobsPage /></ProtectedRoute>} />
+                      <Route path="expenditures" element={<ProtectedRoute section="expenditures"><ExpendituresPage /></ProtectedRoute>} />
+                      <Route path="customers" element={<ProtectedRoute><CustomersPage /></ProtectedRoute>} />
+                      <Route path="kanban" element={<ProtectedRoute><ProjectTracker /></ProtectedRoute>} />
+                      <Route path="whatsapp" element={<ProtectedRoute><WhatsAppDashboard /></ProtectedRoute>} />
+                      <Route path="profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+                    </Route>
+
+                    <Route path="*" element={<Navigate to="/pos" replace />} />
+                  </Routes>
+                </HashRouter>
+              </StakeholderProvider>
+            </AuthProvider>
+          </POSModeProvider>
+        </LanguageProvider>
+      </ThemeProvider>
+      {/* Network Error Overlay — above all routes, outside Router */}
+      <NetworkGlobalBridge />
+      <NetworkErrorOverlay />
+    </NetworkProvider>
   )
 }

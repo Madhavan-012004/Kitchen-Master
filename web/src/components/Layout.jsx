@@ -21,8 +21,11 @@ const NAV_ITEMS = [
     { path: 'attendance', icon: '📍', tKey: 'attendance', section: 'attendance' },
     { path: 'ai-assistant', icon: '✨', tKey: 'assistant' },
     { path: 'inventory', icon: '📦', tKey: 'inventory', section: 'inventory' },
+    { path: 'tailoring-jobs', icon: '🧵', tKey: 'tailoring', section: 'tailoring' },
     { path: 'expenditures', icon: '💸', tKey: 'expenditures', section: 'expenditures' },
     { path: 'kanban', icon: '📋', tKey: 'kanban' },
+    { path: 'customers', icon: '⭐', tKey: 'customers' },
+    { path: 'whatsapp', icon: '💬', tKey: 'whatsapp' },
     { path: 'profile', icon: '⚙️', tKey: 'settings' },
 ]
 
@@ -41,8 +44,11 @@ const SIDE_NAV_ITEMS = [
     { path: 'analytics', icon: '📊', tKey: 'analytics', section: 'analytics' },
     { path: 'attendance', icon: '📍', tKey: 'attendance', section: 'attendance' },
     { path: 'inventory', icon: '📦', tKey: 'inventory', section: 'inventory' },
+    { path: 'tailoring-jobs', icon: '🧵', tKey: 'tailoring', section: 'tailoring' },
     { path: 'expenditures', icon: '💸', tKey: 'expenditures', section: 'expenditures' },
     { path: 'kanban', icon: '📋', tKey: 'kanban' },
+    { path: 'customers', icon: '⭐', tKey: 'customers' },
+    { path: 'whatsapp', icon: '💬', tKey: 'whatsapp' },
     { path: 'ai-assistant', icon: '✨', tKey: 'assistant' },
 ]
 
@@ -88,7 +94,7 @@ export default function Layout() {
     const { user, logout, canAccess, attendance, checkIn, checkOut } = useAuth()
     const { accessibleRestaurants, selectedRestaurantId, selectRestaurant } = useStakeholder()
     const { theme, toggleTheme } = useTheme()
-    const { supermarketMode, toggleSupermarketMode } = usePOSMode()
+    const { supermarketMode, toggleSupermarketMode, isClothing, isMarket, cycleMode } = usePOSMode()
     const { itemNameLanguage, setItemNameLanguage } = useLanguage()
     const { t, i18n } = useTranslation()
     const navigate = useNavigate()
@@ -161,7 +167,9 @@ export default function Layout() {
                 </div>
                 <div className="top-bar-center">
                     {TOP_NAV_ITEMS.filter(item => {
-                        if (supermarketMode && item.section === 'kitchen') return false;
+                        if (!isClothing && item.section === 'tailoring') return false;
+                        if ((supermarketMode || isClothing) && item.section === 'kitchen') return false;
+                        if ((supermarketMode || isClothing) && item.section === 'billing') return false;
                         return !item.section || canAccess(item.section);
                     }).map(item => (
                         <NavLink
@@ -192,14 +200,6 @@ export default function Layout() {
                         title={t('common.switch_to_mode', { mode: theme === 'dark' ? t('settings.light_mode') : t('settings.dark_mode') })}
                     >
                         {theme === 'dark' ? '☀️' : '🌙'}
-                    </button>
-                    <button
-                        className={`header-pos-mode-btn ${supermarketMode ? 'sm-active' : ''}`}
-                        onClick={toggleSupermarketMode}
-                        title={supermarketMode ? t('common.switch_to_mode', { mode: t('nav.restaurant') }) : t('common.switch_to_mode', { mode: t('nav.market') })}
-                    >
-                        <span className="pos-mode-icon">{supermarketMode ? '🍽️' : '🛒'}</span>
-                        <span className="pos-mode-label">{supermarketMode ? t('nav.restaurant') : t('nav.market')}</span>
                     </button>
                     <div className="header-user-wrapper" ref={profileRef}>
                         <button
@@ -256,7 +256,10 @@ export default function Layout() {
             {/* MINI NAV BAR (Left Vertical Bar) */}
             <aside className="mini-side-bar">
                 {SIDE_NAV_ITEMS.filter(item => {
-                    if (supermarketMode && item.section === 'menu') return false;
+                    if (item.path === 'customers' && !user?.enableCustomerPointsPage) return false;
+                    if (!isClothing && item.section === 'tailoring') return false;
+                    if ((supermarketMode || isClothing) && item.section === 'menu') return false;
+                    if ((supermarketMode || isClothing) && item.section === 'billing') return false;
                     return !item.section || canAccess(item.section);
                 }).map(item => (
                     <NavLink
@@ -277,7 +280,11 @@ export default function Layout() {
             <aside className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
                 <nav className="sidebar-nav">
                     {NAV_ITEMS.filter(item => {
-                        if (supermarketMode && (item.section === 'kitchen' || item.section === 'menu')) return false;
+                        if (item.path === 'customers' && !user?.enableCustomerPointsPage) return false;
+                        if (!isClothing && item.section === 'tailoring') return false;
+                        if ((supermarketMode || isClothing) && item.section === 'menu') return false;
+                        if ((supermarketMode || isClothing) && item.section === 'billing') return false;
+                        if ((supermarketMode || isClothing) && item.section === 'kitchen') return false;
                         // Items without a section (profile, ai-assistant) are always accessible
                         if (!item.section) return true;
                         return canAccess(item.section);

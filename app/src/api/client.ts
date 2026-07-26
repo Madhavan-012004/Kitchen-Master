@@ -4,11 +4,19 @@ import { getApiBaseUrl } from '../config/api';
 import { useStakeholderStore } from '../store/useStakeholderStore';
 import { useNetworkStore } from '../store/useNetworkStore';
 
+// Requests that should NOT be retried (mutations that could cause duplicates)
+const NON_RETRYABLE_METHODS = new Set(['post', 'put', 'patch', 'delete']);
+const NON_RETRYABLE_URLS = [
+    '/auth/login', '/auth/register',
+    '/attendance/checkin', '/attendance/checkout',
+    '/orders',  // order creation
+];
+
 const apiClient = axios.create({
-    timeout: 15000,
+    timeout: 12000,  // 12s — tight enough to surface failures quickly
 });
 
-// Dynamically set baseURL before every request (reads AsyncStorage for the saved server IP)
+// ── Request Interceptor: base URL + JWT + tenant header + path normalization ──
 apiClient.interceptors.request.use(
     async (config) => {
         config.baseURL = await getApiBaseUrl();
@@ -22,11 +30,13 @@ apiClient.interceptors.request.use(
         // Attach X-Restaurant-Id for Stakeholders
         const userStr = await AsyncStorage.getItem('km_user');
         if (userStr) {
-            const user = JSON.parse(userStr);
-            if (user.role === 'stakeholder') {
-                const selectedId = useStakeholderStore.getState().selectedRestaurantId;
-                config.headers['X-Restaurant-Id'] = selectedId || 'ALL';
-            }
+            try {
+                const user = JSON.parse(userStr);
+                if (user.role === 'stakeholder') {
+                    const selectedId = useStakeholderStore.getState().selectedRestaurantId;
+                    config.headers['X-Restaurant-Id'] = selectedId || 'ALL';
+                }
+            } catch { /* ignore parse errors */ }
         }
 
         // Path normalization: ensure requests are relative to the baseURL
@@ -34,30 +44,53 @@ apiClient.interceptors.request.use(
             if (config.url.startsWith('/')) config.url = config.url.substring(1);
             if (config.url.startsWith('api/')) config.url = config.url.substring(4);
         }
+
+        // Initialize retry metadata
+        (config as any)._retryCount = (config as any)._retryCount || 0;
         return config;
     },
     (error) => Promise.reject(error)
 );
 
-// Handle global 401 + network error detection
+// ── Response Interceptor: auto-recover, retry, offline detection ──────────────
 apiClient.interceptors.response.use(
     (response) => {
-        // If a previous request had failed and this one succeeded → auto-recover
+        // Any successful response → auto-recover from offline state
         const { isOffline, setOnline } = useNetworkStore.getState();
         if (isOffline) setOnline();
         return response;
     },
     async (error) => {
+        const config = error.config as any;
         const status = error.response?.status;
         const { setOffline } = useNetworkStore.getState();
 
-        // ── Auth errors: clear token (existing behaviour) ──
+        // ── Auth errors: clear token ──
         if (status === 401) {
             await AsyncStorage.multiRemove(['km_token', 'km_user']);
             return Promise.reject(error);
         }
 
-        // ── Network / server errors: show offline screen ──
+        // ── Retry logic for safe/read operations on transient failures ──
+        const method = config?.method?.toLowerCase();
+        const url = config?.url || '';
+        const isRetryable =
+            config &&
+            !NON_RETRYABLE_METHODS.has(method) &&
+            !NON_RETRYABLE_URLS.some(u => url.includes(u)) &&
+            config._retryCount < 3 &&
+            (!error.response || status >= 500);
+
+        if (isRetryable) {
+            config._retryCount += 1;
+            // Exponential backoff: 500ms, 1s, 2s
+            const delay = Math.min(500 * Math.pow(2, config._retryCount - 1), 4000);
+            console.warn(`⚡ Retrying [${config._retryCount}/3] after ${delay}ms: ${url}`);
+            await new Promise(r => setTimeout(r, delay));
+            return apiClient(config);
+        }
+
+        // ── Network / server errors: mark as offline ──
         if (!error.response) {
             if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
                 setOffline('timeout', null);

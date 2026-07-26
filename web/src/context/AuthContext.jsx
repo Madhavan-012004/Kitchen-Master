@@ -14,7 +14,7 @@ export function AuthProvider({ children }) {
         if (!token || user?.role === 'owner' || user?.role === 'stakeholder') return
         try {
             const res = await api.get('/attendance/status')
-            if (res.data.success && res.data.data.isCheckedIn) {
+            if (res.data.success && res.data.data.isActive) {
                 setAttendance({ 
                     isActive: true, 
                     checkInTime: res.data.data.checkInTime 
@@ -90,28 +90,37 @@ export function AuthProvider({ children }) {
 
     // Role checks
     const canAccess = (section) => {
-        if (!user) return false
-        const role = user.role || 'owner'
+        if (!user) return false;
+        const role = user.role || 'owner';
+        
+        // Always allow attendance (so they can check in/out)
+        if (section === 'attendance') return true;
+
+        if (role === 'owner' || role === 'manager') return true;
+        
         if (role === 'stakeholder') {
-            // Investors/Stakeholders can see management views but are usually restricted from editing depending on specific page logic
-            return ['analytics', 'inventory', 'menu', 'orders', 'employees'].includes(section)
+            return ['analytics', 'inventory', 'menu', 'orders', 'employees'].includes(section);
         }
-        if (role === 'owner' || role === 'manager') return true
-        if (section === 'attendance') return false 
-        if (section === 'kitchen') return ['owner', 'manager', 'kot'].includes(role)
-        if (role === 'biller') return ['pos', 'orders', 'billing'].includes(section)
-        if (role === 'waiter') return ['pos', 'orders', 'menu'].includes(section)
-        if (role === 'kot') return ['orders'].includes(section)
-        if (role === 'inventory') return ['menu', 'orders', 'inventory'].includes(section)
-        if (section === 'billing') return ['owner', 'manager', 'biller'].includes(role)
-        return false
+
+        // Lock everything except attendance if shift is not active
+        if (!attendance.isActive && section !== 'attendance') {
+            return false;
+        }
+
+        if (role === 'waiter') return ['waiter-dashboard', 'pos', 'orders', 'menu'].includes(section);
+        if (role === 'kot' || role === 'kitchen') return ['orders', 'kitchen', 'menu'].includes(section);
+        if (role === 'biller') return ['pos', 'billing', 'orders'].includes(section);
+        if (role === 'inventory') return ['inventory', 'expenditures', 'orders', 'menu'].includes(section);
+        if (role === 'tailor') return ['tailoring'].includes(section);
+        
+        return false;
     }
 
     const checkIn = async (latitude, longitude) => {
         try {
             const res = await api.post('/attendance/checkin', { latitude, longitude })
             if (res.data.success) {
-                setAttendance({ isActive: true, checkInTime: res.data.data.record.checkInTime })
+                setAttendance({ isActive: true, checkInTime: res.data.data.checkInTime })
                 return { success: true }
             }
         } catch (err) {

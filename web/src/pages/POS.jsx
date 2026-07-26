@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import api from '../api/client.js'
 import socket from '../api/socket.js'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -14,6 +15,7 @@ import logo from '../assets/LOGO.jpeg'
 const CATEGORIES_ALL = 'All'
 
 export default function POSPage() {
+    const navigate = useNavigate()
     const { t, i18n } = useTranslation()
     const { showTamilName } = useLanguage()
     const [tables, setTables] = useState([])
@@ -26,6 +28,8 @@ export default function POSPage() {
     const [activeCategory, setActiveCategory] = useState(CATEGORIES_ALL)
     const [cart, setCart] = useState([])
     const [orders, setOrders] = useState({}) // tableNumber -> existing order
+    const [pendingApprovals, setPendingApprovals] = useState([]) // Customer orders waiting for waiter ack
+    const [showPendingDrawer, setShowPendingDrawer] = useState(false)
     const [waitlistCount, setWaitlistCount] = useState(0) // Tracks active waiting customers
     const [menuSearch, setMenuSearch] = useState('')
     const [savingOrder, setSavingOrder] = useState(false)
@@ -43,7 +47,7 @@ export default function POSPage() {
     const [paymentMethod, setPaymentMethod] = useState('cash')
     const [staffMode, setStaffMode] = useState(false) // Toggle for availability editing
     const [showQueueModal, setShowQueueModal] = useState(false) // Queue management
-    
+
     const openConfirm = (message, onConfirm) => {
         onConfirm();
         notify(message);
@@ -60,7 +64,7 @@ export default function POSPage() {
     const [settleWithGst, setSettleWithGst] = useState(true)
     const [scaleWeight, setScaleWeight] = useState(0)
     const [scalePort, setScalePort] = useState(null)
-    
+
     // Extra Charges State
     const [orderExtraCharges, setOrderExtraCharges] = useState([])
     const [tempChargeType, setTempChargeType] = useState('')
@@ -68,12 +72,19 @@ export default function POSPage() {
     const [tempChargeAmount, setTempChargeAmount] = useState('')
     // Temp extra charges in review modal — only committed on Confirm
     const [tempExtraCharges, setTempExtraCharges] = useState([])
-    
+
     // Sidebar Tab: 'order' or 'general'
     const [sidebarTab, setSidebarTab] = useState('order')
 
-    // Supermarket Mode
-    const { supermarketMode } = usePOSMode()
+    // Customer details
+    const [customerName, setCustomerName] = useState('')
+    const [customerMobile, setCustomerMobile] = useState('')
+    const [availablePoints, setAvailablePoints] = useState(0)
+    const [redeemPoints, setRedeemPoints] = useState(false)
+
+    // Supermarket Mode — clothing mode uses the same market POS layout
+    const { supermarketMode: rawSupermarketMode, isClothing } = usePOSMode()
+    const supermarketMode = rawSupermarketMode || isClothing
 
     // Local Tracking for newly created sets (families/groups) before they have orders
     const [localSets, setLocalSets] = useState({}) // baseTable -> Array of setNames
@@ -101,6 +112,24 @@ export default function POSPage() {
         }).catch(() => { })
     }, [])
 
+    useEffect(() => {
+        if (customerMobile && customerMobile.length >= 10) {
+            api.get(`/customers/phone/${customerMobile}`)
+                .then(res => {
+                    if (res.data) {
+                        setCustomerName(res.data.name || customerName);
+                        setAvailablePoints(res.data.loyaltyPoints || 0);
+                    }
+                })
+                .catch(err => {
+                    setAvailablePoints(0);
+                });
+        } else {
+            setAvailablePoints(0);
+            setRedeemPoints(false);
+        }
+    }, [customerMobile]);
+
     const fetchActiveOrders = () => {
         return api.get('/orders?paymentStatus=unpaid&limit=100').then(res => {
             const data = res.data.data?.orders || []
@@ -108,13 +137,13 @@ export default function POSPage() {
             data.forEach(o => {
                 if (o.status && o.status.toLowerCase() === 'cancelled') return;
 
-                const isTakeaway = (o.orderType && o.orderType.toLowerCase() === 'takeaway') || 
-                                   (o.tableNumber && o.tableNumber.startsWith('Takeaway')) || 
-                                   !o.tableNumber;
+                const isTakeaway = (o.orderType && o.orderType.toLowerCase() === 'takeaway') ||
+                    (o.tableNumber && o.tableNumber.startsWith('Takeaway')) ||
+                    !o.tableNumber;
 
                 if (o.tableNumber && o.tableNumber.startsWith('Table')) {
                     map[o.tableNumber] = o;
-                    
+
                     // Also map merged tables to the same order so they show as "Occupied"
                     if (o.mergedTables) {
                         const mergedList = o.mergedTables.split(',').map(t => t.trim());
@@ -146,7 +175,14 @@ export default function POSPage() {
                 const count = res.data.data.filter(q => q.status === 'WAITING' || q.status === 'CALLED').length;
                 setWaitlistCount(count);
             }
-        }).catch(() => {});
+        }).catch(() => { });
+    }
+
+    const fetchPendingApprovals = () => {
+        if (!restaurantId) return;
+        api.get('/orders/pending-ack').then(res => {
+            setPendingApprovals(res.data.orders || []);
+        }).catch(() => { });
     }
 
     // Load all active orders
@@ -154,6 +190,7 @@ export default function POSPage() {
         if (!restaurantId) return
         fetchActiveOrders()
         fetchWaitlistCount()
+        fetchPendingApprovals()
 
         if (socket) {
             const joinRoom = () => socket.emit('join:restaurant', String(restaurantId))
@@ -179,7 +216,7 @@ export default function POSPage() {
                         if (res.data.success && res.data.data) {
                             printBill(res.data.data);
                         }
-                    }).catch(() => {});
+                    }).catch(() => { });
                 }
             };
 
@@ -213,6 +250,16 @@ export default function POSPage() {
                 }
             };
 
+            const handleWaiterRequest = (data) => {
+                if (!data.order) return;
+                fetchPendingApprovals();
+                setNotification(`New order from Table ${data.order.tableNumber} pending approval!`);
+            };
+
+            const handleWaiterAcknowledged = (data) => {
+                fetchPendingApprovals();
+            };
+
             socket.on('kot:new', handleUpdate)
             socket.on('kot:update', handleUpdate)
             socket.on('queue_update', handleQueueUpdate)
@@ -220,6 +267,8 @@ export default function POSPage() {
             socket.on('billing:newRequest', handleBillingRequest)
             socket.on('kot:itemUpdate', handleItemUpdate)
             socket.on('notification:send', handleNotification)
+            socket.on('waiter:newOrderRequest', handleWaiterRequest)
+            socket.on('waiter:orderAcknowledged', handleWaiterAcknowledged)
 
             return () => {
                 socket.off('connect', joinRoom)
@@ -230,6 +279,8 @@ export default function POSPage() {
                 socket.off('billing:newRequest', handleBillingRequest)
                 socket.off('kot:itemUpdate', handleItemUpdate)
                 socket.off('notification:send', handleNotification)
+                socket.off('waiter:newOrderRequest', handleWaiterRequest)
+                socket.off('waiter:orderAcknowledged', handleWaiterAcknowledged)
             }
         }
     }, [restaurantId, socket]) // ✅ Removed selectedTable — now accessed via ref instead
@@ -240,7 +291,7 @@ export default function POSPage() {
             fetchWaitlistCount();
         }
     }, [showQueueModal]);
-    
+
     // Global Barcode Scan Listener
     // ✅ Uses a ref for the buffer so the listener is registered ONCE (not on every keystroke)
     useEffect(() => {
@@ -270,7 +321,7 @@ export default function POSPage() {
         try {
             // Check menu items
             let item = menuItems.find(m => m.barcode === code);
-            
+
             if (!item) {
                 // Search inventory
                 const res = await api.get(`/inventory/barcode/${code}`);
@@ -347,10 +398,14 @@ export default function POSPage() {
             })))
             if (existing.tokenNumber) setTokenNumber(existing.tokenNumber)
             setOrderExtraCharges(existing.extraCharges || [])
+            setCustomerName(existing.customerName || '')
+            setCustomerMobile(existing.customerPhone || '')
             setSidebarTab('order')
         } else {
             setCart([])
             setOrderExtraCharges([])
+            setCustomerName('')
+            setCustomerMobile('')
             setSidebarTab('general')
         }
     }
@@ -364,19 +419,19 @@ export default function POSPage() {
             const port = await navigator.serial.requestPort();
             await port.open({ baudRate: 9600 });
             setScalePort(port);
-            
+
             const reader = port.readable.getReader();
             const decoder = new TextDecoder();
             let buffer = "";
-            
+
             while (true) {
                 const { value, done } = await reader.read();
                 if (done) break;
-                
+
                 buffer += decoder.decode(value);
                 const lines = buffer.split('\n');
                 buffer = lines.pop(); // Keep partial line
-                
+
                 for (const line of lines) {
                     const match = line.match(/[-+]?\d*\.?\d+/);
                     if (match) {
@@ -392,10 +447,10 @@ export default function POSPage() {
     };
 
     const applyWeightToItem = (itemId, weight) => {
-        setCart(prev => prev.map(item => 
-            (item._id === itemId || item.menuItemId === itemId || item.inventoryItemId === itemId) 
-            ? { ...item, quantity: weight } 
-            : item
+        setCart(prev => prev.map(item =>
+            (item._id === itemId || item.menuItemId === itemId || item.inventoryItemId === itemId)
+                ? { ...item, quantity: weight }
+                : item
         ));
         notify(`Applied weight: ${weight} kg`);
     };
@@ -406,9 +461,9 @@ export default function POSPage() {
             notify('S1 (main table) cannot be removed.');
             return;
         }
-        
+
         const baseTable = setKey.split(' - Set')[0];
-        
+
         // Confirm if there are items in the cart
         if (cart.length > 0 && selectedTable === setKey) {
             openConfirm('This set has items in the cart. Are you sure you want to remove it?', () => {
@@ -439,13 +494,13 @@ export default function POSPage() {
         const acTableList = user.acTables.split(',').map(s => s.trim());
         return acTableList.includes(tableNumStr);
     }, [selectedTable, user?.acTables]);
-    
+
     const acMarkup = isAcTable ? (user?.acChargePercentage || 20) : 0;
-    
+
     const tableMetadata = React.useMemo(() => {
         if (!user?.tableMetadata) return {};
         if (typeof user.tableMetadata === 'string') {
-            try { return JSON.parse(user.tableMetadata); } catch(e) { return {}; }
+            try { return JSON.parse(user.tableMetadata); } catch (e) { return {}; }
         }
         return user.tableMetadata;
     }, [user?.tableMetadata]);
@@ -459,12 +514,12 @@ export default function POSPage() {
         const effectivePrice = getEffectivePrice(item.price);
         setSidebarTab('order');
         setCart(prev => {
-            const mId = item._id || item.menuItemId;
+            const mId = item._id || item.id || item.menuItemId;
             const invId = item.inventoryItemId;
-            
+
             // Consolidate if same menu item or same inventory item (no _id means not saved yet)
             const existing = prev.find(c => !c._id && (
-                (mId && c.menuItemId === mId) || 
+                (mId && c.menuItemId === mId) ||
                 (invId && c.inventoryItemId === invId)
             ));
 
@@ -472,14 +527,14 @@ export default function POSPage() {
                 return prev.map(c => (c === existing) ? { ...c, quantity: c.quantity + 1 } : c);
             }
 
-            return [...prev, { 
-                menuItemId: mId, 
+            return [...prev, {
+                menuItemId: mId,
                 inventoryItemId: invId,
-                name: item.name, 
+                name: item.name,
                 tamilName: item.tamilName,
-                price: effectivePrice, 
-                quantity: 1, 
-                notes: '', 
+                price: effectivePrice,
+                quantity: 1,
+                notes: '',
                 status: 'preparing',
                 barcode: item.barcode
             }];
@@ -497,7 +552,7 @@ export default function POSPage() {
                     if (existingOrder) {
                         await api.patch(`/orders/${existingOrder._id}/items/${itemToRemove._id}/status`, { status: 'CANCELLED' });
                         notify(`${itemToRemove.name} cancelled in kitchen`);
-                        
+
                         // Local update: filter out the cancelled item immediately
                         setCart(prev => {
                             const updated = prev.filter(c => c._id !== itemToRemove._id);
@@ -514,10 +569,10 @@ export default function POSPage() {
         }
 
         setCart(prev => {
-            const updated = prev.filter(c => 
-                !((c._id && c._id === itemToRemove._id) || 
-                  (c.menuItemId && c.menuItemId === itemToRemove.menuItemId && !c._id) ||
-                  (c.inventoryItemId && c.inventoryItemId === itemToRemove.inventoryItemId && !c._id))
+            const updated = prev.filter(c =>
+                !((c._id && c._id === itemToRemove._id) ||
+                    (c.menuItemId && c.menuItemId === itemToRemove.menuItemId && !c._id) ||
+                    (c.inventoryItemId && c.inventoryItemId === itemToRemove.inventoryItemId && !c._id))
             );
             if (updated.length === 0 && showReviewModal) setShowReviewModal(false);
             return updated;
@@ -528,9 +583,22 @@ export default function POSPage() {
     const updateQty = (id, delta) => {
         setCart(prev => {
             const updated = prev
-                .map(c => (c.menuItemId === id || c._id === id) ? { ...c, quantity: c.quantity + delta } : c)
+                .map(c => (c.menuItemId === id || c._id === id) ? { ...c, quantity: Math.max(0, c.quantity + delta) } : c)
                 .filter(c => c.quantity > 0);
-            // Bug 8: Auto-close review modal when cart becomes empty
+            if (updated.length === 0) {
+                setShowReviewModal(false);
+            }
+            return updated;
+        })
+    }
+
+    const updateQtyDirect = (id, value) => {
+        const newQty = parseFloat(value);
+        if (isNaN(newQty) || newQty < 0) return;
+        setCart(prev => {
+            const updated = newQty === 0
+                ? prev.filter(c => !(c.menuItemId === id || c._id === id))
+                : prev.map(c => (c.menuItemId === id || c._id === id) ? { ...c, quantity: newQty } : c);
             if (updated.length === 0) {
                 setShowReviewModal(false);
             }
@@ -557,7 +625,7 @@ export default function POSPage() {
                     menuItemId: c.menuItemId,
                     name: c.name,
                     price: c.price,
-                    quantity: c.quantity,
+                    quantity: parseFloat(c.quantity) || 1,
                     notes: c.notes,
                     status: c.status,
                     inventoryItemId: c.inventoryItemId,
@@ -572,7 +640,10 @@ export default function POSPage() {
                     quantity: c.quantity,
                     barcode: c.barcode
                 })),
-                total: cartTotal + orderExtraCharges.reduce((s,c) => s + Number(c.amount || 0), 0)
+                total: cartTotal + orderExtraCharges.reduce((s, c) => s + Number(c.amount || 0), 0),
+                customerName: customerName || undefined,
+                customerPhone: customerMobile || undefined,
+                pointsRedeemed: redeemPoints ? Math.min(availablePoints, cartTotal) : 0
             }
             if (existing) {
                 await api.put(`/orders/${existing._id}`, payload)
@@ -583,13 +654,13 @@ export default function POSPage() {
                 if (savedOrder?.tokenNumber) {
                     setTokenNumber(savedOrder.tokenNumber)
                     const newKey = `Takeaway-T${savedOrder.tokenNumber || savedOrder._id}`
-                    
+
                     // Optimistic update
                     setOrders(prev => ({
                         ...prev,
                         [newKey]: savedOrder
                     }))
-                    
+
                     if (selectedTable === 'Takeaway') {
                         setSelectedTable(newKey);
                     }
@@ -658,13 +729,23 @@ export default function POSPage() {
         });
     }
 
+    const acknowledgeCustomerOrder = async (orderId) => {
+        try {
+            await api.patch(`/orders/${orderId}/waiter-acknowledge`);
+            notify('Order accepted and sent to kitchen');
+            setPendingApprovals(prev => prev.filter(o => o._id !== orderId));
+            fetchActiveOrders();
+        } catch (err) {
+            notify(`Failed to accept order: ${err.response?.data?.message || err.message}`);
+        }
+    }
 
     const handleCombine = async () => {
         if (!combineTargetTable) return;
-        
+
         const targetKey = combineTargetTable.startsWith('Table ') ? combineTargetTable : `Table ${combineTargetTable}`;
         const targetOrder = orders[targetKey];
-        
+
         setSavingOrder(true)
         try {
             await api.post(`/orders/combine-tables`, {
@@ -689,19 +770,19 @@ export default function POSPage() {
     const handleUnmerge = async (tableToUnmerge) => {
         const existing = orders[selectedTable];
         if (!existing) return;
-        
+
         openConfirm(`Are you sure you want to unmerge ${tableToUnmerge}?`, async () => {
             setSavingOrder(true);
             try {
                 await api.post(`/orders/${existing._id}/uncombine-table`, {
                     tableNumber: tableToUnmerge
                 });
-                
+
                 const updatedActiveOrders = await fetchActiveOrders();
                 const currentSelectedTable = selectedTable;
                 setCart([]);
                 setOrderExtraCharges([]);
-                
+
                 if (updatedActiveOrders[currentSelectedTable]) {
                     const order = updatedActiveOrders[currentSelectedTable];
                     setCart(order.items || []);
@@ -713,7 +794,7 @@ export default function POSPage() {
                 } else {
                     setSelectedTable(null);
                 }
-                
+
                 if (typeof notify === 'function') notify(`Table ${tableToUnmerge} unmerged successfully`);
             } catch (err) {
                 if (typeof notify === 'function') notify('Failed to unmerge: ' + (err.response?.data?.message || err.message));
@@ -725,8 +806,9 @@ export default function POSPage() {
 
     const toggleAvailability = async (item) => {
         try {
-            await api.patch(`/menu/${item._id}/toggle`)
-            setMenuItems(prev => prev.map(m => m._id === item._id ? { ...m, isAvailable: !m.isAvailable } : m))
+            const currentId = item._id || item.id;
+            await api.patch(`/menu/${currentId}/toggle`)
+            setMenuItems(prev => prev.map(m => (m._id || m.id) === currentId ? { ...m, isAvailable: !m.isAvailable } : m))
             notify(`${item.name} is now ${!item.isAvailable ? 'Available' : 'Out of Stock'}`)
         } catch (err) {
             notify('Update failed')
@@ -737,12 +819,17 @@ export default function POSPage() {
         const existing = orders[selectedTable]
         if (!existing) return
         try {
-            await api.patch(`/orders/${existing._id}/status`, { 
-                status: 'paid', 
-                paymentStatus: 'paid', 
+            await api.patch(`/orders/${existing._id}/status`, {
+                status: 'paid',
+                paymentStatus: 'paid',
                 paymentMethod: method,
                 printWithGst: settleWithGst
             })
+
+            // Automatically print the bill after payment using settings language
+            const lang = user?.printLanguage || 'en';
+            printBill({ ...existing, paymentMethod: method, printWithGst: settleWithGst }, true, false, lang);
+
             const newOrders = { ...orders }
             delete newOrders[selectedTable]
             setOrders(newOrders)
@@ -758,7 +845,7 @@ export default function POSPage() {
 
             setCart([])
             setSelectedTable(null)
-             setShowPaymentModal(false)
+            setShowPaymentModal(false)
             notify(`Payment received via ${method.toUpperCase()} ✓`)
         } catch (e) {
             notify('Failed to settle bill')
@@ -767,13 +854,13 @@ export default function POSPage() {
 
     const printBill = (order, printCustomerCopy = true, printKitchenCopy = true, printLang = 'en') => {
         if (!order || !order._id) return;
-        
+
         const restaurantName = user?.restaurantName || 'RESTAURANT';
         const logoUrl = user?.logo ? (user.logo.startsWith('http') ? user.logo : window.location.origin + user.logo) : (logo.startsWith('http') ? logo : window.location.origin + logo);
         const logoImg = `<img src="${logoUrl}" class="logo" alt="logo" />`;
 
         const newJobs = [];
-        
+
         // Evaluate user printer settings (default to true if undefined)
         const isCashCounterPrinterEnabled = user?.billPrinterEnabled !== false;
         const isKitchenPrinterEnabled = user?.kotPrinterEnabled !== false;
@@ -781,8 +868,8 @@ export default function POSPage() {
         if (printCustomerCopy && isCashCounterPrinterEnabled) {
             const count = user?.printCount || 1;
             for (let i = 0; i < count; i++) {
-                newJobs.push({ 
-                    type: t('bill.customer_copy', 'CUSTOMER COPY'), 
+                newJobs.push({
+                    type: t('bill.customer_copy', 'CUSTOMER COPY'),
                     itemWiseKOT: user.itemWiseKOT ?? false,
                     printCount: user.printCount ?? 1,
                     pharmacyFontSize: user.pharmacyFontSize || 11,
@@ -815,14 +902,14 @@ export default function POSPage() {
                         totalSgst: order.totalSgst,
                         totalCgst: order.totalCgst,
                         total: order.total
-                    } 
+                    }
                 });
             }
         }
 
         if (printKitchenCopy && !order.skipKOT && isKitchenPrinterEnabled) {
-            newJobs.push({ 
-                type: t('bill.kitchen_copy', 'KITCHEN COPY'), 
+            newJobs.push({
+                type: t('bill.kitchen_copy', 'KITCHEN COPY'),
                 isKot: true,
                 printLang,
                 orderData: {
@@ -831,7 +918,7 @@ export default function POSPage() {
                     table: order.tableNumber || (order.tokenNumber ? `Token ${order.tokenNumber}` : 'Takeaway'),
                     subtotal: order.total || order.subtotal || 0,
                     createdAt: order.createdAt || new Date()
-                } 
+                }
             });
         }
 
@@ -849,18 +936,13 @@ export default function POSPage() {
             alert('Please confirm KOT first before closing the order!');
             return;
         }
-        // Show language picker before printing
-        setPendingPrintOrder(existing);
-        setShowPrintLangModal(true);
+        setShowPaymentModal(true);
     };
 
     const handlePrintWithLanguage = (lang) => {
+        // Obsolete, left for backwards compatibility if needed, but not used directly
         setShowPrintLangModal(false);
-        if (pendingPrintOrder) {
-            printBill({...pendingPrintOrder, printWithGst: settleWithGst}, true, false, lang);
-            setPendingPrintOrder(null);
-        }
-        setShowPaymentModal(true);
+        setPendingPrintOrder(null);
     };
 
     const handleA4Invoice = async () => {
@@ -928,14 +1010,14 @@ export default function POSPage() {
             // KOT is ALWAYS thermal, never pharmacy A4
             const isPharmacy = !isKot && (jobBillTemplate === 'pharmacy' || jobBillTemplate === 'A4');
             const isGstBill = !isKot && (jobBillTemplate === 'gst');
-            
+
             const getBillBody = () => {
                 const isSupermarket = orderData.source === 'supermarket';
                 const totalItemsCount = items.reduce((acc, item) => acc + item.quantity, 0);
                 const discountRate = parseFloat(jobDiscountPct) || 0;
                 const taxRate = typeof user?.taxRate === 'number' ? user.taxRate : 18;
                 const effectiveTaxType = orderData.taxType || user?.taxType || 'Inclusive';
-                
+
                 const originalSubtotal = items.reduce((s, item) => {
                     const price = parseFloat(item.price || 0);
                     const qty = parseFloat(item.quantity || 0);
@@ -952,7 +1034,7 @@ export default function POSPage() {
                     }
                     return s + (basePrice * qty);
                 }, 0);
-                
+
                 const discountAmount = originalSubtotal * (discountRate / 100);
                 const netSubtotal = originalSubtotal - discountAmount;
                 const taxableSubtotal = netSubtotal;
@@ -964,7 +1046,7 @@ export default function POSPage() {
                         const qty = parseFloat(item.quantity || 0);
                         const itemTaxRate = typeof item.taxRate === 'number' ? item.taxRate : taxRate;
                         const finalItemPrice = price * (1 - discountRate / 100);
-                        
+
                         if (effectiveTaxType === 'Inclusive') {
                             const itemBaseRate = finalItemPrice / (1 + itemTaxRate / 100);
                             totalGstAmount += (finalItemPrice - itemBaseRate) * qty;
@@ -973,16 +1055,16 @@ export default function POSPage() {
                         }
                     });
                 }
-                
+
                 const sgstAmount = totalGstAmount / 2;
                 const cgstAmount = totalGstAmount / 2;
-                
-                const extraTotal = extraCharges ? extraCharges.reduce((s,c) => s + Number(c.amount || 0), 0) : 0;
-                
+
+                const extraTotal = extraCharges ? extraCharges.reduce((s, c) => s + Number(c.amount || 0), 0) : 0;
+
                 const grandTotal = isSupermarket && orderData.total !== undefined
                     ? orderData.total.toFixed(2)
                     : (netSubtotal + totalGstAmount + extraTotal).toFixed(2);
-                
+
                 const sgstPct = taxRate / 2;
                 const cgstPct = taxRate / 2;
 
@@ -999,7 +1081,7 @@ export default function POSPage() {
                     <div style="border-top: 1px solid #000; border-bottom: 1px solid #000; margin: 4px 0; padding: 3px 0;">
                         <div style="display: flex; justify-content: space-between; font-size: 15px; padding: 0 10px; font-weight: normal;">
                             <span>${t('bill.bill_no', 'Bill No')}: <span>${orderNumber}</span></span>
-                            <span>${t('bill.table_no', 'Table No')}: <span>${table}</span></span>
+                            ${(!user?.preferredPosMode || user.preferredPosMode === 'restaurant') ? `<span>${t('bill.table_no', 'Table/Type')}: <span>${table}</span></span>` : ''}
                         </div>
                     </div>
                     <div class="center" style="font-size: 15px; font-weight: normal;">${t('bill.date', 'Date')}: ${new Date(createdAt).toLocaleString()}</div>
@@ -1018,27 +1100,27 @@ export default function POSPage() {
                         </thead>
                         <tbody>
                             ${items.map((c, index) => {
-                                const matchedMenu = menuItems.find(m => String(m._id) === String(c.menuItemId));
-                                const tName = c.tamilName || (matchedMenu ? matchedMenu.tamilName : null);
-                                const displayName = (printLang === 'ta' && tName) ? tName : c.name;
-                                
-                                let itemBaseRate, rowTotal;
-                                if (jobPrintWithGst !== false) {
-                                    const finalItemPrice = parseFloat(c.price || 0) * (1 - discountRate / 100);
-                                    const itemTaxRate = typeof c.taxRate === 'number' ? c.taxRate : taxRate;
-                                    if (effectiveTaxType === 'Exclusive') {
-                                        itemBaseRate = finalItemPrice;
-                                    } else {
-                                        itemBaseRate = finalItemPrice / (1 + itemTaxRate / 100);
-                                    }
-                                    rowTotal = itemBaseRate * c.quantity;
-                                } else {
-                                    const finalItemPrice = parseFloat(c.price || 0) * (1 - discountRate / 100);
-                                    itemBaseRate = finalItemPrice;
-                                    rowTotal = itemBaseRate * c.quantity;
-                                }
+                    const matchedMenu = menuItems.find(m => String(m._id) === String(c.menuItemId));
+                    const tName = c.tamilName || (matchedMenu ? matchedMenu.tamilName : null);
+                    const displayName = (printLang === 'ta' && tName) ? tName : c.name;
 
-                                return `
+                    let itemBaseRate, rowTotal;
+                    if (jobPrintWithGst !== false) {
+                        const finalItemPrice = parseFloat(c.price || 0) * (1 - discountRate / 100);
+                        const itemTaxRate = typeof c.taxRate === 'number' ? c.taxRate : taxRate;
+                        if (effectiveTaxType === 'Exclusive') {
+                            itemBaseRate = finalItemPrice;
+                        } else {
+                            itemBaseRate = finalItemPrice / (1 + itemTaxRate / 100);
+                        }
+                        rowTotal = itemBaseRate * c.quantity;
+                    } else {
+                        const finalItemPrice = parseFloat(c.price || 0) * (1 - discountRate / 100);
+                        itemBaseRate = finalItemPrice;
+                        rowTotal = itemBaseRate * c.quantity;
+                    }
+
+                    return `
                                 <tr>
                                     <td style="padding: 2px 0; font-size: ${printLang === 'ta' ? '12px' : '14px'}; font-weight: bold; padding-right: 2px;">${displayName}</td>
                                     ${!isKot && printCategoryInBill ? `<td style="padding: 2px 0; font-size: ${printLang === 'ta' ? '12px' : '14px'}; font-weight: normal; padding-right: 2px; text-transform: capitalize;">${matchedMenu?.category || c.category || 'General'}</td>` : ''}
@@ -1047,7 +1129,7 @@ export default function POSPage() {
                                     ${!isKot ? `<td style="padding: 2px 0; text-align: right; font-size: ${printLang === 'ta' ? '12px' : '14px'}; font-weight: normal;">${rowTotal.toFixed(2)}</td>` : ''}
                                 </tr>
                                 `;
-                            }).join('')}
+                }).join('')}
                         </tbody>
                     </table>
                     ${!isKot ? `
@@ -1113,7 +1195,7 @@ export default function POSPage() {
             const getPharmacyBillBody = () => {
                 const invoiceDate = new Date(createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
                 const invoiceTime = new Date(createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
-                
+
                 let taxableTotal = 0, cgstTotal = 0, sgstTotal = 0, grandTotalPharm = 0;
                 const gstSummary = {}; // To group by GST%
 
@@ -1154,13 +1236,13 @@ export default function POSPage() {
                   
                   <!-- HEADER -->
                   <div style="text-align:center;position:relative;margin-bottom:10px">
-                    ${logoImg ? `<img src="${logoImg.match(/src="([^"]+)"/)?.[1]||''}" style="position:absolute;left:0;top:0;max-height:60px"/>` : ''}
+                    ${logoImg ? `<img src="${logoImg.match(/src="([^"]+)"/)?.[1] || ''}" style="position:absolute;left:0;top:0;max-height:60px"/>` : ''}
                     <div style="font-size:24px;font-weight:900;color:#1e40af;letter-spacing:1px">${restaurantName.toUpperCase()}</div>
                     <div style="font-size:12px;margin:2px 0;font-weight:bold">${user?.address || ''}</div>
                     <div style="font-size:12px">Phones : ${user?.phone || ''}  E-mail : ${user?.email || ''}</div>
                     <div style="font-size:11px;margin-top:4px">DL. No. ${user?.dlNumber || ''} TIN. No. ${user?.tinNumber || ''} GST No. ${user?.gstNumber || ''}</div>
                     <div style="font-size:11px">CIN No. ${user?.cinNumber || ''}</div>
-                    ${logoImg ? `<img src="${logoImg.match(/src="([^"]+)"/)?.[1]||''}" style="position:absolute;right:0;top:0;max-height:60px"/>` : ''}
+                    ${logoImg ? `<img src="${logoImg.match(/src="([^"]+)"/)?.[1] || ''}" style="position:absolute;right:0;top:0;max-height:60px"/>` : ''}
                   </div>
 
                   <div style="display:flex;justify-content:space-between;font-weight:700;border-top:2px solid #000;padding:4px 0">
@@ -1288,21 +1370,21 @@ export default function POSPage() {
                     const finalSellingPrice = mrp * (1 - discountRate / 100);
                     const baseRate = jobPrintWithGst !== false ? finalSellingPrice * (1 - taxRate / 100) : finalSellingPrice;
                     const amount = +(baseRate * qty).toFixed(2);
-                    
+
                     const cgst = jobPrintWithGst !== false ? finalSellingPrice * (cgstPct / 100) : 0;
                     const sgst = jobPrintWithGst !== false ? finalSellingPrice * (sgstPct / 100) : 0;
                     const taxPerUnit = cgst + sgst;
-                    
+
                     const itemTax = taxPerUnit * qty;
                     const itemCgst = cgst * qty;
                     const itemSgst = sgst * qty;
-                    
+
                     totalTaxableSubtotal += amount;
                     totalCgstAmount += itemCgst;
                     totalSgstAmount += itemSgst;
                     totalTaxAmount += itemTax;
                     grandTotalGst += (finalSellingPrice * qty);
-                    
+
                     return `<tr>
                         <td style="border:1px solid #000;padding:2px 4px;text-align:center;">${i + 1}</td>
                         <td style="border:1px solid #000;padding:2px 4px;text-align:left;"><b>${item.name || ''}</b></td>
@@ -1574,861 +1656,972 @@ export default function POSPage() {
                 <>
                     {/* COLUMN 1: TABLES */}
                     <div className="pos-column pos-tables">
-                <div className="panel table-panel">
-                    <div className="panel-header" style={{ padding: '12px 10px' }}>
-                        <span className="panel-title">Tables</span>
-                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                            <button 
-                                className={`primary-btn ${waitlistCount > 0 ? 'pulse-badge' : ''}`} 
-                                style={{ 
-                                    padding: '4px 8px', 
-                                    fontSize: '11px', 
-                                    borderRadius: '2px',
-                                    whiteSpace: 'nowrap',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '6px',
-                                    lineHeight: 1,
-                                    backgroundColor: waitlistCount > 0 ? 'var(--accent)' : 'transparent',
-                                    color: waitlistCount > 0 ? 'var(--accent-text)' : 'var(--text-primary)',
-                                    border: waitlistCount > 0 ? 'none' : '1px solid var(--border)'
-                                }}
-                                onClick={() => setShowQueueModal(true)}
-                            >
-                                Queue <span>👥</span>
-                                {waitlistCount > 0 && (
-                                    <span style={{
-                                        background: 'var(--accent-text)', 
-                                        color: 'var(--accent)', 
-                                        borderRadius: '2px', 
-                                        padding: '1px 6px', 
-                                        fontWeight: 'bold'
-                                    }}>
-                                        {waitlistCount}
-                                    </span>
-                                )}
-                            </button>
-                            <span 
-                                className="panel-badge occupied-badge"
-                                style={{ 
-                                    whiteSpace: 'nowrap',
-                                    padding: '4px 8px',
-                                    fontSize: '11px',
-                                    lineHeight: 1
-                                }}
-                            >
-                                {Object.values(orders).filter(o => o.status !== 'PAID').length} Busy
-                            </span>
-                        </div>
-                    </div>
-                    
-                    <div className="takeaway-section">
-                        <div className="takeaway-header-row">
-                            <span className="section-subtitle">Takeaway Line</span>
-                            <button className={`new-takeaway-btn ${selectedTable === 'Takeaway' ? 'active' : ''}`} onClick={() => selectTable('Takeaway')}>+ New</button>
-                        </div>
-                        <div className="takeaway-line">
-                            {Object.keys(orders).filter(k => k.startsWith('Takeaway-T')).map(k => (
-                                <button key={k} className={`takeaway-token-btn ${selectedTable === k ? 'selected' : ''}`} onClick={() => selectTable(k)}>
-                                    <span className="token-label">T</span>
-                                    <span className="token-val">{orders[k].tokenNumber || '...'}</span>
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className="table-categories-list" style={{ flex: 1, overflowY: 'auto', paddingBottom: '20px' }}>
-                        {(() => {
-                            const tableCats = (typeof user?.tableCategories === 'string' ? JSON.parse(user.tableCategories) : user?.tableCategories) || [];
-                            const tableMeta = (typeof user?.tableMetadata === 'string' ? JSON.parse(user.tableMetadata) : user?.tableMetadata) || {};
-
-                            const groupedTables = {};
-                            const totalT = user?.totalTables || 10;
-                            
-                            for (let i = 1; i <= totalT; i++) {
-                                const loc = tableMeta[i]?.location || 'Uncategorized';
-                                if (!groupedTables[loc]) groupedTables[loc] = [];
-                                groupedTables[loc].push(i);
-                            }
-
-                            const displayCats = tableCats.length > 0 
-                                ? [...tableCats, ...(groupedTables['Uncategorized'] ? ['Uncategorized'] : [])]
-                                : ['All Tables'];
-                            
-                            if (tableCats.length === 0) groupedTables['All Tables'] = groupedTables['Uncategorized'] || [];
-
-                            return displayCats.map(cat => {
-                                const tablesInCat = groupedTables[cat] || [];
-                                if (tablesInCat.length === 0) return null;
-
-                                return (
-                                    <div key={cat} className="table-category-group" style={{ marginBottom: '15px' }}>
-                                        {tableCats.length > 0 && (
-                                            <div className="section-subtitle" style={{ padding: '8px 16px', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', sticky: 'top', zIndex: 1 }}>
-                                                {cat}
-                                            </div>
+                        <div className="panel table-panel">
+                            <div className="panel-header" style={{ padding: '12px 10px' }}>
+                                <span className="panel-title">Tables</span>
+                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                    <button
+                                        className={`primary-btn ${waitlistCount > 0 ? 'pulse-badge' : ''}`}
+                                        style={{
+                                            padding: '4px 8px',
+                                            fontSize: '11px',
+                                            borderRadius: '2px',
+                                            whiteSpace: 'nowrap',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px',
+                                            lineHeight: 1,
+                                            backgroundColor: waitlistCount > 0 ? 'var(--accent)' : 'transparent',
+                                            color: waitlistCount > 0 ? 'var(--accent-text)' : 'var(--text-primary)',
+                                            border: waitlistCount > 0 ? 'none' : '1px solid var(--border)'
+                                        }}
+                                        onClick={() => setShowQueueModal(true)}
+                                    >
+                                        Queue <span>👥</span>
+                                        {waitlistCount > 0 && (
+                                            <span style={{
+                                                background: 'var(--accent-text)',
+                                                color: 'var(--accent)',
+                                                borderRadius: '2px',
+                                                padding: '1px 6px',
+                                                fontWeight: 'bold'
+                                            }}>
+                                                {waitlistCount}
+                                            </span>
                                         )}
-                                        <div className="table-grid">
-                                            {tablesInCat.map(num => {
-                                                const status = getTableStatus(num);
-                                                const key = `Table ${num}`;
-                                                const isSelected = selectedTable === key;
-                                                const order = orders[key];
-                                                const parentMergedOrder = Object.values(orders).find(o => o && o.mergedTables && o.mergedTables.includes(key));
+                                    </button>
+                                    {pendingApprovals.length > 0 && (
+                                        <button
+                                            className="primary-btn pulse-badge"
+                                            style={{
+                                                padding: '4px 8px',
+                                                fontSize: '11px',
+                                                borderRadius: '2px',
+                                                background: '#ff9800',
+                                                color: '#fff',
+                                                border: 'none',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '6px'
+                                            }}
+                                            onClick={() => setShowPendingDrawer(!showPendingDrawer)}
+                                        >
+                                            Approve <span>🔔</span>
+                                            <span style={{
+                                                background: '#fff',
+                                                color: '#ff9800',
+                                                borderRadius: '2px',
+                                                padding: '1px 6px',
+                                                fontWeight: 'bold'
+                                            }}>
+                                                {pendingApprovals.length}
+                                            </span>
+                                        </button>
+                                    )}
+                                    <span
+                                        className="panel-badge occupied-badge"
+                                        style={{
+                                            whiteSpace: 'nowrap',
+                                            padding: '4px 8px',
+                                            fontSize: '11px',
+                                            lineHeight: 1
+                                        }}
+                                    >
+                                        {Object.values(orders).filter(o => o.status !== 'PAID').length} Busy
+                                    </span>
+                                </div>
+                            </div>
 
-                                                let totalItems = 0;
-                                                let readyItems = 0;
-                                                if (order && order.items) {
-                                                    totalItems = order.items.length;
-                                                    readyItems = order.items.filter(i => i.status === 'ready' || i.status === 'served').length;
-                                                }
-                                                const isAllReady = totalItems > 0 && readyItems === totalItems;
-
-                                                const handleClick = () => {
-                                                    if (parentMergedOrder) selectTable(parentMergedOrder.tableNumber);
-                                                    else selectTable(num);
-                                                };
-
-                                                const displayNum = parentMergedOrder ? `${num}🔗` : 
-                                                                 (order?.mergedTables ? `${num}, ${order.mergedTables.replace(/Table /g, '')}` : num);
-
-                                                return (
-                                                    <button
-                                                        key={num}
-                                                        className={`table-btn ${status} ${isSelected ? 'selected' : ''} ${isAllReady ? 'all-ready' : ''} ${order?.status ? `status-${order.status.toLowerCase()}` : ''} ${parentMergedOrder ? 'merged-source' : ''}`}
-                                                        onClick={handleClick}
-                                                    >
-                                                        <span className="table-num">{displayNum}</span>
-                                                        {status === 'occupied' && <span className="table-dot" />}
-                                                        {(() => {
-                                                            const baseKey = `Table ${num}`
-                                                            const activeSets = Object.keys(orders).filter(k => k === baseKey || k.startsWith(`${baseKey} - Set`)).length;
-                                                            if (activeSets > 1) return <span className="set-count-badge">{activeSets}</span>
-                                                            return null
-                                                        })()}
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
+                            {/* Pending Approvals Drawer */}
+                            {showPendingDrawer && pendingApprovals.length > 0 && (
+                                <div style={{ padding: '12px', background: '#fff3e0', borderBottom: '1px solid #ffe0b2' }}>
+                                    <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', color: '#e65100', display: 'flex', justifyContent: 'space-between' }}>
+                                        <span>Pending Customer Orders</span>
+                                        <span style={{ cursor: 'pointer', opacity: 0.7 }} onClick={() => setShowPendingDrawer(false)}>✕</span>
+                                    </h4>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        {pendingApprovals.map(order => (
+                                            <div key={order._id} style={{ background: '#fff', padding: '10px', borderRadius: '4px', border: '1px dashed #ff9800' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                                    <strong style={{ color: '#000' }}>Table {order.tableNumber}</strong>
+                                                    <span style={{ fontSize: '12px', color: '#666' }}>{new Date(order.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+                                                </div>
+                                                <div style={{ fontSize: '12px', color: '#555', marginBottom: '10px', maxHeight: '60px', overflowY: 'auto' }}>
+                                                    {order.items.map((item, idx) => (
+                                                        <div key={idx}>{item.quantity}x {item.name}</div>
+                                                    ))}
+                                                </div>
+                                                <button
+                                                    onClick={() => acknowledgeCustomerOrder(order._id)}
+                                                    style={{ width: '100%', padding: '8px', background: '#4caf50', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}
+                                                >
+                                                    Accept & Send KOT
+                                                </button>
+                                            </div>
+                                        ))}
                                     </div>
-                                );
-                            });
-                        })()}
-                    </div>
-
-                    {/* 
-                        REMOVED: Split tables now integrated into main table sets.
-                    */}
-                </div>
-            </div>
-
-            {/* COLUMN 2: ORDER REVIEW */}
-            <div className="pos-column pos-order">
-                <div className="panel order-panel">
-                    <div className="panel-tab-header">
-                        <button 
-                            className={`panel-tab-btn ${sidebarTab === 'general' ? 'active' : ''}`}
-                            onClick={() => setSidebarTab('general')}
-                        >
-                            📋 General
-                        </button>
-                        <button 
-                            className={`panel-tab-btn ${sidebarTab === 'order' ? 'active' : ''}`}
-                            onClick={() => setSidebarTab('order')}
-                        >
-                            🛒 Current Order
-                        </button>
-                    </div>
-
-                    <div className="panel-header premium-sidebar-header">
-                        <div className="panel-header-top">
-                            <span className="panel-title">{sidebarTab === 'general' ? 'Table Details' : 'Current Order'}</span>
-                            {selectedTable && (
-                                <div className="table-badge-small">
-                                    {selectedTable === 'Takeaway' ? '🥡' : `T${selectedTable.replace('Table ', '').split(' - ')[0]}`}
                                 </div>
                             )}
-                        </div>
-                        {selectedTable && selectedTable.startsWith('Table ') && (
-                            <div className="table-meta-actions-row">
-                                {(() => {
-                                    const baseTable = selectedTable.split(' - Set')[0];
-                                    const backendSets = Object.keys(orders).filter(k => k === baseTable || k.startsWith(`${baseTable} - Set`));
-                                    const trackedLocalSets = localSets[baseTable] || [baseTable];
-                                    const allSets = Array.from(new Set([...backendSets, ...trackedLocalSets])).sort();
-                                    
-                                    return (
-                                        <>
-                                            <div className="set-management-mini">
-                                                <div className="set-switcher-compact">
-                                                    {allSets.map((setKey, idx) => (
-                                                        <div key={setKey} className="set-btn-mini-wrap">
-                                                            <button 
-                                                                className={`set-btn-mini ${selectedTable === setKey ? 'active' : ''}`}
-                                                                onClick={() => selectTable(setKey)}
-                                                            >
-                                                                S{idx + 1}
-                                                            </button>
-                                                            {/* Bug 1: S1 (base table, idx===0) is non-removable; only extra sets can be removed */}
-                                                            {idx > 0 && (
-                                                                <button
-                                                                    className="set-remove-mini"
-                                                                    title={`Remove ${setKey}`}
-                                                                    onClick={(e) => { e.stopPropagation(); removeSet(setKey, allSets); }}
-                                                                >
-                                                                    ×
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                    ))}
-                                                    <button 
-                                                        className="add-set-btn-mini"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            const nextIdx = allSets.length + 1;
-                                                            const newSetKey = `${baseTable} - Set ${nextIdx}`;
-                                                            setLocalSets(prev => ({
-                                                                ...prev,
-                                                                [baseTable]: [...(prev[baseTable] || [baseTable]), newSetKey]
-                                                            }));
-                                                            selectTable(newSetKey);
-                                                            setSidebarTab('order');
-                                                        }}
-                                                        title="Add Set"
-                                                    >
-                                                        +
-                                                    </button>
-                                                </div>
-                                            </div>
-                                            
-                                            <button 
-                                                className="merge-action-btn-mini"
-                                                onClick={(e) => { e.stopPropagation(); setShowCombineModal(true); }}
-                                                title="Merge Tables"
-                                            >
-                                                🔗 Merge
-                                            </button>
-                                        </>
-                                    );
-                                })()}
-                            </div>
-                        )}
-                    </div>
 
-                    {selectedTable === 'Takeaway' && tokenNumber && sidebarTab === 'order' && (
-                        <div className="token-badge">
-                            <span className="token-label">TOKEN</span>
-                            <span className="token-number">{tokenNumber}</span>
-                        </div>
-                    )}
-
-                    {!selectedTable ? (
-                        <div className="order-empty">
-                            <span>👈</span>
-                            <p>{t('pos.select_table_hint')}</p>
-                        </div>
-                    ) : sidebarTab === 'general' ? (
-                        <div className="table-details-view">
-                            <div className="table-details-card">
-                                <div className="table-details-number">
-                                    {(() => {
-                                        const text = selectedTable.replace('Table ', '');
-                                        if (text.includes(' - Set ')) {
-                                            const [num, setPart] = text.split(' - Set ');
-                                            const setNum = setPart.trim();
-                                            return (
-                                                <div className="table-details-set-display">
-                                                    <span className="big-num">{num}</span>
-                                                    <span className="small-set">SET {setNum}</span>
-                                                </div>
-                                            );
-                                        }
-                                        return text;
-                                    })()}
+                            <div className="takeaway-section">
+                                <div className="takeaway-header-row">
+                                    <span className="section-subtitle">Takeaway Line</span>
+                                    <button className={`new-takeaway-btn ${selectedTable === 'Takeaway' ? 'active' : ''}`} onClick={() => selectTable('Takeaway')}>+ New</button>
                                 </div>
-                                <div className="table-details-info">
-                                    {(() => {
-                                        const baseNum = selectedTable.replace('Table ', '').split(' - Set')[0];
-                                        return (
-                                            <>
-                                                <div className="detail-row">
-                                                    <span className="detail-label">{t('common.status')}</span>
-                                                    <span className={`detail-value status-pill ${orders[selectedTable] ? 'occupied' : 'free'}`}>
-                                                        {orders[selectedTable] ? t('common.occupied') : t('common.free')}
-                                                    </span>
-                                                </div>
-                                                <div className="detail-row">
-                                                    <span className="detail-label">{t('pos.seats')}</span>
-                                                    <span className="detail-value">
-                                                        {(() => {
-                                                            const currentOrder = orders[selectedTable];
-                                                            let totalSeats = Number(tableMetadata[baseNum]?.seats || 0);
-                                                            if (currentOrder?.mergedTables) {
-                                                                const others = currentOrder.mergedTables.split(',').map(t => t.trim().replace('Table ', ''));
-                                                                others.forEach(tNum => {
-                                                                    if (tNum !== baseNum && tableMetadata[tNum]) {
-                                                                        totalSeats += Number(tableMetadata[tNum].seats || 0);
-                                                                    }
-                                                                });
-                                                            }
-                                                            return totalSeats || 'N/A';
-                                                        })()}
-                                                    </span>
-                                                </div>
-                                                <div className="detail-row">
-                                                    <span className="detail-label">{t('common.location')}</span>
-                                                    <span className="detail-value">{tableMetadata[baseNum]?.location || t('pos.not_specified')}</span>
-                                                </div>
-                                                <div className="detail-row">
-                                                    <span className="detail-label">{t('pos.area_type')}</span>
-                                                    <span className="detail-value">{isAcTable ? t('pos.ac_area') : t('pos.general_area')}</span>
-                                                </div>
+                                <div className="takeaway-line">
+                                    {Object.keys(orders).filter(k => k.startsWith('Takeaway-T')).map(k => (
+                                        <button key={k} className={`takeaway-token-btn ${selectedTable === k ? 'selected' : ''}`} onClick={() => selectTable(k)}>
+                                            <span className="token-label">T</span>
+                                            <span className="token-val">{orders[k].tokenNumber || '...'}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
 
-                                                {orders[selectedTable]?.mergedTables && (
-                                                    <div className="merged-tables-details">
-                                                        <h4 className="merge-list-title">🔗 Currently Merged</h4>
-                                                        <div className="merge-pill-container">
-                                                            {orders[selectedTable].mergedTables.split(',').map(t => t.trim()).map(tableNum => (
-                                                                <div key={tableNum} className="merge-pill-item">
-                                                                    <span>{tableNum}</span>
-                                                                    <button 
-                                                                        className="unmerge-pill-btn"
-                                                                        onClick={(e) => { e.stopPropagation(); handleUnmerge(tableNum); }}
-                                                                        title={`Unmerge ${tableNum}`}
-                                                                        disabled={savingOrder}
-                                                                        style={{ position: 'relative', zIndex: 100, pointerEvents: 'auto' }}
-                                                                    >
-                                                                        ✕
-                                                                    </button>
-                                                                </div>
-                                                            ))}
-                                                        </div>
+                            <div className="table-categories-list" style={{ flex: 1, overflowY: 'auto', paddingBottom: '20px' }}>
+                                {(() => {
+                                    const tableCats = (typeof user?.tableCategories === 'string' ? JSON.parse(user.tableCategories) : user?.tableCategories) || [];
+                                    const tableMeta = (typeof user?.tableMetadata === 'string' ? JSON.parse(user.tableMetadata) : user?.tableMetadata) || {};
+
+                                    const groupedTables = {};
+                                    const totalT = user?.totalTables || 10;
+
+                                    for (let i = 1; i <= totalT; i++) {
+                                        const loc = tableMeta[i]?.location || 'Uncategorized';
+                                        if (!groupedTables[loc]) groupedTables[loc] = [];
+                                        groupedTables[loc].push(i);
+                                    }
+
+                                    const displayCats = tableCats.length > 0
+                                        ? [...tableCats, ...(groupedTables['Uncategorized'] ? ['Uncategorized'] : [])]
+                                        : ['All Tables'];
+
+                                    if (tableCats.length === 0) groupedTables['All Tables'] = groupedTables['Uncategorized'] || [];
+
+                                    return displayCats.map(cat => {
+                                        const tablesInCat = groupedTables[cat] || [];
+                                        if (tablesInCat.length === 0) return null;
+
+                                        return (
+                                            <div key={cat} className="table-category-group" style={{ marginBottom: '15px' }}>
+                                                {tableCats.length > 0 && (
+                                                    <div className="section-subtitle" style={{ padding: '8px 16px', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', sticky: 'top', zIndex: 1 }}>
+                                                        {cat}
                                                     </div>
                                                 )}
-                                            </>
-                                        );
-                                    })()}
-                                </div>
-                            </div>
-                            
-                            {!orders[selectedTable] && (
-                                <div className="start-order-hint">
-                                    ** Select items from the menu to start ordering **
-                                </div>
-                            )}
-                        </div>
-                    ) : cart.length === 0 ? (
-                        <div className="order-empty">
-                            <span>🍴</span>
-                            <p>Cart is empty. Add items from the menu →</p>
-                        </div>
-                    ) : (
-                        <>
-                            <div className="cart-items">
-                                {cart.map((item, idx) => (
-                                    <div key={item._id || `new-${idx}`} className={`cart-item ${item.status === 'served' ? 'served' : ''}`}>
-                                        <div className="cart-item-info">
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                <span className="cart-item-name">{(showTamilName && item.tamilName) ? item.tamilName : item.name}</span>
-                                                {item.status && (item.status.toLowerCase() === 'ready' || item.status.toLowerCase() === 'served') && (
-                                                    <span className="item-status-badge">
-                                                        {item.status.toLowerCase() === 'served' ? 'Served' : 'Ready'}
-                                                    </span>
-                                                )}
+                                                <div className="table-grid">
+                                                    {tablesInCat.map(num => {
+                                                        const status = getTableStatus(num);
+                                                        const key = `Table ${num}`;
+                                                        const isSelected = selectedTable === key;
+                                                        const order = orders[key];
+                                                        const parentMergedOrder = Object.values(orders).find(o => o && o.mergedTables && o.mergedTables.includes(key));
+
+                                                        let totalItems = 0;
+                                                        let readyItems = 0;
+                                                        if (order && order.items) {
+                                                            totalItems = order.items.length;
+                                                            readyItems = order.items.filter(i => i.status === 'ready' || i.status === 'served').length;
+                                                        }
+                                                        const isAllReady = totalItems > 0 && readyItems === totalItems;
+
+                                                        const handleClick = () => {
+                                                            if (parentMergedOrder) selectTable(parentMergedOrder.tableNumber);
+                                                            else selectTable(num);
+                                                        };
+
+                                                        const displayNum = parentMergedOrder ? `${num}🔗` :
+                                                            (order?.mergedTables ? `${num}, ${order.mergedTables.replace(/Table /g, '')}` : num);
+
+                                                        return (
+                                                            <button
+                                                                key={num}
+                                                                className={`table-btn ${status} ${isSelected ? 'selected' : ''} ${isAllReady ? 'all-ready' : ''} ${order?.status ? `status-${order.status.toLowerCase()}` : ''} ${parentMergedOrder ? 'merged-source' : ''}`}
+                                                                onClick={handleClick}
+                                                            >
+                                                                <span className="table-num">{displayNum}</span>
+                                                                {status === 'occupied' && <span className="table-dot" />}
+                                                                {(() => {
+                                                                    const baseKey = `Table ${num}`
+                                                                    const activeSets = Object.keys(orders).filter(k => k === baseKey || k.startsWith(`${baseKey} - Set`)).length;
+                                                                    if (activeSets > 1) return <span className="set-count-badge">{activeSets}</span>
+                                                                    return null
+                                                                })()}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
                                             </div>
-                                            <span className="cart-item-price">₹{(item.price * item.quantity).toFixed(2)}</span>
-                                        </div>
-                                        <div className="cart-item-qty">
-                                            <button className="qty-btn" onClick={() => updateQty(item._id || item.menuItemId, -1)} disabled={item.status === 'served'}>−</button>
-                                            <span>{item.quantity}</span>
-                                            <button className="qty-btn" onClick={() => updateQty(item._id || item.menuItemId, 1)} disabled={item.status === 'served'}>+</button>
-                                        </div>
-                                    </div>
-                                ))}
+                                        );
+                                    });
+                                })()}
                             </div>
 
-                            <div className="cart-summary-compact">
-                                <div className="summary-header-compact">
-                                    <div className="compact-total">
-                                        <span className="total-label">{t('common.total')}</span>
-                                        <span className="total-value">₹{(cartTotal + orderExtraCharges.reduce((s,c) => s + Number(c.amount||0), 0)).toFixed(2)}</span>
-                                    </div>
-                                    <button className="review-btn-compact" onClick={() => setShowReviewModal(true)}>
-                                        🔍 {t('pos.review_order')}
-                                    </button>
-                                </div>
+                            {/* 
+                        REMOVED: Split tables now integrated into main table sets.
+                    */}
+                        </div>
+                    </div>
 
-                                <div className="compact-actions-grid single-action">
-                                    <button
-                                        className="compact-btn kot"
-                                        onClick={saveOrder}
-                                        disabled={cart.length === 0 || savingOrder}
-                                    >
-                                        👨‍🍳 {savingOrder ? '...' : 'KOT'}
-                                    </button>
-                                    <button
-                                        className="compact-btn settle"
-                                        onClick={handlePrintAndClose}
-                                        disabled={!orders[selectedTable] || savingOrder}
-                                    >
-                                        🧾 {t('bill.receipt')}
-                                    </button>
-                                </div>
-                                <div className="compact-actions-grid single-action" style={{ marginTop: '5px' }}>
-                                    <button
-                                        className="compact-btn"
-                                        onClick={handleA4Invoice}
-                                        disabled={!orders[selectedTable] || savingOrder}
-                                        style={{ background: 'linear-gradient(135deg, #4f46e5, #3b82f6)', color: '#fff' }}
-                                    >
-                                        📄 A4 PDF
-                                    </button>
-                                    <button
-                                        className="compact-btn"
-                                        onClick={handleWhatsApp}
-                                        disabled={!orders[selectedTable] || savingOrder}
-                                        style={{ background: 'linear-gradient(135deg, #25D366, #128C7E)', color: '#fff' }}
-                                    >
-                                        💬 WhatsApp
-                                    </button>
-                                </div>
-                                <button 
-                                    className="compact-cancel-btn" 
-                                    onClick={(e) => { e.stopPropagation(); closeOrder(); }}
-                                    disabled={savingOrder}
-                                    style={{ position: 'relative', zIndex: 50, pointerEvents: 'auto' }}
+                    {/* COLUMN 2: ORDER REVIEW */}
+                    <div className="pos-column pos-order">
+                        <div className="panel order-panel">
+                            <div className="panel-tab-header">
+                                <button
+                                    className={`panel-tab-btn ${sidebarTab === 'general' ? 'active' : ''}`}
+                                    onClick={() => setSidebarTab('general')}
                                 >
-                                     ✕ {t('common.cancel')} {t('pos.cart')}
+                                    📋 General
                                 </button>
-                                
-                                {scalePort ? (
-                                    <div className="scale-controls-pos">
-                                        <div className="scale-data">
-                                            <span className="label">Live Weight:</span>
-                                            <span className="val">{scaleWeight.toFixed(3)} KG</span>
+                                <button
+                                    className={`panel-tab-btn ${sidebarTab === 'order' ? 'active' : ''}`}
+                                    onClick={() => setSidebarTab('order')}
+                                >
+                                    🛒 Current Order
+                                </button>
+                            </div>
+
+                            <div className="panel-header premium-sidebar-header">
+                                <div className="panel-header-top">
+                                    <span className="panel-title">{sidebarTab === 'general' ? 'Table Details' : 'Current Order'}</span>
+                                    {selectedTable && (
+                                        <div className="table-badge-small">
+                                            {selectedTable === 'Takeaway' ? '🥡' : `T${selectedTable.replace('Table ', '').split(' - ')[0]}`}
                                         </div>
-                                        <button className="apply-scale-btn" onClick={() => {
-                                            if (cart.length > 0) {
-                                                const lastItem = cart[cart.length - 1];
-                                                applyWeightToItem(lastItem._id || lastItem.menuItemId || lastItem.inventoryItemId, scaleWeight);
-                                            }
-                                        }}>
-                                            Apply to Last Item
-                                        </button>
+                                    )}
+                                </div>
+                                {selectedTable && selectedTable.startsWith('Table ') && (
+                                    <div className="table-meta-actions-row">
+                                        {(() => {
+                                            const baseTable = selectedTable.split(' - Set')[0];
+                                            const backendSets = Object.keys(orders).filter(k => k === baseTable || k.startsWith(`${baseTable} - Set`));
+                                            const trackedLocalSets = localSets[baseTable] || [baseTable];
+                                            const allSets = Array.from(new Set([...backendSets, ...trackedLocalSets])).sort();
+
+                                            return (
+                                                <>
+                                                    <div className="set-management-mini">
+                                                        <div className="set-switcher-compact">
+                                                            {allSets.map((setKey, idx) => (
+                                                                <div key={setKey} className="set-btn-mini-wrap">
+                                                                    <button
+                                                                        className={`set-btn-mini ${selectedTable === setKey ? 'active' : ''}`}
+                                                                        onClick={() => selectTable(setKey)}
+                                                                    >
+                                                                        S{idx + 1}
+                                                                    </button>
+                                                                    {/* Bug 1: S1 (base table, idx===0) is non-removable; only extra sets can be removed */}
+                                                                    {idx > 0 && (
+                                                                        <button
+                                                                            className="set-remove-mini"
+                                                                            title={`Remove ${setKey}`}
+                                                                            onClick={(e) => { e.stopPropagation(); removeSet(setKey, allSets); }}
+                                                                        >
+                                                                            ×
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                            <button
+                                                                className="add-set-btn-mini"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    const nextIdx = allSets.length + 1;
+                                                                    const newSetKey = `${baseTable} - Set ${nextIdx}`;
+                                                                    setLocalSets(prev => ({
+                                                                        ...prev,
+                                                                        [baseTable]: [...(prev[baseTable] || [baseTable]), newSetKey]
+                                                                    }));
+                                                                    selectTable(newSetKey);
+                                                                    setSidebarTab('order');
+                                                                }}
+                                                                title="Add Set"
+                                                            >
+                                                                +
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    <button
+                                                        className="merge-action-btn-mini"
+                                                        onClick={(e) => { e.stopPropagation(); setShowCombineModal(true); }}
+                                                        title="Merge Tables"
+                                                    >
+                                                        🔗 Merge
+                                                    </button>
+                                                </>
+                                            );
+                                        })()}
                                     </div>
-                                ) : (
-                                    <button className="connect-scale-pos-btn" onClick={connectScale}>
-                                        ⚖️ {t('pos.connect_scale')}
-                                    </button>
                                 )}
                             </div>
-                        </>
-                    )}
-                </div>
-            </div>
 
-            {/* COLUMN 3: MENU */}
-            <div className="pos-column pos-menu">
-                {/* Search + Category Filter */}
-                <div className="menu-header">
-                    <input
-                        className="menu-search"
-                        placeholder={`🔍  ${t('pos.search_placeholder')}`}
-                        value={menuSearch}
-                        onChange={e => setMenuSearch(e.target.value)}
-                    />
-                    <div className="category-tabs">
-                        {categories.map(cat => (
-                            <button
-                                key={cat}
-                                className={`cat-tab ${activeCategory === cat ? 'active' : ''}`}
-                                onClick={() => setActiveCategory(cat)}
-                            >
-                                {cat}
-                            </button>
-                        ))}
-                    </div>
-                    <button
-                        className={`staff-mode-btn ${staffMode ? 'active' : ''}`}
-                        onClick={() => setStaffMode(!staffMode)}
-                        title={t('pos.staff_mode_title')}
-                    >
-                        {staffMode ? `🔒 ${t('pos.staff_mode_on')}` : `🔑 ${t('pos.staff_mode_off')}`}
-                    </button>
-                </div>
+                            {selectedTable === 'Takeaway' && tokenNumber && sidebarTab === 'order' && (
+                                <div className="token-badge">
+                                    <span className="token-label">TOKEN</span>
+                                    <span className="token-number">{tokenNumber}</span>
+                                </div>
+                            )}
 
-                {/* Menu Item Grid */}
-                <div className="menu-grid" style={{ gridTemplateColumns: `repeat(${user?.menuItemColumnCount || 4}, 1fr)` }}>
-                    {filteredMenu.map(item => (
-                        <div key={item._id} className="menu-item-container" style={{ position: 'relative' }}>
-                            {(() => {
-                                const cartItem = cart.find(c => c.menuItemId === item._id || c._id === item._id);
-                                const qty = cartItem ? cartItem.quantity : 0;
-                                return (
-                                    /* Bug 7: wrapper div with overflow: visible so badge isn't clipped */
-                                    <div style={{ position: 'relative', overflow: 'visible' }}>
-                                        <button
-                                            className={`menu-item-card ${qty > 0 ? 'selected' : ''} ${!item.isAvailable ? 'out-of-stock' : ''}`}
-                                            onClick={() => item.isAvailable && addToCart(item)}
-                                            disabled={!selectedTable || !item.isAvailable}
-                                            title={!item.isAvailable ? `${(showTamilName && item.tamilName) ? item.tamilName : item.name} ${t('pos.is_out_of_stock')}` : (selectedTable ? `${t('common.add')} ${(showTamilName && item.tamilName) ? item.tamilName : item.name}` : t('pos.select_table_hint'))}
-                                            style={{ position: 'relative' }}
-                                        >
-                                            <div className={`veg-dot ${item.isVeg ? 'veg' : 'nonveg'}`} />
-                                            <div className="menu-item-name">{(showTamilName && item.tamilName) ? item.tamilName : item.name}</div>
-                                            <div className="menu-item-category">{item.category}</div>
-                                            <div className="menu-item-price">₹{getEffectivePrice(item.price)}</div>
-                                            {!item.isAvailable && <div className="out-of-stock-badge">{t('pos.set_out_of_stock').toUpperCase()}</div>}
-                                        </button>
-                                        {/* Bug 7: badge outside button so overflow: visible works */}
-                                        {qty > 0 && <div className="item-qty-badge">{qty}</div>}
+                            {!selectedTable ? (
+                                <div className="order-empty">
+                                    <span>👈</span>
+                                    <p>{t('pos.select_table_hint')}</p>
+                                </div>
+                            ) : sidebarTab === 'general' ? (
+                                <div className="table-details-view">
+                                    <div className="table-details-card">
+                                        <div className={`table-details-number ${selectedTable === 'Takeaway' ? 'is-takeaway' : ''}`}>
+                                            {(() => {
+                                                const text = selectedTable.replace('Table ', '');
+                                                if (text === 'Takeaway') return t('pos.takeaway', 'Takeaway');
+                                                if (text.includes(' - Set ')) {
+                                                    const [num, setPart] = text.split(' - Set ');
+                                                    const setNum = setPart.trim();
+                                                    return (
+                                                        <div className="table-details-set-display">
+                                                            <span className="big-num">{num}</span>
+                                                            <span className="small-set">SET {setNum}</span>
+                                                        </div>
+                                                    );
+                                                }
+                                                return text;
+                                            })()}
+                                        </div>
+                                        <div className="table-details-info">
+                                            {(() => {
+                                                const baseNum = selectedTable.replace('Table ', '').split(' - Set')[0];
+                                                return (
+                                                    <>
+                                                        <div className="detail-row">
+                                                            <span className="detail-label">{t('common.status')}</span>
+                                                            <span className={`detail-value status-pill ${orders[selectedTable] ? 'occupied' : 'free'}`}>
+                                                                {orders[selectedTable] ? t('common.occupied') : t('common.free')}
+                                                            </span>
+                                                        </div>
+                                                        <div className="detail-row">
+                                                            <span className="detail-label">{t('pos.seats')}</span>
+                                                            <span className="detail-value">
+                                                                {(() => {
+                                                                    const currentOrder = orders[selectedTable];
+                                                                    let totalSeats = Number(tableMetadata[baseNum]?.seats || 0);
+                                                                    if (currentOrder?.mergedTables) {
+                                                                        const others = currentOrder.mergedTables.split(',').map(t => t.trim().replace('Table ', ''));
+                                                                        others.forEach(tNum => {
+                                                                            if (tNum !== baseNum && tableMetadata[tNum]) {
+                                                                                totalSeats += Number(tableMetadata[tNum].seats || 0);
+                                                                            }
+                                                                        });
+                                                                    }
+                                                                    return totalSeats || 'N/A';
+                                                                })()}
+                                                            </span>
+                                                        </div>
+                                                        <div className="detail-row">
+                                                            <span className="detail-label">{t('common.location')}</span>
+                                                            <span className="detail-value">{tableMetadata[baseNum]?.location || t('pos.not_specified')}</span>
+                                                        </div>
+                                                        <div className="detail-row">
+                                                            <span className="detail-label">{t('pos.area_type')}</span>
+                                                            <span className="detail-value">{isAcTable ? t('pos.ac_area') : t('pos.general_area')}</span>
+                                                        </div>
+
+                                                        <div className="customer-info-section" style={{ marginTop: '20px', paddingTop: '15px', borderTop: '1px solid var(--border)' }}>
+                                                            <h4 style={{ marginBottom: '10px', color: 'var(--text-primary)', fontSize: '14px' }}>Customer Details</h4>
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                                                <input
+                                                                    type="tel"
+                                                                    placeholder="Phone Number..."
+                                                                    value={customerMobile}
+                                                                    onChange={e => setCustomerMobile(e.target.value)}
+                                                                    className="pos-search-input"
+                                                                    style={{ width: '100%' }}
+                                                                />
+                                                                <input
+                                                                    type="text"
+                                                                    placeholder="Name..."
+                                                                    value={customerName}
+                                                                    onChange={e => setCustomerName(e.target.value)}
+                                                                    className="pos-search-input"
+                                                                    style={{ width: '100%' }}
+                                                                />
+                                                                {availablePoints > 0 && (
+                                                                    <div className="loyalty-points-widget" style={{ padding: '10px', background: 'var(--inv-primary, #C6F53D)', borderRadius: '8px', marginTop: '5px' }}>
+                                                                        <span style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>⭐ {availablePoints.toFixed(2)} Points Available</span>
+                                                                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                                                                            <input
+                                                                                type="checkbox"
+                                                                                checked={redeemPoints}
+                                                                                onChange={e => setRedeemPoints(e.target.checked)}
+                                                                            />
+                                                                            Redeem Points
+                                                                        </label>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+
+                                                        {orders[selectedTable]?.mergedTables && (
+                                                            <div className="merged-tables-details">
+                                                                <h4 className="merge-list-title">🔗 Currently Merged</h4>
+                                                                <div className="merge-pill-container">
+                                                                    {orders[selectedTable].mergedTables.split(',').map(t => t.trim()).map(tableNum => (
+                                                                        <div key={tableNum} className="merge-pill-item">
+                                                                            <span>{tableNum}</span>
+                                                                            <button
+                                                                                className="unmerge-pill-btn"
+                                                                                onClick={(e) => { e.stopPropagation(); handleUnmerge(tableNum); }}
+                                                                                title={`Unmerge ${tableNum}`}
+                                                                                disabled={savingOrder}
+                                                                                style={{ position: 'relative', zIndex: 100, pointerEvents: 'auto' }}
+                                                                            >
+                                                                                ✕
+                                                                            </button>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </>
+                                                );
+                                            })()}
+                                        </div>
                                     </div>
-                                );
-                            })()}
-                            {/* Bug 5: Staff mode toggle - e.stopPropagation ensures it doesn't bubble to parent */}
-                            {staffMode && (
-                                <button
-                                    className={`item-availability-toggle ${item.isAvailable ? 'available' : 'oos'}`}
-                                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); toggleAvailability(item); }}
-                                >
-                                    {item.isAvailable ? t('pos.set_out_of_stock') : t('pos.set_available')}
-                                </button>
+
+                                    {!orders[selectedTable] && (
+                                        <div className="start-order-hint">
+                                            ** Select items from the menu to start ordering **
+                                        </div>
+                                    )}
+                                </div>
+                            ) : cart.length === 0 ? (
+                                <div className="order-empty">
+                                    <span>🍴</span>
+                                    <p>Cart is empty. Add items from the menu →</p>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="cart-items">
+                                        {cart.map((item, idx) => (
+                                            <div key={item._id || `new-${idx}`} className={`cart-item ${item.status === 'served' ? 'served' : ''}`}>
+                                                <div className="cart-item-info">
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                        <span className="cart-item-name">{(showTamilName && item.tamilName) ? item.tamilName : item.name}</span>
+                                                        {item.status && (item.status.toLowerCase() === 'ready' || item.status.toLowerCase() === 'served') && (
+                                                            <span className="item-status-badge">
+                                                                {item.status.toLowerCase() === 'served' ? 'Served' : 'Ready'}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <span className="cart-item-price">₹{(item.price * item.quantity).toFixed(2)}</span>
+                                                </div>
+                                                <div className="cart-item-qty">
+                                                    <button className="qty-btn" onClick={() => updateQty(item._id || item.menuItemId, -1)} disabled={item.status === 'served'}>−</button>
+                                                    <input
+                                                        type="number"
+                                                        min="0.001"
+                                                        step="0.001"
+                                                        value={item.quantity}
+                                                        onChange={e => updateQtyDirect(item._id || item.menuItemId, e.target.value)}
+                                                        disabled={item.status === 'served'}
+                                                        style={{ width: '52px', textAlign: 'center', border: '1px solid var(--border)', borderRadius: '4px', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px', padding: '2px 4px', MozAppearance: 'textfield' }}
+                                                        onFocus={e => e.target.select()}
+                                                    />
+                                                    <button className="qty-btn" onClick={() => updateQty(item._id || item.menuItemId, 1)} disabled={item.status === 'served'}>+</button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <div className="cart-summary-compact">
+                                        <div className="summary-header-compact">
+                                            <div className="compact-total">
+                                                <span className="total-label">{t('common.total')}</span>
+                                                <span className="total-value">₹{(cartTotal + orderExtraCharges.reduce((s, c) => s + Number(c.amount || 0), 0)).toFixed(2)}</span>
+                                            </div>
+                                            <button className="review-btn-compact" onClick={() => setShowReviewModal(true)}>
+                                                🔍 {t('pos.review_order')}
+                                            </button>
+                                        </div>
+
+                                        <div className="compact-actions-grid single-action">
+                                            <button
+                                                className="compact-btn unified"
+                                                onClick={saveOrder}
+                                                disabled={cart.length === 0 || savingOrder}
+                                            >
+                                                👨‍🍳 {savingOrder ? '...' : 'KOT'}
+                                            </button>
+                                            <button
+                                                className="compact-btn unified"
+                                                onClick={(e) => { e.stopPropagation(); closeOrder(); }}
+                                                disabled={savingOrder}
+                                                style={{ margin: 0, height: '100%', position: 'relative', zIndex: 50, pointerEvents: 'auto' }}
+                                            >
+                                                ✕ {t('common.cancel', 'Cancel')}
+                                            </button>
+                                        </div>
+                                        <div className="compact-actions-grid single-action" style={{ marginTop: '5px' }}>
+                                            <button
+                                                className="compact-btn unified"
+                                                onClick={handleA4Invoice}
+                                                disabled={!orders[selectedTable] || savingOrder}
+                                            >
+                                                📄 A4 PDF
+                                            </button>
+                                            <button
+                                                className="compact-btn unified"
+                                                onClick={handleWhatsApp}
+                                                disabled={!orders[selectedTable] || savingOrder}
+                                            >
+                                                💬 WhatsApp
+                                            </button>
+                                        </div>
+                                        <button
+                                            className="compact-btn unified"
+                                            onClick={handlePrintAndClose}
+                                            disabled={!orders[selectedTable] || savingOrder}
+                                            style={{ width: '100%', marginTop: '5px', height: '45px' }}
+                                        >
+                                            🧾 {t('bill.close_bill', 'Close bill')}
+                                        </button>
+
+                                        {scalePort ? (
+                                            <div className="scale-controls-pos">
+                                                <div className="scale-data">
+                                                    <span className="label">Live Weight:</span>
+                                                    <span className="val">{scaleWeight.toFixed(3)} KG</span>
+                                                </div>
+                                                <button className="apply-scale-btn" onClick={() => {
+                                                    if (cart.length > 0) {
+                                                        const lastItem = cart[cart.length - 1];
+                                                        applyWeightToItem(lastItem._id || lastItem.menuItemId || lastItem.inventoryItemId, scaleWeight);
+                                                    }
+                                                }}>
+                                                    Apply to Last Item
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <button className="connect-scale-pos-btn" onClick={connectScale}>
+                                                ⚖️ {t('pos.connect_scale')}
+                                            </button>
+                                        )}
+                                    </div>
+                                </>
                             )}
                         </div>
-                    ))}
-                    {filteredMenu.length === 0 && (
-                        <div className="menu-empty">No items found</div>
-                    )}
-                </div>
-            </div>
+                    </div>
 
-            {/* MODALS */}
-
-            {showCombineModal && (
-                <div className="pos-modal">
-                    <div className="modal-content combine-modal-premium">
-                        <div className="modal-header-premium">
-                            <h2>{t('pos.combine_order')}</h2>
-                            <p>{t('pos.select_target_table', { table: selectedTable })}</p>
-                            <button className="close-btn" onClick={() => setShowCombineModal(false)}>×</button>
-                        </div>
-                        
-                        <div className="modal-body-premium">
-                            <div className="table-selection-grid">
-                                {Array.from({ length: user?.totalTables || 10 }, (_, i) => i + 1).map(num => {
-                                    const key = `Table ${num}`;
-                                    if (key === selectedTable) return null;
-                                    const isOccupied = !!orders[key];
-                                    const isSelected = combineTargetTable === key || combineTargetTable === String(num);
-
-                                    return (
-                                        <div
-                                            key={num}
-                                            className={`selectable-table-item ${isOccupied ? 'occupied' : 'empty'} ${isSelected ? 'selected' : ''}`}
-                                            onClick={() => setCombineTargetTable(key)}
-                                        >
-                                            <span className="table-num">{num}</span>
-                                            {isOccupied && <span className="occupied-indicator" title="Occupied" />}
-                                        </div>
-                                    );
-                                })}
+                    {/* COLUMN 3: MENU */}
+                    <div className="pos-column pos-menu">
+                        {/* Search + Category Filter */}
+                        <div className="menu-header">
+                            <input
+                                className="menu-search"
+                                placeholder={`🔍  ${t('pos.search_placeholder')}`}
+                                value={menuSearch}
+                                onChange={e => setMenuSearch(e.target.value)}
+                            />
+                            <div className="category-tabs">
+                                {categories.map(cat => (
+                                    <button
+                                        key={cat}
+                                        className={`cat-tab ${activeCategory === cat ? 'active' : ''}`}
+                                        onClick={() => setActiveCategory(cat)}
+                                    >
+                                        {cat}
+                                    </button>
+                                ))}
                             </div>
+                            <button
+                                className={`staff-mode-btn ${staffMode ? 'active' : ''}`}
+                                onClick={() => setStaffMode(!staffMode)}
+                                title={t('pos.staff_mode_title')}
+                            >
+                                {staffMode ? `🔒 ${t('pos.staff_mode_on')}` : `🔑 ${t('pos.staff_mode_off')}`}
+                            </button>
                         </div>
 
-                        <div className="modal-footer premium">
-                            <button className="secondary-btn" onClick={() => setShowCombineModal(false)}>{t('common.cancel')}</button>
-                            <button className="primary-btn-premium" onClick={handleCombine} disabled={savingOrder || !combineTargetTable}>
-                                {savingOrder ? t('pos.combining') : t('pos.confirm_combine')}
-                            </button>
+                        {/* Menu Item Grid */}
+                        <div className="pos-menu-grid" style={{ gridTemplateColumns: `repeat(${Number(user?.menuItemColumnCount) || 4}, minmax(0, 1fr))`, '--col-count': Number(user?.menuItemColumnCount) || 4 }}>
+                            {filteredMenu.map(item => (
+                                <div key={item._id || item.id} className="menu-item-container" style={{ position: 'relative' }}>
+                                    {(() => {
+                                        const currentId = item._id || item.id;
+                                        const cartItem = cart.find(c => c.menuItemId === currentId);
+                                        const qty = cartItem ? cartItem.quantity : 0;
+                                        return (
+                                            /* Bug 7: wrapper div with overflow: visible so badge isn't clipped */
+                                            <div style={{ position: 'relative', overflow: 'visible' }}>
+                                                <button
+                                                    className={`menu-item-card ${qty > 0 ? 'selected' : ''} ${!item.isAvailable ? 'out-of-stock' : ''}`}
+                                                    onClick={() => item.isAvailable && addToCart(item)}
+                                                    disabled={!selectedTable || !item.isAvailable}
+                                                    title={!item.isAvailable ? `${(showTamilName && item.tamilName) ? item.tamilName : item.name} ${t('pos.is_out_of_stock')}` : (selectedTable ? `${t('common.add')} ${(showTamilName && item.tamilName) ? item.tamilName : item.name}` : t('pos.select_table_hint'))}
+                                                    style={{ position: 'relative' }}
+                                                >
+                                                    <div className={`veg-dot ${item.isVeg ? 'veg' : 'nonveg'}`} />
+                                                    <div className="menu-item-name">{(showTamilName && item.tamilName) ? item.tamilName : item.name}</div>
+                                                    <div className="menu-item-category">{item.category}</div>
+                                                    <div className="menu-item-price">₹{Number(getEffectivePrice(item.price)).toFixed(2)}</div>
+                                                    {!item.isAvailable && <div className="out-of-stock-badge">{t('pos.set_out_of_stock').toUpperCase()}</div>}
+                                                </button>
+                                                {/* Bug 7: badge outside button so overflow: visible works */}
+                                                {qty > 0 && <div className="item-qty-badge">{qty}</div>}
+                                            </div>
+                                        );
+                                    })()}
+                                    {/* Bug 5: Staff mode toggle - e.stopPropagation ensures it doesn't bubble to parent */}
+                                    {staffMode && (
+                                        <button
+                                            className={`item-availability-toggle ${item.isAvailable ? 'available' : 'oos'}`}
+                                            onClick={(e) => { e.stopPropagation(); e.preventDefault(); toggleAvailability(item); }}
+                                        >
+                                            {item.isAvailable ? t('pos.set_out_of_stock') : t('pos.set_available')}
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                            {filteredMenu.length === 0 && (
+                                <div className="menu-empty">No items found</div>
+                            )}
                         </div>
                     </div>
-                </div>
-            )}
 
-            {showPaymentModal && (
-                <div className="pos-modal">
-                    <div className="modal-content payment-modal">
-                        <div className="modal-header">
-                            <h2>{t('pos.select_payment_method')}</h2>
-                            <button className="close-btn" onClick={() => setShowPaymentModal(false)}>×</button>
-                        </div>
-                        
-                        <div className="payment-summary">
-                            <span className="summary-label">{t('pos.amount_due')}</span>
-                            <span className="summary-val">₹{cartTotal.toLocaleString()}</span>
-                        </div>
+                    {/* MODALS */}
 
-                        <div style={{ padding: '10px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', marginBottom: '10px' }}>
-                            <span style={{ fontWeight: 600, color: '#334155' }}>Print Bill with GST</span>
-                            <label className="switch" style={{ margin: 0 }}>
-                                <input type="checkbox" checked={settleWithGst} onChange={e => setSettleWithGst(e.target.checked)} />
-                                <span className="slider round"></span>
-                            </label>
-                        </div>
+                    {showCombineModal && (
+                        <div className="pos-modal">
+                            <div className="modal-content combine-modal-premium">
+                                <div className="modal-header-premium">
+                                    <h2>{t('pos.combine_order')}</h2>
+                                    <p>{t('pos.select_target_table', { table: selectedTable })}</p>
+                                    <button className="close-btn" onClick={() => setShowCombineModal(false)}>×</button>
+                                </div>
 
-                        <div className="payment-options-grid">
-                            <button 
-                                className={`payment-option-card ${paymentMethod === 'cash' ? 'active' : ''}`}
-                                onClick={() => setPaymentMethod('cash')}
-                            >
-                                <span className="option-icon">💵</span>
-                                <span className="option-name">{t('pos.cash')}</span>
-                            </button>
-                            <button 
-                                className={`payment-option-card ${paymentMethod === 'upi' ? 'active' : ''}`}
-                                onClick={() => setPaymentMethod('upi')}
-                            >
-                                <span className="option-icon">📱</span>
-                                <span className="option-name">{t('pos.upi_scan')}</span>
-                            </button>
-                            <button 
-                                className={`payment-option-card ${paymentMethod === 'card' ? 'active' : ''}`}
-                                onClick={() => setPaymentMethod('card')}
-                            >
-                                <span className="option-icon">💳</span>
-                                <span className="option-name">{t('pos.card_chip')}</span>
-                            </button>
-                        </div>
+                                <div className="modal-body-premium">
+                                    <div className="table-selection-grid">
+                                        {Array.from({ length: user?.totalTables || 10 }, (_, i) => i + 1).map(num => {
+                                            const key = `Table ${num}`;
+                                            if (key === selectedTable) return null;
+                                            const isOccupied = !!orders[key];
+                                            const isSelected = combineTargetTable === key || combineTargetTable === String(num);
 
-                        <div className="modal-footer" style={{ marginTop: 30 }}>
-                            <button className="secondary-btn" onClick={() => setShowPaymentModal(false)}>{t('common.back')}</button>
-                            <button 
-                                className="confirm-settle-btn" 
-                                onClick={() => settleOrder(paymentMethod)}
-                            >
-                                {t('pos.complete_settlement')}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {showReviewModal && cart.length > 0 && (
-                <div className="pos-modal review-modal">
-                    <div className="modal-content large">
-                        <div className="modal-header">
-                            <h2>{t('pos.review_items_title', { table: selectedTable })}</h2>
-                            <button className="close-btn" onClick={() => { setShowReviewModal(false); setTempExtraCharges([]); setTempChargeName(''); setTempChargeAmount(''); }}>×</button>
-                        </div>
-                        
-                        <div className="modal-body">
-                            <div className="review-items-container">
-                                <table className="review-table">
-                                    <thead>
-                                        <tr>
-                                            <th>{t('common.name')}</th>
-                                            <th>{t('common.quantity')}</th>
-                                            <th>{t('common.price')}</th>
-                                            <th>{t('common.total')}</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {cart.map((item, idx) => {
-                                            const itemId = item._id || item.menuItemId;
-                                            const isSentToKot = !!item._id;
-                                            const existingOrder = orders[selectedTable];
-                                            const orderCreatedAt = existingOrder?.createdAt ? new Date(existingOrder.createdAt).getTime() : Date.now();
-                                            const diffMins = (Date.now() - orderCreatedAt) / 60000;
-                                            const isEditable = item.status !== 'served' && (!isSentToKot || diffMins <= 3);
                                             return (
-                                                <tr key={itemId || idx}>
-                                                    <td>
-                                                        <div className="review-item-name-cell">
-                                                            <span className="review-item-name">{(showTamilName && item.tamilName) ? item.tamilName : item.name}</span>
-                                                            {item.status && item.status.toLowerCase() === 'served' && <span className="badge-served">{t('pos.served')}</span>}
-                                                            {item.status && item.status.toLowerCase() === 'ready' && <span className="badge-ready">{t('pos.ready')}</span>}
-                                                        </div>
-                                                    </td>
-                                                    <td>
-                                                        <div className="review-qty-controls">
-                                                            <button
-                                                                className="review-qty-btn minus"
-                                                                onClick={() => updateQty(itemId, -1)}
-                                                                disabled={!isEditable}
-                                                            >−</button>
-                                                            <span className="review-qty-val">{item.quantity}</span>
-                                                            <button
-                                                                className="review-qty-btn plus"
-                                                                onClick={() => updateQty(itemId, 1)}
-                                                                disabled={!isEditable}
-                                                            >+</button>
-                                                        </div>
-                                                    </td>
-                                                    <td>₹{item.price}</td>
-                                                    <td>
-                                                        <div className="review-price-cell">
-                                                            <span>₹{item.price * item.quantity}</span>
-                                                            {isEditable && (
-                                                                <button
-                                                                    className="review-remove-btn"
-                                                                    onClick={(e) => { e.stopPropagation(); removeItemFromCart(item); }}
-                                                                    title="Remove Item"
-                                                                    style={{ position: 'relative', zIndex: 5 }}
-                                                                >
-                                                                    🗑️
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                    </td>
-                                                </tr>
+                                                <div
+                                                    key={num}
+                                                    className={`selectable-table-item ${isOccupied ? 'occupied' : 'empty'} ${isSelected ? 'selected' : ''}`}
+                                                    onClick={() => setCombineTargetTable(key)}
+                                                >
+                                                    <span className="table-num">{num}</span>
+                                                    {isOccupied && <span className="occupied-indicator" title="Occupied" />}
+                                                </div>
                                             );
                                         })}
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            <div className="review-summary">
-                                <div className="summary-row" style={{ borderBottom: '1px dashed #ddd', paddingBottom: '10px', marginBottom: '10px' }}>
-                                    <span>{t('common.subtotal', 'Subtotal')}</span>
-                                    <span>₹{cartTotal.toFixed(2)}</span>
-                                </div>
-
-                                {[...orderExtraCharges.map((c,i) => ({...c, _idx: i, _type: 'order'})), ...tempExtraCharges.map((c,i) => ({...c, _idx: i, _type: 'temp'}))].map((c, idx) => {
-                                    const amountAbs = Math.abs(c.amount);
-                                    let percentage = 0;
-                                    if (c.amount < 0 && cartTotal > 0) percentage = ((amountAbs / cartTotal) * 100).toFixed(1);
-                                    
-                                    return (
-                                        <div key={'all-chg-'+idx} className="summary-row" style={{ color: c.amount < 0 ? '#22c55e' : 'inherit' }}>
-                                            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                {c._type === 'temp' ? '⏳ ' : '✓ '}
-                                                {c.amount < 0 && c.name === 'Discount' ? t('common.discount', 'Discount') : c.name}
-                                                {percentage > 0 ? ` (${percentage}%)` : ''}
-                                                <button onClick={() => {
-                                                    if (c._type === 'temp') setTempExtraCharges(prev => prev.filter((_, i) => i !== c._idx));
-                                                    else setOrderExtraCharges(prev => prev.filter((_, i) => i !== c._idx));
-                                                }} style={{ background: 'none', border: 'none', color: 'red', cursor: 'pointer', fontSize: '14px', lineHeight: 1 }} title="Remove">×</button>
-                                            </span>
-                                            <span>{c.amount < 0 ? `-₹${amountAbs.toFixed(2)}` : `₹${amountAbs.toFixed(2)}`}</span>
-                                        </div>
-                                    );
-                                })}
-
-                                <div style={{ borderBottom: '1px solid #eee', paddingBottom: '10px', marginBottom: '10px', marginTop: '10px' }}>
-                                    <div style={{ display: 'flex', gap: '5px' }}>
-                                        <select 
-                                            className="form-input" 
-                                            style={{ padding: '6px', flex: 1 }}
-                                            value={tempChargeType} 
-                                            onChange={e => {
-                                                setTempChargeType(e.target.value);
-                                                if (e.target.value !== 'Custom') {
-                                                    setTempChargeName(e.target.value);
-                                                } else {
-                                                    setTempChargeName('');
-                                                }
-                                            }}
-                                        >
-                                            <option value="">{t('pos.select_charge', 'Select Charge')}</option>
-                                            <option value="Discount">{t('common.discount', 'Discount')}</option>
-                                            <option value="Custom">{t('pos.custom_charge', 'Custom')}</option>
-                                        </select>
-                                        {tempChargeType === 'Custom' && (
-                                            <input type="text" className="form-input" style={{ padding: '6px', width: '100px' }} placeholder={t('common.name', 'Name')} value={tempChargeName} onChange={e => setTempChargeName(e.target.value)} />
-                                        )}
-                                        <input 
-                                            type="number" 
-                                            className="form-input" 
-                                            style={{ padding: '6px', width: '70px' }} 
-                                            placeholder="₹" 
-                                            min="0"
-                                            value={tempChargeAmount} 
-                                            onChange={e => setTempChargeAmount(e.target.value)} 
-                                        />
-                                        <button 
-                                            className="secondary-btn" 
-                                            style={{ padding: '6px 12px' }}
-                                            onClick={() => {
-                                                if (tempChargeName && tempChargeAmount) {
-                                                    const amount = Number(tempChargeAmount);
-                                                    const isDiscount = (tempChargeName === 'Discount');
-                                                    if (!isDiscount && amount < 0) {
-                                                        alert(t('pos.extra_charges_positive'));
-                                                        return;
-                                                    }
-                                                    const absAmount = Math.abs(amount);
-                                                    const finalAmount = isDiscount ? -absAmount : absAmount;
-                                                    setTempExtraCharges(prev => [...prev, { 
-                                                        name: tempChargeName === 'Custom' ? 'Custom Charge' : tempChargeName, 
-                                                        amount: finalAmount 
-                                                    }]);
-                                                    setTempChargeType('');
-                                                    setTempChargeName('');
-                                                    setTempChargeAmount('');
-                                                }
-                                            }}>{t('common.add')}</button>
                                     </div>
                                 </div>
-                                <div className="summary-row total">
-                                    <span>{t('bill.total')}</span>
-                                    <span>₹{(cartTotal + (orderExtraCharges?.reduce((s, c) => s + Number(c.amount || 0), 0) || 0) + (tempExtraCharges?.reduce((s, c) => s + Number(c.amount || 0), 0) || 0)).toFixed(2)}</span>
+
+                                <div className="modal-footer premium">
+                                    <button className="secondary-btn" onClick={() => setShowCombineModal(false)}>{t('common.cancel')}</button>
+                                    <button className="primary-btn-premium" onClick={handleCombine} disabled={savingOrder || !combineTargetTable}>
+                                        {savingOrder ? t('pos.combining') : t('pos.confirm_combine')}
+                                    </button>
                                 </div>
                             </div>
                         </div>
+                    )}
 
-                        <div className="modal-footer" style={{ justifyContent: 'space-between' }}>
-                            <div style={{ display: 'flex', gap: '10px' }}>
-                                <button className="secondary-btn" onClick={() => { setShowReviewModal(false); setTempExtraCharges([]); setTempChargeName(''); setTempChargeAmount(''); }}>{t('pos.close_review')}</button>
-                                <button 
-                                    className="secondary-btn" 
-                                    style={{ borderColor: '#ef4444', color: '#ef4444', position: 'relative', zIndex: 10, pointerEvents: 'auto' }} 
-                                    onClick={(e) => { e.stopPropagation(); setShowReviewModal(false); closeOrder(); }}
-                                >
-                                    Cancel Entire Order
-                                </button>
-                            </div>
-                            <button className="primary-btn" onClick={() => {
-                                // Bug 9: Commit temp charges to orderExtraCharges on confirm
-                                if (tempExtraCharges.length > 0) {
-                                    setOrderExtraCharges(prev => [...prev, ...tempExtraCharges]);
-                                }
-                                setTempExtraCharges([]);
-                                setTempChargeName('');
-                                setTempChargeAmount('');
-                                setShowReviewModal(false);
-                                saveOrder();
-                            }} disabled={savingOrder || cart.length === 0}>
-                                {savingOrder ? t('pos.processing') : t('pos.confirm_send_kot')}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+                    {showPaymentModal && (
+                        <div className="pos-modal">
+                            <div className="modal-content payment-modal-premium">
+                                <div className="modal-header-premium">
+                                    <h2>{t('pos.select_payment_method', 'Select Payment Method')}</h2>
+                                    <button className="close-btn" onClick={() => setShowPaymentModal(false)}>×</button>
+                                </div>
 
-            {/* Scanning HUD */}
-            {(scanning || lastScannedItem) && (
-                <div className={`scanning-hud ${scanning ? 'active' : ''}`}>
-                    <div className="hud-content">
-                        {scanning ? (
-                            <div className="scanning-pulse">
-                                <span className="scanner-line" />
-                                <span className="hud-text">{t('pos.reading_barcode')}</span>
-                            </div>
-                        ) : (
-                            <div className="scan-success">
-                                <span className="hud-icon">✓</span>
-                                <div className="hud-details">
-                                    <span className="hud-label">{t('pos.added_to_bill')}</span>
-                                    <span className="hud-val">{lastScannedItem?.name} - ₹{lastScannedItem?.price}</span>
+                                <div className="payment-summary-premium">
+                                    <span className="summary-label">Amount Due</span>
+                                    <div className="summary-amount">
+                                        <span className="currency">₹</span>
+                                        <span className="amount-val">{cartTotal.toLocaleString()}</span>
+                                    </div>
+                                </div>
+
+                                <div className="payment-gst-toggle-premium">
+                                    <span className="toggle-label">Print Bill with GST</span>
+                                    <label className="switch toggle-switch-premium">
+                                        <input type="checkbox" checked={settleWithGst} onChange={e => setSettleWithGst(e.target.checked)} />
+                                        <span className="slider round"></span>
+                                    </label>
+                                </div>
+
+                                <div className="payment-options-grid-premium">
+                                    <button
+                                        className={`payment-option-premium ${paymentMethod === 'cash' ? 'active' : ''}`}
+                                        onClick={() => setPaymentMethod('cash')}
+                                    >
+                                        <div className="option-icon-wrapper cash-icon">💵</div>
+                                        <span className="option-name">{t('pos.cash', 'Cash')}</span>
+                                        {paymentMethod === 'cash' && <div className="active-indicator"></div>}
+                                    </button>
+                                    <button
+                                        className={`payment-option-premium ${paymentMethod === 'upi' ? 'active' : ''}`}
+                                        onClick={() => setPaymentMethod('upi')}
+                                    >
+                                        <div className="option-icon-wrapper upi-icon">📱</div>
+                                        <span className="option-name">{t('pos.upi_scan', 'UPI / Scan')}</span>
+                                        {paymentMethod === 'upi' && <div className="active-indicator"></div>}
+                                    </button>
+                                    <button
+                                        className={`payment-option-premium ${paymentMethod === 'card' ? 'active' : ''}`}
+                                        onClick={() => setPaymentMethod('card')}
+                                    >
+                                        <div className="option-icon-wrapper card-icon">💳</div>
+                                        <span className="option-name">{t('pos.card_chip', 'Card / Chip')}</span>
+                                        {paymentMethod === 'card' && <div className="active-indicator"></div>}
+                                    </button>
+                                </div>
+
+                                <div className="modal-footer-premium">
+                                    <button className="secondary-btn-premium" onClick={() => setShowPaymentModal(false)}>Back</button>
+                                    <button
+                                        className="confirm-settle-btn-premium"
+                                        onClick={() => settleOrder(paymentMethod)}
+                                    >
+                                        Complete Settlement
+                                        <span className="btn-arrow">→</span>
+                                    </button>
                                 </div>
                             </div>
-                        )}
-                    </div>
-                </div>
-            )}
+                        </div>
+                    )}
 
-            {/* Scale Overlay (Optional) */}
-            {scalePort && (
-                <div className="scale-hud-mini">
-                    <span className="scale-icon">⚖️</span>
-                    <span className="scale-val">{scaleWeight.toFixed(3)} KG</span>
-                </div>
-            )}
+                    {showReviewModal && cart.length > 0 && (
+                        <div className="pos-modal review-modal">
+                            <div className="modal-content large">
+                                <div className="modal-header">
+                                    <h2>{t('pos.review_items_title', { table: selectedTable })}</h2>
+                                    <button className="close-btn" onClick={() => { setShowReviewModal(false); setTempExtraCharges([]); setTempChargeName(''); setTempChargeAmount(''); }}>×</button>
+                                </div>
+
+                                <div className="modal-body">
+                                    <div className="review-items-container">
+                                        <table className="review-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>{t('common.name')}</th>
+                                                    <th>{t('common.quantity')}</th>
+                                                    <th>{t('common.price')}</th>
+                                                    <th>{t('common.total')}</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {cart.map((item, idx) => {
+                                                    const itemId = item._id || item.menuItemId;
+                                                    const isSentToKot = !!item._id;
+                                                    const existingOrder = orders[selectedTable];
+                                                    const orderCreatedAt = existingOrder?.createdAt ? new Date(existingOrder.createdAt).getTime() : Date.now();
+                                                    const diffMins = (Date.now() - orderCreatedAt) / 60000;
+                                                    const isEditable = item.status !== 'served' && (!isSentToKot || diffMins <= 3);
+                                                    return (
+                                                        <tr key={itemId || idx}>
+                                                            <td>
+                                                                <div className="review-item-name-cell">
+                                                                    <span className="review-item-name">{(showTamilName && item.tamilName) ? item.tamilName : item.name}</span>
+                                                                    {item.status && item.status.toLowerCase() === 'served' && <span className="badge-served">{t('pos.served')}</span>}
+                                                                    {item.status && item.status.toLowerCase() === 'ready' && <span className="badge-ready">{t('pos.ready')}</span>}
+                                                                </div>
+                                                            </td>
+                                                            <td>
+                                                                <div className="review-qty-controls">
+                                                                    <button
+                                                                        className="review-qty-btn minus"
+                                                                        onClick={() => updateQty(itemId, -1)}
+                                                                        disabled={!isEditable}
+                                                                    >−</button>
+                                                                    <span className="review-qty-val">{item.quantity}</span>
+                                                                    <button
+                                                                        className="review-qty-btn plus"
+                                                                        onClick={() => updateQty(itemId, 1)}
+                                                                        disabled={!isEditable}
+                                                                    >+</button>
+                                                                </div>
+                                                            </td>
+                                                            <td>₹{Number(item.price).toFixed(2)}</td>
+                                                            <td>
+                                                                <div className="review-price-cell">
+                                                                    <span>₹{Number(item.price * item.quantity).toFixed(2)}</span>
+                                                                    {isEditable && (
+                                                                        <button
+                                                                            className="review-remove-btn"
+                                                                            onClick={(e) => { e.stopPropagation(); removeItemFromCart(item); }}
+                                                                            title="Remove Item"
+                                                                            style={{ position: 'relative', zIndex: 5 }}
+                                                                        >
+                                                                            🗑️
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    <div className="review-summary">
+                                        <div className="summary-row" style={{ borderBottom: '1px dashed #ddd', paddingBottom: '10px', marginBottom: '10px' }}>
+                                            <span>{t('common.subtotal', 'Subtotal')}</span>
+                                            <span>₹{cartTotal.toFixed(2)}</span>
+                                        </div>
+
+                                        {[...orderExtraCharges.map((c, i) => ({ ...c, _idx: i, _type: 'order' })), ...tempExtraCharges.map((c, i) => ({ ...c, _idx: i, _type: 'temp' }))].map((c, idx) => {
+                                            const amountAbs = Math.abs(c.amount);
+                                            let percentage = 0;
+                                            if (c.amount < 0 && cartTotal > 0) percentage = ((amountAbs / cartTotal) * 100).toFixed(1);
+
+                                            return (
+                                                <div key={'all-chg-' + idx} className="summary-row" style={{ color: c.amount < 0 ? '#22c55e' : 'inherit' }}>
+                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                        {c._type === 'temp' ? '⏳ ' : '✓ '}
+                                                        {c.amount < 0 && c.name === 'Discount' ? t('common.discount', 'Discount') : c.name}
+                                                        {percentage > 0 ? ` (${percentage}%)` : ''}
+                                                        <button onClick={() => {
+                                                            if (c._type === 'temp') setTempExtraCharges(prev => prev.filter((_, i) => i !== c._idx));
+                                                            else setOrderExtraCharges(prev => prev.filter((_, i) => i !== c._idx));
+                                                        }} style={{ background: 'none', border: 'none', color: 'red', cursor: 'pointer', fontSize: '14px', lineHeight: 1 }} title="Remove">×</button>
+                                                    </span>
+                                                    <span>{c.amount < 0 ? `-₹${amountAbs.toFixed(2)}` : `₹${amountAbs.toFixed(2)}`}</span>
+                                                </div>
+                                            );
+                                        })}
+
+                                        <div style={{ borderBottom: '1px solid #eee', paddingBottom: '10px', marginBottom: '10px', marginTop: '10px' }}>
+                                            <div style={{ display: 'flex', gap: '5px' }}>
+                                                <select
+                                                    className="form-input"
+                                                    style={{ padding: '6px', flex: 1 }}
+                                                    value={tempChargeType}
+                                                    onChange={e => {
+                                                        setTempChargeType(e.target.value);
+                                                        if (e.target.value !== 'Custom') {
+                                                            setTempChargeName(e.target.value);
+                                                        } else {
+                                                            setTempChargeName('');
+                                                        }
+                                                    }}
+                                                >
+                                                    <option value="">{t('pos.select_charge', 'Select Charge')}</option>
+                                                    <option value="Discount">{t('common.discount', 'Discount')}</option>
+                                                    <option value="Custom">{t('pos.custom_charge', 'Custom')}</option>
+                                                </select>
+                                                {tempChargeType === 'Custom' && (
+                                                    <input type="text" className="form-input" style={{ padding: '6px', width: '100px' }} placeholder={t('common.name', 'Name')} value={tempChargeName} onChange={e => setTempChargeName(e.target.value)} />
+                                                )}
+                                                <input
+                                                    type="number"
+                                                    className="form-input"
+                                                    style={{ padding: '6px', width: '70px' }}
+                                                    placeholder="₹"
+                                                    min="0"
+                                                    value={tempChargeAmount}
+                                                    onChange={e => setTempChargeAmount(e.target.value)}
+                                                />
+                                                <button
+                                                    className="secondary-btn"
+                                                    style={{ padding: '6px 12px' }}
+                                                    onClick={() => {
+                                                        if (tempChargeName && tempChargeAmount) {
+                                                            const amount = Number(tempChargeAmount);
+                                                            const isDiscount = (tempChargeName === 'Discount');
+                                                            if (!isDiscount && amount < 0) {
+                                                                alert(t('pos.extra_charges_positive'));
+                                                                return;
+                                                            }
+                                                            const absAmount = Math.abs(amount);
+                                                            const finalAmount = isDiscount ? -absAmount : absAmount;
+                                                            setTempExtraCharges(prev => [...prev, {
+                                                                name: tempChargeName === 'Custom' ? 'Custom Charge' : tempChargeName,
+                                                                amount: finalAmount
+                                                            }]);
+                                                            setTempChargeType('');
+                                                            setTempChargeName('');
+                                                            setTempChargeAmount('');
+                                                        }
+                                                    }}>{t('common.add')}</button>
+                                            </div>
+                                        </div>
+                                        <div className="summary-row total">
+                                            <span>{t('bill.total')}</span>
+                                            <span>₹{(cartTotal + (orderExtraCharges?.reduce((s, c) => s + Number(c.amount || 0), 0) || 0) + (tempExtraCharges?.reduce((s, c) => s + Number(c.amount || 0), 0) || 0)).toFixed(2)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="modal-footer" style={{ justifyContent: 'space-between' }}>
+                                    <div style={{ display: 'flex', gap: '10px' }}>
+                                        <button className="secondary-btn" onClick={() => { setShowReviewModal(false); setTempExtraCharges([]); setTempChargeName(''); setTempChargeAmount(''); }}>{t('pos.close_review')}</button>
+                                        <button
+                                            className="secondary-btn"
+                                            style={{ borderColor: '#ef4444', color: '#ef4444', position: 'relative', zIndex: 10, pointerEvents: 'auto' }}
+                                            onClick={(e) => { e.stopPropagation(); setShowReviewModal(false); closeOrder(); }}
+                                        >
+                                            Cancel Entire Order
+                                        </button>
+                                    </div>
+                                    <button className="primary-btn" onClick={() => {
+                                        // Bug 9: Commit temp charges to orderExtraCharges on confirm
+                                        if (tempExtraCharges.length > 0) {
+                                            setOrderExtraCharges(prev => [...prev, ...tempExtraCharges]);
+                                        }
+                                        setTempExtraCharges([]);
+                                        setTempChargeName('');
+                                        setTempChargeAmount('');
+                                        setShowReviewModal(false);
+                                        saveOrder();
+                                    }} disabled={savingOrder || cart.length === 0}>
+                                        {savingOrder ? t('pos.processing') : t('pos.confirm_send_kot')}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Scanning HUD */}
+                    {(scanning || lastScannedItem) && (
+                        <div className={`scanning-hud ${scanning ? 'active' : ''}`}>
+                            <div className="hud-content">
+                                {scanning ? (
+                                    <div className="scanning-pulse">
+                                        <span className="scanner-line" />
+                                        <span className="hud-text">{t('pos.reading_barcode')}</span>
+                                    </div>
+                                ) : (
+                                    <div className="scan-success">
+                                        <span className="hud-icon">✓</span>
+                                        <div className="hud-details">
+                                            <span className="hud-label">{t('pos.added_to_bill')}</span>
+                                            <span className="hud-val">{lastScannedItem?.name} - ₹{Number(lastScannedItem?.price || 0).toFixed(2)}</span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Scale Overlay (Optional) */}
+                    {scalePort && (
+                        <div className="scale-hud-mini">
+                            <span className="scale-icon">⚖️</span>
+                            <span className="scale-val">{scaleWeight.toFixed(3)} KG</span>
+                        </div>
+                    )}
                 </>
             )}
-            
+
             {showQueueModal && (
-                <QueueManagementModal 
+                <QueueManagementModal
                     restaurantId={restaurantId}
                     socket={socket}
                     onClose={() => setShowQueueModal(false)}
@@ -2438,7 +2631,7 @@ export default function POSPage() {
                     }}
                 />
             )}
-            
+
             {/* Print Language Selection Modal */}
             {showPrintLangModal && (
                 <div className="pos-modal" style={{ zIndex: 9999 }}>
@@ -2508,12 +2701,12 @@ export default function POSPage() {
             <iframe
                 id="print-iframe"
                 title="print-iframe"
-                style={{ 
-                    position: 'absolute', 
-                    top: '-10000px', 
-                    left: '-10000px', 
-                    width: '0px', 
-                    height: '0px', 
+                style={{
+                    position: 'absolute',
+                    top: '-10000px',
+                    left: '-10000px',
+                    width: '0px',
+                    height: '0px',
                     border: 'none',
                     visibility: 'hidden'
                 }}

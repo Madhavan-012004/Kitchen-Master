@@ -1,9 +1,0 @@
-paddleocr==2.7.0.3
-paddlepaddle==2.5.2
-opencv-python
-numpy
-pandas
-openpyxl
-llama-cpp-python==0.2.24
-pdf2image
-Pillow

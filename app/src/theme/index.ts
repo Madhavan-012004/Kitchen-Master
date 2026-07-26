@@ -1,117 +1,117 @@
-// ─── Color Palettes — Dark Teal + Neon Lime ─────────────────────────────────
+// ─── Color Palettes — Dark Navy + Amber ─────────────────────────────────
 
 export const DarkColors = {
-    // ── Primary brand: Neon Lime ──
-    primary: '#C6F53D',
-    primaryDark: '#a8d42e',
-    primaryLight: '#d8f76a',
+    // ── Primary brand: Amber ──
+    primary: '#F59E0B',
+    primaryDark: '#D97706',
+    primaryLight: '#FBBF24',
 
-    // ── Backgrounds: Deep Dark Teal ──
-    background: '#081312',
-    surface: '#0F1D1B',
-    surfaceElevated: '#1A2F2D',
-    card: '#132221',
+    // ── Backgrounds: Deep Dark Navy ──
+    background: '#0B0F19',
+    surface: '#111827',
+    surfaceElevated: '#1F2937',
+    card: '#111827',
 
     // ── Text ──
     textPrimary: '#FFFFFF',
-    textSecondary: '#B0BFBD',
-    textMuted: '#6B8A87',
-    textInverse: '#0B2221',
+    textSecondary: '#9CA3AF',
+    textMuted: '#6B7280',
+    textInverse: '#0B0F19',
 
-    // ── Accent: Neon Lime for highlights ──
-    accent: '#C6F53D',
-    accentGreen: '#2DD479',
-    accentYellow: '#F59E0B',
-    accentBlue: '#4C8EFF',
-    accentPurple: '#9B59B6',
-    accentTeal: '#1A8F7E',
+    // ── Accent: Amber for highlights ──
+    accent: '#F59E0B',
+    accentGreen: '#10B981',
+    accentYellow: '#FBBF24',
+    accentBlue: '#3B82F6',
+    accentPurple: '#8B5CF6',
+    accentTeal: '#14B8A6',
 
     // ── Status ──
-    success: '#2DD479',
+    success: '#10B981',
     warning: '#F59E0B',
-    error: '#F87171',
-    info: '#4C8EFF',
+    error: '#EF4444',
+    info: '#3B82F6',
 
     // ── Borders ──
-    border: 'rgba(198, 245, 61, 0.1)',
-    borderLight: 'rgba(198, 245, 61, 0.2)',
+    border: 'rgba(245, 158, 11, 0.15)',
+    borderLight: 'rgba(245, 158, 11, 0.3)',
 
     // ── Glass ──
-    glass: 'rgba(198, 245, 61, 0.05)',
-    glassStrong: 'rgba(198, 245, 61, 0.08)',
-    glassBorder: 'rgba(198, 245, 61, 0.12)',
+    glass: 'rgba(245, 158, 11, 0.05)',
+    glassStrong: 'rgba(245, 158, 11, 0.1)',
+    glassBorder: 'rgba(245, 158, 11, 0.15)',
 
     // ── Overlay ──
     overlay: 'rgba(0, 0, 0, 0.8)',
 
     // ── Grays ──
     white: '#FFFFFF',
-    gray100: '#E8F0EF',
-    gray200: '#D0E0DE',
-    gray300: '#B0BFBD',
-    gray400: '#8A9E9B',
-    gray500: '#6B8A87',
-    gray600: '#4F6E6B',
-    gray700: '#2D5250',
-    gray800: '#1A2F2D',
-    gray900: '#0F1D1B',
+    gray100: '#F3F4F6',
+    gray200: '#E5E7EB',
+    gray300: '#D1D5DB',
+    gray400: '#9CA3AF',
+    gray500: '#6B7280',
+    gray600: '#4B5563',
+    gray700: '#374151',
+    gray800: '#1F2937',
+    gray900: '#111827',
 };
 
 export const LightColors = {
-    // ── Primary brand: Neon Lime ──
-    primary: '#C6F53D',
-    primaryDark: '#a8d42e',
-    primaryLight: '#d8f76a',
+    // ── Primary brand: Amber ──
+    primary: '#F59E0B',
+    primaryDark: '#D97706',
+    primaryLight: '#FBBF24',
 
-    // ── Backgrounds: Light Teal-tinted ──
-    background: '#F0F6F5',
-    surface: '#E4EDEC',
+    // ── Backgrounds: Light Gray ──
+    background: '#F3F4F6',
+    surface: '#E5E7EB',
     surfaceElevated: '#FFFFFF',
     card: '#FFFFFF',
 
     // ── Text ──
-    textPrimary: '#0B2221',
-    textSecondary: '#2B4E4A',
-    textMuted: '#507572',
-    textInverse: '#0B2221',
+    textPrimary: '#111827',
+    textSecondary: '#4B5563',
+    textMuted: '#6B7280',
+    textInverse: '#111827',
 
     // ── Accent ──
-    accent: '#C6F53D',
-    accentGreen: '#16A34A',
-    accentYellow: '#F59E0B',
-    accentBlue: '#2563EB',
-    accentPurple: '#7C3AED',
-    accentTeal: '#064843',
+    accent: '#F59E0B',
+    accentGreen: '#10B981',
+    accentYellow: '#FBBF24',
+    accentBlue: '#3B82F6',
+    accentPurple: '#8B5CF6',
+    accentTeal: '#14B8A6',
 
     // ── Status ──
-    success: '#16A34A',
+    success: '#10B981',
     warning: '#F59E0B',
-    error: '#DC2626',
-    info: '#2563EB',
+    error: '#EF4444',
+    info: '#3B82F6',
 
     // ── Borders ──
-    border: 'rgba(6, 72, 67, 0.1)',
-    borderLight: 'rgba(6, 72, 67, 0.2)',
+    border: 'rgba(17, 24, 39, 0.1)',
+    borderLight: 'rgba(17, 24, 39, 0.2)',
 
     // ── Glass ──
-    glass: 'rgba(6, 72, 67, 0.03)',
-    glassStrong: 'rgba(6, 72, 67, 0.06)',
-    glassBorder: 'rgba(6, 72, 67, 0.1)',
+    glass: 'rgba(17, 24, 39, 0.03)',
+    glassStrong: 'rgba(17, 24, 39, 0.06)',
+    glassBorder: 'rgba(17, 24, 39, 0.1)',
 
     // ── Overlay ──
     overlay: 'rgba(0, 0, 0, 0.4)',
 
-    // ── Grays / Teal-tinted ──
+    // ── Grays ──
     white: '#FFFFFF',
-    gray100: '#F0F6F5',
-    gray200: '#E4EDEC',
-    gray300: '#D0E0DE',
-    gray400: '#B0BFBD',
-    gray500: '#8A9E9B',
-    gray600: '#507572',
-    gray700: '#2B4E4A',
-    gray800: '#0F2E2C',
-    gray900: '#081312',
+    gray100: '#F3F4F6',
+    gray200: '#E5E7EB',
+    gray300: '#D1D5DB',
+    gray400: '#9CA3AF',
+    gray500: '#6B7280',
+    gray600: '#4B5563',
+    gray700: '#374151',
+    gray800: '#1F2937',
+    gray900: '#111827',
 };
 
 // ─── Gradient Sets ────────────────────────────────────────────────────────────
@@ -128,28 +128,29 @@ export interface GradientSet {
 }
 
 export const DarkGradients: GradientSet = {
-    background: ['#081312', '#0F1D1B'],
-    header: ['#0F1D1B', '#132221'],
-    primary: ['#d8f76a', '#C6F53D', '#a8d42e'],
-    card: ['#132221', '#1A2F2D'],
-    success: ['#2DD479', '#16A34A'],
-    error: ['#F87171', '#DC2626'],
-    info: ['#4C8EFF', '#2563EB'],
-    purpleCard: ['#9B59B6', '#6C3483'],
-    goldCard: ['#F59E0B', '#D97706'],
+    background: ['#0B0F19', '#111827'],
+    header: ['#111827', '#1F2937'],
+    primary: ['#FBBF24', '#F59E0B', '#D97706'],
+    card: ['#111827', '#1F2937'],
+    success: ['#34D399', '#10B981'],
+    error: ['#F87171', '#EF4444'],
+    info: ['#60A5FA', '#3B82F6'],
+    purpleCard: ['#A78BFA', '#8B5CF6'],
+    goldCard: ['#FBBF24', '#F59E0B'],
 };
 
 export const LightGradients: GradientSet = {
-    background: ['#F0F6F5', '#E4EDEC'],
-    header: ['#064843', '#0A6B60'],
-    primary: ['#d8f76a', '#C6F53D', '#a8d42e'],
-    card: ['#FFFFFF', '#F0F6F5'],
-    success: ['#16A34A', '#15803D'],
-    error: ['#DC2626', '#B91C1C'],
-    info: ['#2563EB', '#1D4ED8'],
-    purpleCard: ['#7C3AED', '#6D28D9'],
-    goldCard: ['#F59E0B', '#D97706'],
+    background: ['#F3F4F6', '#E5E7EB'],
+    header: ['#FFFFFF', '#F3F4F6'],
+    primary: ['#FBBF24', '#F59E0B', '#D97706'],
+    card: ['#FFFFFF', '#F3F4F6'],
+    success: ['#34D399', '#10B981'],
+    error: ['#F87171', '#EF4444'],
+    info: ['#60A5FA', '#3B82F6'],
+    purpleCard: ['#A78BFA', '#8B5CF6'],
+    goldCard: ['#FBBF24', '#F59E0B'],
 };
+
 
 // ─── Typography ───────────────────────────────────────────────────────────────
 export const Typography = {
@@ -213,21 +214,21 @@ export const Shadows = {
         elevation: 16,
     },
     primary: {
-        shadowColor: '#C6F53D',
+        shadowColor: '#F59E0B',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.45,
         shadowRadius: 16,
         elevation: 10,
     },
     glow: {
-        shadowColor: '#C6F53D',
+        shadowColor: '#F59E0B',
         shadowOffset: { width: 0, height: 0 },
         shadowOpacity: 0.7,
         shadowRadius: 20,
         elevation: 12,
     },
     teal: {
-        shadowColor: '#064843',
+        shadowColor: '#1F2937',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.4,
         shadowRadius: 12,

@@ -3,87 +3,112 @@
 <head>
     <title>ProBloom</title>
     <style>
+        * { box-sizing: border-box; }
         body {
-            margin: 0;
-            padding: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            background: #0f172a;
-            color: white;
+            margin: 0; padding: 0;
+            width: 100vw; height: 100vh;
+            background: #000;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            overflow: hidden;
-        }
-        .logo-container {
-            margin-bottom: 2rem;
-            animation: pulse 2s infinite ease-in-out;
-        }
-        .logo {
-            width: 120px;
-            height: 120px;
-            border-radius: 20%;
-            box-shadow: 0 0 30px rgba(99, 102, 241, 0.4);
-        }
-        .title {
-            font-size: 1.8rem;
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-            letter-spacing: 1px;
-        }
-        .subtitle {
-            font-size: 0.9rem;
-            color: #94a3b8;
-            margin-bottom: 2rem;
-        }
-        .loader-bar {
-            width: 250px;
-            height: 4px;
-            background: #1e293b;
-            border-radius: 10px;
             overflow: hidden;
             position: relative;
         }
+        .video-background {
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%;
+            object-fit: cover; z-index: 1;
+        }
+        .overlay {
+            position: absolute; bottom: 32px; left: 0;
+            width: 100%; z-index: 2;
+            display: flex; flex-direction: column;
+            align-items: center; gap: 10px;
+        }
+        /* ── Stage indicators ──────────────────────── */
+        .stages {
+            display: flex; gap: 20px; margin-bottom: 4px;
+        }
+        .stage {
+            display: flex; align-items: center; gap: 6px;
+            font-size: 0.78rem; font-weight: 500;
+            color: rgba(255,255,255,0.4);
+            transition: color 0.4s;
+        }
+        .stage.active { color: #facc15; }
+        .stage.done   { color: #4ade80; }
+        .stage.error  { color: #f87171; }
+        .stage-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: rgba(255,255,255,0.2);
+            transition: background 0.4s;
+        }
+        .stage.active .stage-dot { background: #facc15; animation: blink 1s infinite; }
+        .stage.done   .stage-dot { background: #4ade80; }
+        .stage.error  .stage-dot { background: #f87171; }
+        @keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0.2;} }
+        /* ── Progress bar ──────────────────────────── */
+        .loader-bar {
+            width: 320px; height: 6px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px; overflow: hidden;
+        }
         .loader-progress {
-            width: 0%;
-            height: 100%;
-            background: linear-gradient(90deg, #6366f1, #8b5cf6);
+            width: 0%; height: 100%;
+            background: linear-gradient(90deg, #6366f1, #a855f7, #ec4899);
             border-radius: 10px;
-            transition: width 0.3s ease;
+            transition: width 0.5s ease;
         }
         .status-text {
-            margin-top: 1rem;
-            font-size: 0.8rem;
-            color: #64748b;
-        }
-        @keyframes pulse {
-            0% { transform: scale(1); opacity: 0.9; }
-            50% { transform: scale(1.05); opacity: 1; }
-            100% { transform: scale(1); opacity: 0.9; }
+            font-size: 0.85rem; font-weight: 500;
+            color: rgba(255,255,255,0.85);
+            text-shadow: 0 1px 4px rgba(0,0,0,0.9);
+            text-align: center;
+            max-width: 380px;
+            min-height: 1.4em;
         }
     </style>
 </head>
 <body>
-    <div class="logo-container">
-        <img src="logo.jpeg" class="logo" alt="Logo" />
+    <video class="video-background" autoplay loop muted playsinline>
+        <source src="splash_video.mp4" type="video/mp4" />
+    </video>
+
+    <div class="overlay">
+        <div class="stages">
+            <div class="stage active" id="st-db"><div class="stage-dot"></div>Database</div>
+            <div class="stage"        id="st-api"><div class="stage-dot"></div>Backend API</div>
+            <div class="stage"        id="st-app"><div class="stage-dot"></div>Ready</div>
+        </div>
+        <div class="loader-bar">
+            <div id="progress" class="loader-progress"></div>
+        </div>
+        <div id="status" class="status-text">Initializing…</div>
     </div>
-    <div class="title">ProBloom</div>
-    <div class="subtitle">Premium Billing & Inventory System</div>
-    
-    <div class="loader-bar">
-        <div id="progress" class="loader-progress"></div>
-    </div>
-    <div id="status" class="status-text">Starting backend services...</div>
 
     <script>
         const { ipcRenderer } = require('electron');
         const progressEl = document.getElementById('progress');
-        const statusEl = document.getElementById('status');
+        const statusEl   = document.getElementById('status');
+        const stDb  = document.getElementById('st-db');
+        const stApi = document.getElementById('st-api');
+        const stApp = document.getElementById('st-app');
 
-        ipcRenderer.on('status-update', (event, { status, progress }) => {
+        ipcRenderer.on('status-update', (event, { status, progress, stage, isError }) => {
             statusEl.innerText = status;
             progressEl.style.width = progress + '%';
+
+            if (stage === 'db') {
+                stDb.className  = isError ? 'stage error' : 'stage active';
+            } else if (stage === 'api') {
+                stDb.className  = 'stage done';
+                stApi.className = isError ? 'stage error' : 'stage active';
+            } else if (stage === 'app') {
+                stDb.className  = 'stage done';
+                stApi.className = 'stage done';
+                stApp.className = isError ? 'stage error' : 'stage active';
+            }
+            if (progress >= 100 && !isError) {
+                stApp.className = 'stage done';
+            }
         });
     </script>
 </body>

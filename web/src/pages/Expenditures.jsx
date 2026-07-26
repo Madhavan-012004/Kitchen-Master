@@ -9,6 +9,7 @@ export default function Expenditures() {
     const [showModal, setShowModal] = useState(false);
     const [selectedInvoice, setSelectedInvoice] = useState(null);
     const [filter, setFilter] = useState('All');
+    const [searchQuery, setSearchQuery] = useState('');
     const [viewMode, setViewMode] = useState('invoice'); // 'invoice' or 'all'
     const [formData, setFormData] = useState({
         amount: '',
@@ -96,9 +97,20 @@ export default function Expenditures() {
         }
     };
 
-    const filteredTransactions = transactions.filter(t =>
-        filter === 'All' || t.category === filter
-    );
+    const filteredTransactions = transactions.filter(t => {
+        const matchesCat = filter === 'All' || t.category === filter;
+        if (!matchesCat) return false;
+        
+        if (!searchQuery.trim()) return true;
+        const q = searchQuery.toLowerCase();
+        
+        const dateStr = new Date(t.date).toLocaleDateString('en-IN').toLowerCase();
+        const invoiceMatch = t.invoiceNumber?.toLowerCase().includes(q);
+        const descMatch = t.description?.toLowerCase().includes(q);
+        const dateMatch = dateStr.includes(q);
+        
+        return invoiceMatch || descMatch || dateMatch;
+    });
 
     // Group transactions by invoice number (for invoice view)
     const groupedByInvoice = React.useMemo(() => {
@@ -204,6 +216,16 @@ export default function Expenditures() {
                     >
                         📋 All Transactions
                     </button>
+                </div>
+
+                <div className="search-bar" style={{ display: 'flex', flex: 1, margin: '0 15px' }}>
+                    <input 
+                        type="text" 
+                        placeholder="Search by invoice, account, or date..." 
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                    />
                 </div>
 
                 <div className="filter-tabs">

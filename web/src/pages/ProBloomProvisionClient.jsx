@@ -51,7 +51,7 @@ export default function ProBloomProvisionClient() {
     }
 
     return (
-        <div className="hq-layout">
+        <div className="hq-layout" style={{ pointerEvents: 'auto', userSelect: 'auto' }}>
             <div className="hq-ambient-glow hq-ambient-1"></div>
             <div className="hq-ambient-glow hq-ambient-2"></div>
             
@@ -113,27 +113,27 @@ export default function ProBloomProvisionClient() {
                     </div>
 
                     {/* Form */}
-                    <form onSubmit={submit} style={{ padding: '2.5rem' }}>
+                    <form onSubmit={submit} style={{ padding: '2.5rem', pointerEvents: 'auto', zIndex: 50, position: 'relative' }}>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
                             <div className="hq-input-group">
                                 <label>Restaurant Name</label>
-                                <input name="restaurantName" required placeholder="e.g. Spice Garden" value={form.restaurantName} onChange={handle} autoFocus />
+                                <input name="restaurantName" required placeholder="e.g. Spice Garden" value={form.restaurantName} onChange={handle} autoFocus style={{ pointerEvents: 'auto', userSelect: 'auto' }} />
                             </div>
                             <div className="hq-input-group">
                                 <label>Owner Contact Name</label>
-                                <input name="name" required placeholder="e.g. Rahul Kumar" value={form.name} onChange={handle} />
+                                <input name="name" required placeholder="e.g. Rahul Kumar" value={form.name} onChange={handle} style={{ pointerEvents: 'auto', userSelect: 'auto' }} />
                             </div>
                             <div className="hq-input-group">
                                 <label>Master Email Address</label>
-                                <input name="email" type="email" required placeholder="owner@restaurant.com" value={form.email} onChange={handle} />
+                                <input name="email" type="email" required placeholder="owner@restaurant.com" value={form.email} onChange={handle} style={{ pointerEvents: 'auto', userSelect: 'auto' }} />
                             </div>
                             <div className="hq-input-group">
                                 <label>Vault Password</label>
-                                <input name="password" type="password" required placeholder="••••••••" value={form.password} onChange={handle} />
+                                <input name="password" type="password" required placeholder="••••••••" value={form.password} onChange={handle} style={{ pointerEvents: 'auto', userSelect: 'auto' }} />
                             </div>
                             <div className="hq-input-group" style={{ gridColumn: '1 / -1' }}>
                                 <label>Secure Comm Line (Phone)</label>
-                                <input name="phone" placeholder="+91..." value={form.phone} onChange={handle} />
+                                <input name="phone" placeholder="+91..." value={form.phone} onChange={handle} style={{ pointerEvents: 'auto', userSelect: 'auto' }} />
                             </div>
                         </div>
 

@@ -1,7 +1,8 @@
 import { io } from 'socket.io-client';
 
-// Connect directly to the local backend port for Electron offline app
-const socketUrl = 'http://localhost:9092';
+const isElectron = window.location.protocol === 'file:';
+const isAndroid = /android/i.test(navigator.userAgent);
+const socketUrl = 'https://kitchen-master.onrender.com';
 
 const socket = io(socketUrl, {
     path: '/socket.io', // Expressed explicitly to match vite.config proxy

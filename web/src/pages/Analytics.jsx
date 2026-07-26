@@ -43,7 +43,8 @@ export default function AnalyticsPage() {
         { id: 'total-inventory-valuation', label: 'Total Inventory Valuation', icon: '💰' },
         { id: 'cashier-wise-sales', label: 'Cashier wise sales Report', icon: '👤' },
         { id: 'hsn-summary', label: 'HSN Summary', icon: '🔢' },
-        { id: 'cancelled-item-summary', label: 'Cancelled Item Summary', icon: '❌' }
+        { id: 'cancelled-item-summary', label: 'Cancelled Item Summary', icon: '❌' },
+        { id: 'month-wise-stock-report', label: 'Month Wise Stock Report', icon: '📅' }
     ]
 
     const fetchAnalytics = async () => {
@@ -125,13 +126,13 @@ export default function AnalyticsPage() {
             borderColor: 'rgba(198,245,61,0.5)'
         },
         {
-            label: 'Net Profit',
-            value: `₹${Math.round(data?.summary?.netProfit || 0).toLocaleString('en-IN')}`,
-            icon: '📈',
-            bg: 'rgba(45,212,121,0.1)',
-            color: '#2DD479',
-            trend: `${data?.summary?.profitMargin?.toFixed(1) || 0}% Margin`,
-            borderColor: 'rgba(45,212,121,0.5)'
+            label: 'Gross Profit',
+            value: `₹${Math.round(data?.summary?.grossProfit || 0).toLocaleString('en-IN')}`,
+            icon: '💎',
+            bg: 'rgba(139,92,246,0.1)',
+            color: '#a78bfa',
+            trend: 'After COGS',
+            borderColor: 'rgba(139,92,246,0.5)'
         },
         {
             label: 'Total Expense',
@@ -143,13 +144,13 @@ export default function AnalyticsPage() {
             borderColor: 'rgba(239,68,68,0.5)'
         },
         {
-            label: 'Gross Profit',
-            value: `₹${Math.round(data?.summary?.grossProfit || 0).toLocaleString('en-IN')}`,
-            icon: '💎',
-            bg: 'rgba(139,92,246,0.1)',
-            color: '#a78bfa',
-            trend: 'After COGS',
-            borderColor: 'rgba(139,92,246,0.5)'
+            label: 'Net Profit',
+            value: `₹${Math.round(data?.summary?.netProfit || 0).toLocaleString('en-IN')}`,
+            icon: '📈',
+            bg: 'rgba(45,212,121,0.1)',
+            color: '#2DD479',
+            trend: `${data?.summary?.profitMargin?.toFixed(1) || 0}% Margin`,
+            borderColor: 'rgba(45,212,121,0.5)'
         },
         {
             label: 'Total Orders',
@@ -615,6 +616,8 @@ export default function AnalyticsPage() {
                                     <tr>
                                         <th>Item Name</th>
                                         <th>Category</th>
+                                        <th>Purchased Stock</th>
+                                        <th>Sold Stock</th>
                                         <th>Current Stock</th>
                                         <th>Cost/Unit</th>
                                     </tr>
@@ -624,8 +627,10 @@ export default function AnalyticsPage() {
                                         <tr key={i} className={item.currentStock <= item.lowStockThreshold ? 'low-stock-row' : ''}>
                                             <td>{item.name}</td>
                                             <td>{item.category}</td>
-                                            <td>{item.currentStock} {item.unit}</td>
-                                            <td>₹{item.costPerUnit}</td>
+                                            <td>{Number(item.purchasedCount || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })} {item.unit}</td>
+                                            <td>{Number(item.soldCount || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })} {item.unit}</td>
+                                            <td>{Number(item.currentStock || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })} {item.unit}</td>
+                                            <td>₹{Number(item.costPerUnit || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -768,6 +773,71 @@ export default function AnalyticsPage() {
                                             </tr>
                                         );
                                     })}
+                                </tbody>
+                            </table>
+                        </div>
+                        {downloadBar}
+                    </div>
+                )
+            case 'month-wise-stock-report':
+                return (
+                    <div className="report-content-view">
+                        <div className="report-summary-grid mini">
+                            <div className="summary-val-card" style={{ background: 'rgba(37,99,235,0.07)' }}>
+                                <span className="label">Total Months Covered</span>
+                                <span className="val">{[...new Set(reportData?.monthWiseStock?.map(r => r.month) || [])].length}</span>
+                            </div>
+                            <div className="summary-val-card" style={{ background: 'rgba(45,212,121,0.07)' }}>
+                                <span className="label">Items Added</span>
+                                <span className="val" style={{ color: '#2DD479' }}>{reportData?.monthWiseStock?.reduce((sum, r) => sum + (r.added || 0), 0)?.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="summary-val-card" style={{ background: 'rgba(239,68,68,0.07)' }}>
+                                <span className="label">Items Consumed</span>
+                                <span className="val" style={{ color: '#ef4444' }}>{reportData?.monthWiseStock?.reduce((sum, r) => sum + (r.consumed || 0), 0)?.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                            </div>
+                        </div>
+                        <div className="report-table-wrapper">
+                            <table className="premium-table">
+                                <thead>
+                                    <tr>
+                                        <th>Month</th>
+                                        <th>Item Name</th>
+                                        <th>Total Added</th>
+                                        <th>Total Consumed</th>
+                                        <th>Net Change</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {reportData?.monthWiseStock?.map((r, i) => (
+                                        <tr key={i}>
+                                            <td>{r.month}</td>
+                                            <td>{r.item}</td>
+                                            <td>
+                                                {(r.added || 0) > 0
+                                                    ? <span style={{ color: '#2DD479' }}>+{Number(r.added).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                                                    : <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Not Added</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                {(r.consumed || 0) > 0
+                                                    ? <span style={{ color: '#ef4444' }}>-{Number(r.consumed).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                                                    : <span style={{ color: 'var(--text-muted)' }}>—</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                <b style={{ color: r.netChange > 0 ? '#2DD479' : (r.netChange < 0 ? '#ef4444' : 'inherit') }}>
+                                                    {r.netChange > 0 ? '+' : ''}{Number(r.netChange || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                                                </b>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {(!reportData?.monthWiseStock || reportData.monthWiseStock.length === 0) && (
+                                        <tr>
+                                            <td colSpan="5" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
+                                                No stock movements found for the selected period.
+                                            </td>
+                                        </tr>
+                                    )}
                                 </tbody>
                             </table>
                         </div>
@@ -1113,12 +1183,12 @@ export default function AnalyticsPage() {
                             <div className="profit-analysis">
                                 <div className="profit-value-row">
                                     <div style={{ flex: 1 }}>
-                                        <div className="text-sm text-gray-400">Net Profit</div>
-                                        <span className="big-profit">₹{Math.round(data?.summary?.netProfit || 0).toLocaleString('en-IN')}</span>
-                                    </div>
-                                    <div style={{ flex: 1 }}>
                                         <div className="text-sm text-gray-400">Gross Profit</div>
                                         <span className="big-profit" style={{ color: '#00D68F' }}>₹{Math.round(data?.summary?.grossProfit || 0).toLocaleString('en-IN')}</span>
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <div className="text-sm text-gray-400">Net Profit</div>
+                                        <span className="big-profit">₹{Math.round(data?.summary?.netProfit || 0).toLocaleString('en-IN')}</span>
                                     </div>
                                     <span className={`profit-indicator ${data?.summary?.netProfit >= 0 ? 'pos' : 'neg'}`}>
                                         {data?.summary?.netProfit >= 0 ? '▲ Positive' : '▼ Negative'}

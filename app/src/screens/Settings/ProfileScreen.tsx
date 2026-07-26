@@ -702,7 +702,11 @@ export default function ProfileScreen({ navigation }: any) {
                             label="Preferred POS Mode"
                             value={form.preferredPosMode}
                             onChange={(v: string) => set('preferredPosMode', v)}
-                            options={[{ label: '🍽️ Restaurant POS', value: 'restaurant' }, { label: '🛒 Supermarket POS', value: 'supermarket' }]}
+                            options={[
+                                { label: '🍽️ Restaurant POS', value: 'restaurant' },
+                                { label: '🛒 Supermarket POS', value: 'supermarket' },
+                                { label: '👗 Clothing & Tailoring POS', value: 'clothing' },
+                            ]}
                             colors={colors}
                         />
                         <SelectField
@@ -848,11 +852,18 @@ export default function ProfileScreen({ navigation }: any) {
                     )}
 
                     {user.role === 'owner' && (
-                        <TouchableOpacity style={[styles.actionRow, { backgroundColor: colors.glass, borderColor: colors.border }]} onPress={() => navigation.navigate('EmployeeManagement')}>
-                            <Ionicons name="people-outline" size={22} color={colors.primary} />
-                            <Text style={[styles.actionText, { color: colors.textPrimary }]}>Manage Staff &amp; Roles</Text>
-                            <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-                        </TouchableOpacity>
+                        <>
+                            <TouchableOpacity style={[styles.actionRow, { backgroundColor: colors.glass, borderColor: colors.border }]} onPress={() => navigation.navigate('EmployeeManagement')}>
+                                <Ionicons name="people-outline" size={22} color={colors.primary} />
+                                <Text style={[styles.actionText, { color: colors.textPrimary }]}>Manage Staff &amp; Roles</Text>
+                                <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.actionRow, { backgroundColor: colors.glass, borderColor: colors.border }]} onPress={() => navigation.navigate('StaffPerformance')}>
+                                <Ionicons name="stats-chart-outline" size={22} color={colors.primary} />
+                                <Text style={[styles.actionText, { color: colors.textPrimary }]}>Staff Performance & Reviews</Text>
+                                <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+                            </TouchableOpacity>
+                        </>
                     )}
 
                     {__DEV__ && user.role !== 'waiter' && (

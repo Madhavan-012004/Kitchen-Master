@@ -4,7 +4,7 @@ import './AIAssistant.css';
 
 const AIAssistant = () => {
     const [messages, setMessages] = useState([
-        { role: 'assistant', content: 'Hello! I am your ProBloom Assistant. How can I help you manage your restaurant today?' }
+        { role: 'assistant', content: 'Hello! I am your ProBloom Assistant. How can I help you manage your Shop today?' }
     ]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
@@ -49,7 +49,7 @@ const AIAssistant = () => {
         if (content.includes('|') && content.includes('\n')) {
             const lines = content.split('\n');
             const tableLines = lines.filter(l => l.includes('|'));
-            
+
             if (tableLines.length >= 2) {
                 // This is a very basic table parser
                 const rows = tableLines.filter(l => !l.includes('---'));
@@ -132,7 +132,7 @@ const AIAssistant = () => {
                     <form onSubmit={handleSend} className="ai-input-form">
                         <input
                             type="text"
-                            placeholder="Ask me anything about your restaurant..."
+                            placeholder="Ask me anything about your Shop..."
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             disabled={loading}

@@ -453,21 +453,23 @@ export default function OrdersPage() {
                         </div>
                     </div>
 
-                    <div className="filter-group">
-                        <label>Order Type</label>
-                        <div className="input-wrapper">
-                            <span className="input-icon">🍽️</span>
-                            <select
-                                value={filterType}
-                                onChange={(e) => setFilterType(e.target.value)}
-                                className="filter-input"
-                            >
-                                <option value="All">All Types</option>
-                                <option value="dine-in">Dine-In</option>
-                                <option value="takeaway">Takeaway</option>
-                            </select>
+                    {user?.businessType === 'restaurant' && (
+                        <div className="filter-group">
+                            <label>Order Type</label>
+                            <div className="input-wrapper">
+                                <span className="input-icon">🍽️</span>
+                                <select
+                                    value={filterType}
+                                    onChange={(e) => setFilterType(e.target.value)}
+                                    className="filter-input"
+                                >
+                                    <option value="All">All Types</option>
+                                    <option value="dine-in">Dine-In</option>
+                                    <option value="takeaway">Takeaway</option>
+                                </select>
+                            </div>
                         </div>
-                    </div>
+                    )}
 
                     <div className="filter-group">
                         <label>Status</label>
@@ -531,11 +533,15 @@ export default function OrdersPage() {
                             }}>
                                 <div className="card-header">
                                     <div className="card-header-left">
-                                        <span className={`type-badge ${o.orderType}`}>
-                                            {o.orderType === 'takeaway' ? '🥡 Takeaway' : '🍽️ Dine-In'}
-                                        </span>
+                                        {user?.businessType === 'restaurant' && (
+                                            <span className={`type-badge ${o.orderType}`}>
+                                                {o.orderType === 'takeaway' ? '🥡 Takeaway' : '🍽️ Dine-In'}
+                                            </span>
+                                        )}
                                         <h3 className="table-identifier">
-                                            {o.tableNumber ? o.tableNumber : (o.tokenNumber ? `Token ${o.tokenNumber}` : 'Takeaway')}
+                                            {user?.businessType === 'restaurant'
+                                                ? (o.tableNumber ? o.tableNumber : (o.tokenNumber ? `Token ${o.tokenNumber}` : 'Takeaway'))
+                                                : `Bill #${o.orderNumber}`}
                                         </h3>
                                     </div>
                                     <span className="time-badge">
@@ -551,6 +557,19 @@ export default function OrdersPage() {
                                             {o.items?.length > 3 && ' ...'}
                                         </p>
                                     </div>
+                                    
+                                    {o.rating && (
+                                        <div style={{ marginTop: '12px', padding: '10px', background: 'var(--surface-2)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                                            <div style={{ color: '#FFD700', fontSize: '14px', marginBottom: '4px' }}>
+                                                {'★'.repeat(o.rating)}{'☆'.repeat(5 - o.rating)}
+                                            </div>
+                                            {o.feedback && (
+                                                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0, fontStyle: 'italic' }}>
+                                                    "{o.feedback}"
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="card-footer">

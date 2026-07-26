@@ -67,7 +67,7 @@ function emptyRow() {
     return { id: Date.now(), productId: '', productName: '', qty: 1, mrp: 0, basic: 0, rate: 0, disPct: 0, disRs: 0, sgst: 0, cgst: 0, igst: 0, tax: 0, total: 0, remarks: '', inStock: 0, batchNo: '', mfgDate: '', expDate: '', hsnCode: '' }
 }
 
-function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
+function SupermarketPOSContent({ tabId, tabTitle, printBill, isActive, onBillNoChange, onNewTab, onCloseTab }) {
     const { user } = useAuth()
     const taxRate = typeof user?.taxRate === 'number' ? user.taxRate : 18;
     const today = new Date().toLocaleDateString('en-CA') // YYYY-MM-DD
@@ -115,6 +115,7 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
     const [historyOrders, setHistoryOrders]       = useState([])
     const [historyLoading, setHistoryLoading]     = useState(false)
     const [showEmailModal, setShowEmailModal]     = useState(false)
+    const [showBillingSummary, setShowBillingSummary] = useStickyState(true, `sm_pos_billingSummary_${tabId}`)
     const [emailAddr, setEmailAddr]               = useState('')
     const [pendingReprint, setPendingReprint]     = useState(null)
     const [showReprintLang, setShowReprintLang]   = useState(false)
@@ -163,7 +164,13 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
                 lookupProduct(idx, e.target.value, e.key === 'Tab')
             } else if (e.key === 'Enter') {
                 e.preventDefault()
+                if (col === 'qty') {
+                    if (rows[idx].qty === '' || rows[idx].qty == null) {
+                        updateRow(idx, 'qty', 1);
+                    }
+                }
                 setActiveRowIdx(Math.min(rows.length - 1, idx + 1))
+                setActiveCol('productId')
             }
         }
     }
@@ -174,8 +181,43 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
     const [customerMobile, setCustomerMobile] = useStickyState('', `sm_pos_customerMobile_${tabId}`)
     const [prevBalance, setPrevBalance]       = useStickyState(0, `sm_pos_prevBalance_${tabId}`)
     const [customerTab, setCustomerTab]       = useState('customer') // 'customer' | 'receipt'
+    const [availablePoints, setAvailablePoints] = useStickyState(0, `sm_pos_availablePoints_${tabId}`)
+    const [redeemPoints, setRedeemPoints]     = useStickyState(false, `sm_pos_redeemPoints_${tabId}`)
+    const [allCustomersList, setAllCustomersList] = useState([])
+    const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
+    const [customerDropdownIndex, setCustomerDropdownIndex] = useState(-1)
+
+    // Fetch all customers when settlement modal opens for autocomplete
+    useEffect(() => {
+        if (showSettlement) {
+            api.get('/customers')
+                .then(res => {
+                    const data = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+                    setAllCustomersList(data);
+                })
+                .catch(err => console.error("Failed to fetch customers", err));
+        }
+    }, [showSettlement]);
     
-    // ── Pharmacy/Custom Bill Fields ──────────────────────────
+    // Fetch customer details including loyalty points when mobile number is 10 digits
+    useEffect(() => {
+        if (customerMobile && customerMobile.length >= 10) {
+            api.get(`/customers/phone/${customerMobile}`)
+                .then(res => {
+                    if (res.data) {
+                        setCustomerName(res.data.name || customerName);
+                        setAvailablePoints(res.data.loyaltyPoints || 0);
+                    }
+                })
+                .catch(err => {
+                    // Customer not found or error, reset points
+                    setAvailablePoints(0);
+                });
+        } else {
+            setAvailablePoints(0);
+            setRedeemPoints(false);
+        }
+    }, [customerMobile]);
     const billTemplate = user?.basicBillTemplate || 'standard';
     const [printWithGst, setPrintWithGst]     = useStickyState(true, `sm_pos_printWithGst_${tabId}`);
 
@@ -215,6 +257,8 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
 
     const firstProductIdRef = useRef(null)
 
+
+
     // ── Fetch inventory catalog ───────────────────────────────
     const refreshInventory = useCallback(async () => {
         try {
@@ -240,14 +284,18 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
 
     useEffect(() => {
         refreshInventory();
-        // Generate bill number only if it's empty (prevents overwriting sticky state on load)
-        if (!billNo) {
-            setBillNo('TRP' + String(Math.floor(1000 + Math.random() * 9000)));
-        }
     }, [refreshInventory]);
 
     useEffect(() => {
-        if (onBillNoChange) onBillNoChange(billNo);
+        if (!billNo && tabTitle && tabTitle !== 'Loading...' && tabTitle !== 'New Order') {
+            setBillNo(tabTitle);
+        }
+    }, [tabTitle, billNo, setBillNo]);
+
+    useEffect(() => {
+        if (onBillNoChange && billNo && billNo !== tabTitle) {
+            onBillNoChange(billNo);
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [billNo]);
 
@@ -344,7 +392,12 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
     const totalItems    = computed.reduce((s, r) => s + (parseFloat(r.qty) || 0), 0)
     const totalDiscount = computed.reduce((s, r) => s + r.disRs, 0)
     const subTotal      = computed.reduce((s, r) => s + r.total, 0)
-    const grandTotal    = subTotal + parseFloat(freightCharges || 0) - (subTotal * (parseFloat(disPctHeader) || 0) / 100)
+    
+    // Loyalty Points Logic
+    const maxPointsDiscount = subTotal + parseFloat(freightCharges || 0) - (subTotal * (parseFloat(disPctHeader) || 0) / 100);
+    const pointsDiscount = (redeemPoints && availablePoints > 0) ? Math.min(availablePoints, maxPointsDiscount) : 0;
+
+    const grandTotal    = maxPointsDiscount - pointsDiscount;
 
     const handleEditableGrandTotalChange = (e) => {
         const val = parseFloat(e.target.value);
@@ -391,7 +444,7 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
             const next = [...prev]
             let finalValue = value;
 
-            if (field === 'qty' && next[idx] && next[idx].productId) {
+            if (field === 'qty' && next[idx] && next[idx].productId && value !== '') {
                 const newQty = parseFloat(value) || 0;
                 let otherQty = 0;
                 for (let i = 0; i < next.length; i++) {
@@ -434,7 +487,7 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
         ).slice(0, 50)
     }, [inventory, searchQuery])
 
-    function forceApplyProductToRow(idx, found) {
+    function forceApplyProductToRow(idx, found, isBarcodeScan = false) {
         const safeId = found.barcode || found.id || found._id || 'N/A';
         const available = found.currentStock || 0;
         let triggerStockAlert = null;
@@ -464,19 +517,29 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
                 return next;
             });
 
-            // Focus back on the current row's productId for next scan
-            setActiveRowIdx(idx);
-            setActiveCol('productId');
-            setTimeout(() => {
-                const el = document.getElementById(`cell-${idx}-productId`);
-                if (el) { el.value = ''; el.focus(); }
-            }, 10);
+            if (isBarcodeScan) {
+                // Focus back on the current row's productId for next scan
+                setActiveRowIdx(idx);
+                setActiveCol('productId');
+                setTimeout(() => {
+                    const el = document.getElementById(`cell-${idx}-productId`);
+                    if (el) { el.value = ''; el.focus(); }
+                }, 10);
+            } else {
+                // Focus on the existing row's qty cell for manual adjustment
+                setActiveRowIdx(existingIdx);
+                setActiveCol('qty');
+                setTimeout(() => {
+                    const el = document.getElementById(`cell-${existingIdx}-qty`);
+                    if (el) { el.focus(); el.select(); }
+                }, 10);
+            }
             return;
         }
 
         // --- Standard logic for new item ---
-        let initialQty = rows[idx]?.qty > 0 ? rows[idx].qty : 1;
-        if (initialQty > available) {
+        let initialQty = rows[idx]?.qty > 0 ? rows[idx].qty : (isBarcodeScan ? 1 : '');
+        if (initialQty !== '' && initialQty > available) {
             triggerStockAlert = {
                 name: found.name,
                 available: available,
@@ -514,13 +577,23 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
             if (idx === prev.length - 1) return [...prev, emptyRow()]
             return prev
         })
-        setActiveRowIdx(idx + 1)
-        setActiveCol('productId')
-        setTimeout(() => document.getElementById(`cell-${idx + 1}-productId`)?.focus(), 10)
+        
+        if (isBarcodeScan) {
+            setActiveRowIdx(idx + 1)
+            setActiveCol('productId')
+            setTimeout(() => document.getElementById(`cell-${idx + 1}-productId`)?.focus(), 10)
+        } else {
+            setActiveRowIdx(idx)
+            setActiveCol('qty')
+            setTimeout(() => {
+                const el = document.getElementById(`cell-${idx}-qty`);
+                if (el) { el.focus(); el.select(); }
+            }, 10)
+        }
     }
 
     // ── Product lookup by ID or barcode ──────────────────────
-    function lookupProduct(idx, query, isTab = false) {
+    function lookupProduct(idx, query, isTab = false, isBarcodeScan = false) {
         query = query.trim()
         if (!query) {
             if (isTab) {
@@ -544,7 +617,7 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
             (i.name || '').toLowerCase() === query.toLowerCase()
         )
         if (found) {
-            forceApplyProductToRow(idx, found)
+            forceApplyProductToRow(idx, found, isBarcodeScan)
         } else {
             // Force fetch just in case it was newly added in a different tab
             refreshInventory().then(actualItems => {
@@ -555,7 +628,7 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
                     (i.name || '').toLowerCase() === query.toLowerCase()
                 );
                 if (foundAfterSync) {
-                    forceApplyProductToRow(idx, foundAfterSync);
+                    forceApplyProductToRow(idx, foundAfterSync, isBarcodeScan);
                 } else if (!isTab) {
                     notify('❌ Product not found')
                 }
@@ -621,6 +694,10 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
                 if (activeRowIdx !== null) handleDeleteRow(activeRowIdx) 
             }
             if (e.key === 'Enter') {
+                if (document.getElementById('customer-dropdown-container')) {
+                    e.preventDefault(); // Prevent bill print while dropdown is open
+                    return;
+                }
                 const now = Date.now()
                 const diff = now - lastEnterTimeRef.current
                 lastEnterTimeRef.current = now
@@ -654,22 +731,9 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
     }, [rows, saving, showSettlement, showHistoryModal, showEmailModal, showHeldModal, grandTotal, activeRowIdx, isActive, isScaleConnected])
 
     function handleNewBill() {
-        const activeRows = rows.filter(r => r.productId || r.total > 0)
-        if (activeRows.length > 0) {
-            handleParkBill()
+        if (onNewTab) {
+            onNewTab();
         }
-
-        setRows([emptyRow()])
-        setActiveRowIdx(0)
-        setActiveCol('productId')
-        setCustomerId(''); setCustomerName(''); setCustomerMobile(''); setPrevBalance(0)
-        setDoctorName(''); setNumberOfDays(''); setIsPharmacyDetailsOpen(true)
-        setFreightCharges(0); setVehicleNumber(''); setEmpCode('')
-        setEditableGrandTotal(undefined)
-        setDisPctHeader(0)
-        setBillNo('TRP' + String(Math.floor(1000 + Math.random() * 9000)))
-        setBillDate(today)
-        notify('🆕 New Bill started')
     }
 
     const handleParkBill = () => {
@@ -687,6 +751,8 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
             freightCharges,
             taxType,
             payment,
+            redeemPoints,
+            pointsDiscount,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             total: grandTotal
         }
@@ -772,6 +838,7 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
         setFreightCharges(bill.freightCharges || 0)
         setTaxType(bill.taxType || 'Inclusive') // Default to Inclusive if not set
         setPayment(bill.payment || 'CASH') // Default to CASH if not set
+        setRedeemPoints(bill.redeemPoints || false)
 
         // Remove from held list
         setHeldBills(prev => prev.filter((_, i) => i !== index))
@@ -867,6 +934,7 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
                 discountType: 'PERCENTAGE',
                 discountValue: parseFloat(disPctHeader) || 0,
                 discountAmount: subTotal * (parseFloat(disPctHeader) / 100),
+                pointsRedeemed: pointsDiscount,
                 freightCharges: parseFloat(freightCharges) || 0,
                 billNo,
                 doctorName,
@@ -924,6 +992,7 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
                     totalSgst: printWithGst ? ((taxType === 'Inclusive' ? (subTotal * (1 - (parseFloat(disPctHeader) || 0) / 100) - (subTotal * (1 - (parseFloat(disPctHeader) || 0) / 100) / (1 + taxRate / 100))) : (subTotal * (1 - (parseFloat(disPctHeader) || 0) / 100) * (taxRate / 100))) / 2) : 0.0,
                     totalCgst: printWithGst ? ((taxType === 'Inclusive' ? (subTotal * (1 - (parseFloat(disPctHeader) || 0) / 100) - (subTotal * (1 - (parseFloat(disPctHeader) || 0) / 100) / (1 + taxRate / 100))) : (subTotal * (1 - (parseFloat(disPctHeader) || 0) / 100) * (taxRate / 100))) / 2) : 0.0,
                     discountPct: parseFloat(disPctHeader) || 0,
+                    pointsRedeemed: pointsDiscount,
                     freightCharges: parseFloat(freightCharges) || 0,
                     createdAt: new Date(),
                     skipKOT: true,
@@ -931,7 +1000,13 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
                     source: 'supermarket'
                 }
                 printBill(printOrderObj, true, false, 'en')
-                setTimeout(() => handleNewBill(), 1200)
+                setTimeout(() => {
+                    if (onCloseTab) {
+                        onCloseTab();
+                    } else if (onNewTab) {
+                        onNewTab();
+                    }
+                }, 1200)
             }
         } catch (err) {
             notify('❌ Error saving bill: ' + (err.response?.data?.message || 'unknown'))
@@ -1120,7 +1195,7 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
                                                     value={row.qty}
                                                     onChange={e => updateRow(idx, 'qty', e.target.value)}
                                                     onKeyDown={e => handleCellKeyDown(e, idx, 'qty')}
-                                                    onFocus={() => { setActiveRowIdx(idx); setActiveCol('qty') }}
+                                                    onFocus={(e) => { setActiveRowIdx(idx); setActiveCol('qty'); e.target.select(); }}
                                                 />
                                             </div>
                                         </td>
@@ -1166,12 +1241,12 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
                                         <td className="col-hsn">
                                             <input
                                                 id={`cell-${idx}-hsnCode`}
-                                                className={activeRowIdx === idx && activeCol === 'hsnCode' ? 'cell-active' : ''}
-                                                value={row.hsnCode}
-                                                onChange={e => updateRow(idx, 'hsnCode', e.target.value)}
-                                                onKeyDown={e => handleCellKeyDown(e, idx, 'hsnCode')}
-                                                onFocus={() => { setActiveRowIdx(idx); setActiveCol('hsnCode') }}
+                                                className="readonly-cell"
+                                                value={row.hsnCode || ''}
+                                                readOnly
+                                                tabIndex="-1"
                                                 placeholder="HSN"
+                                                style={{backgroundColor: 'transparent', color: 'var(--text-muted)', cursor: 'default'}}
                                             />
                                         </td>
                                         {showAdvancedCols && (
@@ -1196,7 +1271,7 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
                                                     value={row.disPct}
                                                     onChange={e => updateRow(idx, 'disPct', e.target.value)}
                                                     onKeyDown={e => handleCellKeyDown(e, idx, 'disPct')}
-                                                    onFocus={() => { setActiveRowIdx(idx); setActiveCol('disPct') }}
+                                                    onFocus={(e) => { setActiveRowIdx(idx); setActiveCol('disPct'); e.target.select(); }}
                                                 />
                                             </td>
                                         )}
@@ -1267,51 +1342,89 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
                         </div>
                     </div>
                     
-                    <div className="sm-summary-header">Billing Summary</div>
-                    <div className="sm-summary-field" style={{ display: 'none' }}>
-                        <label>Bill Type</label>
-                    </div>
-                    <div className="sm-summary-field">
-                        <label>Bill No</label>
-                        <input value={billNo} onChange={e => setBillNo(e.target.value)} readOnly={!manualBillNo} className={!manualBillNo ? 'readonly' : ''} />
-                    </div>
-                    <div className="sm-summary-field">
-                        <label>Due Date</label>
-                        <input value={dueDate} onChange={e => setDueDate(e.target.value)} placeholder="E No" />
-                    </div>
-                    <div className="sm-summary-field">
-                        <label>PO Date</label>
-                        <input value={poDate} onChange={e => setPODate(e.target.value)} placeholder="C No" />
-                    </div>
-                    <div className="sm-summary-field">
-                        <label>Emp Code</label>
-                        <input value={empCode} onChange={e => setEmpCode(e.target.value)} />
-                    </div>
-                    <div className="sm-summary-field">
-                        <label>Freight Charges</label>
-                        <input type="number" value={freightCharges} onChange={e => setFreightCharges(e.target.value)} min="0" />
-                    </div>
-                    <div className="sm-summary-field">
-                        <label>Vehicle Number</label>
-                        <input value={vehicleNumber} onChange={e => setVehicleNumber(e.target.value)} />
+                    {user?.posDetailedView && (
+                    <>
+                    <div className="sm-summary-header" onClick={() => setShowBillingSummary(!showBillingSummary)} style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>Billing Summary</span>
+                        <span style={{ fontSize: '12px', transition: 'transform 0.2s', transform: showBillingSummary ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
                     </div>
 
-                    <div className="sm-kpi-card orange">
-                        <div className="kpi-label">Total Items</div>
-                        <div className="kpi-val">{computed.filter(r => r.productName).length}</div>
-                    </div>
-                    <div className="sm-kpi-card blue">
-                        <div className="kpi-label">Total Discount</div>
-                        <div className="kpi-val">{totalDiscount.toFixed(2)}</div>
-                    </div>
-                    <div className="sm-kpi-card orange">
-                        <div className="kpi-label">Net Amount</div>
-                        <div className="kpi-val">{grandTotal.toFixed(2)}</div>
-                    </div>
+                    {showBillingSummary && (
+                        <div className="sm-summary-fields-container" style={{ flex: 1, overflowY: 'auto' }}>
+                            <div className="sm-summary-field" style={{ display: 'none' }}>
+                                <label>Bill Type</label>
+                            </div>
+                            <div className="sm-summary-field">
+                                <label>Bill No</label>
+                                <input value={billNo} onChange={e => setBillNo(e.target.value)} readOnly={!manualBillNo} className={!manualBillNo ? 'readonly' : ''} />
+                            </div>
+                            <div className="sm-summary-field">
+                                <label>Due Date</label>
+                                <input value={dueDate} onChange={e => setDueDate(e.target.value)} placeholder="E No" />
+                            </div>
+                            <div className="sm-summary-field">
+                                <label>PO Date</label>
+                                <input value={poDate} onChange={e => setPODate(e.target.value)} placeholder="C No" />
+                            </div>
+                            <div className="sm-summary-field">
+                                <label>Emp Code</label>
+                                <input value={empCode} onChange={e => setEmpCode(e.target.value)} />
+                            </div>
+                            <div className="sm-summary-field">
+                                <label>Freight Charges</label>
+                                <input type="number" value={freightCharges} onChange={e => setFreightCharges(e.target.value)} min="0" />
+                            </div>
+                            <div className="sm-summary-field">
+                                <label>Vehicle Number</label>
+                                <input value={vehicleNumber} onChange={e => setVehicleNumber(e.target.value)} />
+                            </div>
+
+                            {/* Loyalty Points Section */}
+                            {availablePoints > 0 && (
+                                <div className="sm-summary-field" style={{ background: '#f0f9ff', padding: '10px', borderRadius: '8px', border: '1px solid #bae6fd', marginTop: '10px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                                        <label style={{ color: '#0369a1', fontWeight: 'bold' }}>Loyalty Points ({availablePoints.toFixed(2)})</label>
+                                        <label className="sm-chk" style={{ margin: 0 }}>
+                                            <input 
+                                                type="checkbox" 
+                                                checked={redeemPoints} 
+                                                onChange={e => setRedeemPoints(e.target.checked)} 
+                                            /> Redeem
+                                        </label>
+                                    </div>
+                                    {redeemPoints && (
+                                        <div style={{ fontSize: '12px', color: '#0ea5e9', marginTop: '5px' }}>
+                                            Saving ₹{pointsDiscount.toFixed(2)} on this order
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                            <div className="sm-summary-field">
+                                <label>Vehicle Number</label>
+                                <input value={vehicleNumber} onChange={e => setVehicleNumber(e.target.value)} />
+                            </div>
+
+                            <div className="sm-kpi-card orange">
+                                <div className="kpi-label">Total Items</div>
+                                <div className="kpi-val">{computed.filter(r => r.productName).length}</div>
+                            </div>
+                            <div className="sm-kpi-card blue">
+                                <div className="kpi-label">Total Discount</div>
+                                <div className="kpi-val">{(totalDiscount + pointsDiscount).toFixed(2)}</div>
+                            </div>
+                            <div className="sm-kpi-card orange">
+                                <div className="kpi-label">Net Amount</div>
+                                <div className="kpi-val">{grandTotal.toFixed(2)}</div>
+                            </div>
+                        </div>
+                    )}
+                    </>
+                    )}
                 </div>
             </div>
 
             {/* ── CUSTOMER / RECEIPT PANEL ── */}
+            {user?.posDetailedView && (
             <div className="sm-customer-panel">
                 <div className="sm-tabs">
                     <button className={customerTab === 'customer' ? 'tab active' : 'tab'} onClick={() => setCustomerTab('customer')}>
@@ -1330,13 +1443,14 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
 
                 {/* ── Details Section removed ── */}
             </div>
+            )}
 
 
             {/* ── ACTION BUTTONS ── */}
             <div className="sm-action-bar">
                 <button className="sm-action-btn primary" onClick={handleNewBill} title="F1">
                     <span className="action-icon">🧾</span>
-                    <span className="action-label">Bill</span>
+                    <span className="action-label">New Bill</span>
                     <span className="action-key">[F1]</span>
                 </button>
                 <button className="sm-action-btn green" onClick={handleSave} disabled={saving} title="F2">
@@ -1482,8 +1596,8 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
                                             >
                                                 <td>{m.barcode || m.id || m._id}</td>
                                                 <td>{m.name || 'Untitled'}</td>
-                                                <td className={i === searchSelectedIdx ? 'hl-red' : ''}>{m.price}</td>
-                                                <td className={i === searchSelectedIdx ? 'hl-red' : ''}>{m.price}</td>
+                                                <td className={i === searchSelectedIdx ? 'hl-red' : ''}>{Number(m.price || 0).toFixed(2)}</td>
+                                                <td className={i === searchSelectedIdx ? 'hl-red' : ''}>{Number(m.price || 0).toFixed(2)}</td>
                                             </tr>
                                         ))}
                                         {searchMatches.length === 0 && (
@@ -1507,208 +1621,208 @@ function SupermarketPOSContent({ tabId, printBill, isActive, onBillNoChange }) {
                             <h2>Settlement / Tender</h2>
                             <button onClick={() => setShowSettlement(false)}>✕</button>
                         </div>
-                        <div className="sm-tender-body">
-                            <div className="tender-row total" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                                <label style={{ color: 'var(--text-primary)', fontWeight: 'bold' }}>Net Amount Payable (Editable)</label>
-                                <input 
-                                    type="number" 
-                                    min="0" 
-                                    step="0.01" 
-                                    value={editableGrandTotal !== undefined ? editableGrandTotal : grandTotal.toFixed(2)} 
-                                    onChange={handleEditableGrandTotalChange} 
-                                    style={{ 
-                                        fontSize: '24px', 
-                                        fontWeight: 'bold', 
-                                        color: '#22c55e', 
-                                        background: 'var(--bg-secondary)', 
-                                        border: '2px solid var(--border)', 
-                                        borderRadius: '8px', 
-                                        padding: '5px 10px', 
-                                        width: '100%', 
-                                        textAlign: 'right' 
-                                    }} 
-                                />
-                            </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginTop: '10px', marginBottom: '15px', width: '100%' }}>
+                        <div className="sm-tender-body" style={{ padding: '15px' }}>
+                            {/* Net Payable & Discount Row */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr 1fr', gap: '10px', marginBottom: '15px' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                    <label style={{ color: 'var(--text-primary)', fontWeight: 'bold', fontSize: '13px', marginBottom: '4px' }}>Discount (%)</label>
-                                    <input 
-                                        type="number" 
-                                        min="0" 
-                                        max="100" 
-                                        step="0.1" 
-                                        value={disPctHeader} 
-                                        onChange={handleDiscountPctChange} 
-                                        style={{ width: '100%', padding: '8px', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', background: 'var(--bg-card)' }}
-                                    />
+                                    <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', marginBottom: '4px' }}>SUBTOTAL</label>
+                                    <div style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--text-primary)', padding: '6px 10px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '6px', textAlign: 'center' }}>₹{subTotal.toFixed(2)}</div>
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                    <label style={{ color: 'var(--text-primary)', fontWeight: 'bold', fontSize: '13px', marginBottom: '4px' }}>Discount (₹)</label>
+                                    <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', marginBottom: '4px' }}>DISCOUNT</label>
+                                    <div style={{ display: 'flex', gap: '4px' }}>
+                                        <input type="number" min="0" max="100" step="0.1" value={disPctHeader} onChange={handleDiscountPctChange} placeholder="%" style={{ width: '40%', padding: '6px', fontSize: '13px', border: '1px solid var(--border)', borderRadius: '6px', background: 'var(--bg-card)', color: 'var(--text-primary)', textAlign: 'center' }} />
+                                        <input type="number" min="0" step="0.01" value={(subTotal * (parseFloat(disPctHeader) / 100)).toFixed(2)} onChange={handleDiscountAmtChange} placeholder="₹" style={{ width: '60%', padding: '6px', fontSize: '13px', border: '1px solid var(--border)', borderRadius: '6px', background: 'var(--bg-card)', color: 'var(--text-primary)', textAlign: 'center' }} />
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                    <label style={{ fontSize: '11px', fontWeight: '800', color: '#22c55e', marginBottom: '4px' }}>AFTER DISCOUNT</label>
                                     <input 
-                                        type="number" 
-                                        min="0" 
-                                        step="0.01" 
-                                        value={(subTotal * (parseFloat(disPctHeader) / 100)).toFixed(2)} 
-                                        onChange={handleDiscountAmtChange} 
-                                        style={{ width: '100%', padding: '8px', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', background: 'var(--bg-card)' }}
+                                        type="number" min="0" step="0.01" 
+                                        value={editableGrandTotal !== undefined ? editableGrandTotal : grandTotal.toFixed(2)} 
+                                        onChange={handleEditableGrandTotalChange} 
+                                        style={{ fontSize: '16px', fontWeight: '900', color: '#22c55e', background: 'var(--bg-secondary)', border: '2px solid #22c55e', borderRadius: '6px', padding: '4px 10px', width: '100%', outline: 'none', textAlign: 'center' }} 
                                     />
                                 </div>
                             </div>
-                            <div className="tender-row mt-3">
-                                <label>Cash</label>
-                                <input autoFocus type="number" min="0" value={tenderCash} onChange={e => {
-                                    const val = parseFloat(e.target.value)||0;
-                                    setTenderCash(val);
-                                    setGivenAmount(val);
-                                }} onFocus={e => e.target.select()} />
-                            </div>
-                            <div className="tender-row">
-                                <label>UPI / WALLET</label>
-                                <input type="number" min="0" value={tenderUPI} onChange={e => setTenderUPI(parseFloat(e.target.value)||0)} onFocus={e => e.target.select()} />
-                            </div>
-                            <div className="tender-row">
-                                <label>Card</label>
-                                <input type="number" min="0" value={tenderCard} onChange={e => setTenderCard(parseFloat(e.target.value)||0)} onFocus={e => e.target.select()} />
-                            </div>
 
-                            {/* Cash Return Calculator */}
-                            <div className="tender-change-calc" style={{
-                                marginTop: '15px',
-                                padding: '15px',
-                                background: 'var(--bg-secondary)',
-                                borderRadius: '8px',
-                                border: '1px solid var(--border)'
-                            }}>
-                                <h3 style={{ margin: '0 0 10px 0', fontSize: '13px', color: 'var(--accent)', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                    💵 Cash Return Calculator
-                                </h3>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                        <label style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)', marginBottom: '4px' }}>Given Amount (from Customer)</label>
-                                        <input 
-                                            type="number" 
-                                            min="0" 
-                                            placeholder="e.g. 200, 500" 
-                                            value={givenAmount || ''} 
-                                            onChange={handleGivenAmountChange}
-                                            style={{
-                                                width: '100%',
-                                                padding: '8px',
-                                                border: '1px solid var(--border)',
-                                                borderRadius: '6px',
-                                                color: 'var(--text-primary)',
-                                                background: 'var(--bg-card)',
-                                                fontSize: '18px',
-                                                fontWeight: 'bold',
-                                                textAlign: 'right',
-                                                outline: 'none'
-                                            }}
-                                            onFocus={e => e.target.select()}
-                                        />
-                                    </div>
-                                    <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'flex-end' }}>
-                                        <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)' }}>Balance Return (Change)</span>
-                                        <span style={{
-                                            fontSize: '24px',
-                                            fontWeight: '900',
-                                            color: '#22c55e',
-                                            marginTop: '4px'
-                                        }}>
-                                            ₹{Math.max(0, (givenAmount || 0) - (editableGrandTotal !== undefined ? parseFloat(editableGrandTotal) : grandTotal)).toFixed(2)}
-                                        </span>
-                                    </div>
+                            {/* Customer Loyalty Section */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '10px', background: 'var(--bg-secondary)', padding: '10px', borderRadius: '8px', border: '1px solid var(--border)', marginBottom: '15px', alignItems: 'end' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
+                                    <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', marginBottom: '4px' }}>CUSTOMER PHONE</label>
+                                    <input 
+                                        type="text" 
+                                        maxLength="10" 
+                                        value={customerMobile} 
+                                        onChange={e => {
+                                            setCustomerMobile(e.target.value.replace(/\D/g, ''));
+                                            setShowCustomerDropdown(true);
+                                            setCustomerDropdownIndex(-1);
+                                        }}
+                                        onKeyDown={(e) => {
+                                            const matches = allCustomersList.filter(c => c.phone && c.phone.includes(customerMobile));
+                                            if (e.key === 'ArrowDown') {
+                                                if (showCustomerDropdown) {
+                                                    e.preventDefault();
+                                                    setCustomerDropdownIndex(prev => Math.min(prev + 1, matches.length - 1));
+                                                }
+                                            } else if (e.key === 'ArrowUp') {
+                                                if (showCustomerDropdown) {
+                                                    e.preventDefault();
+                                                    setCustomerDropdownIndex(prev => Math.max(prev - 1, -1));
+                                                }
+                                            } else if (e.key === 'Enter') {
+                                                if (showCustomerDropdown && matches.length > 0) {
+                                                    // Always block Enter from bubbling when dropdown is open
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    // Pick highlighted item, or first match if nothing highlighted
+                                                    const idx = customerDropdownIndex >= 0 ? customerDropdownIndex : 0;
+                                                    const c = matches[idx];
+                                                    setCustomerMobile(c.phone);
+                                                    setCustomerName(c.name || '');
+                                                    setAvailablePoints(c.loyaltyPoints || 0);
+                                                    setCustomerDropdownIndex(-1);
+                                                    setShowCustomerDropdown(false);
+                                                }
+                                            }
+                                        }}
+                                        onFocus={() => setShowCustomerDropdown(true)}
+                                        onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
+                                        placeholder="10-digit number" 
+                                        style={{ width: '100%', padding: '6px 8px', fontSize: '14px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)' }} 
+                                    />
+                                    {showCustomerDropdown && customerMobile.length > 0 && customerMobile.length < 10 && (
+                                        <div id="customer-dropdown-container" style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '6px', maxHeight: '150px', overflowY: 'auto', zIndex: 10 }}>
+                                            {allCustomersList.filter(c => c.phone && c.phone.includes(customerMobile)).length > 0 ? (
+                                                allCustomersList.filter(c => c.phone && c.phone.includes(customerMobile)).map((c, idx) => (
+                                                    <div 
+                                                        key={c.id} 
+                                                        style={{ padding: '8px', cursor: 'pointer', borderBottom: '1px solid var(--border)', fontSize: '12px', color: 'var(--text-primary)', backgroundColor: customerDropdownIndex === idx ? 'rgba(0,0,0,0.1)' : 'transparent' }}
+                                                        onMouseEnter={() => setCustomerDropdownIndex(idx)}
+                                                        onMouseDown={() => {
+                                                            setCustomerMobile(c.phone);
+                                                            setCustomerName(c.name || '');
+                                                            setAvailablePoints(c.loyaltyPoints || 0);
+                                                            setShowCustomerDropdown(false);
+                                                        }}
+                                                    >
+                                                        <strong>{c.phone}</strong> - {c.name || 'Unknown'}
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <div style={{ padding: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>No matches</div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
-                            </div>
-
-                            <div className="sm-template-section" style={{ margin: '20px 0', background: 'none', border: 'none', boxShadow: 'none', padding: 0 }}>
-                                <div className="sm-template-toggle" style={{ marginBottom: '16px', display: 'flex', gap: '10px' }}>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', background: 'var(--bg-secondary)', padding: '10px 15px', borderRadius: '8px', border: '1px solid var(--border)', flex: 1 }}>
-                                        <input 
-                                            type="checkbox" 
-                                            checked={printWithGst} 
-                                            onChange={(e) => setPrintWithGst(e.target.checked)} 
-                                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                                        />
-                                        <span style={{ fontWeight: 'bold', color: 'var(--text-primary)' }}>Print with GST</span>
+                                <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
+                                    <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', marginBottom: '4px' }}>CUSTOMER NAME</label>
+                                    <input 
+                                        type="text" 
+                                        value={customerName} 
+                                        onChange={e => {
+                                            setCustomerName(e.target.value);
+                                            setShowCustomerDropdown(true);
+                                        }} 
+                                        onFocus={() => setShowCustomerDropdown(true)}
+                                        onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
+                                        placeholder="Name" 
+                                        style={{ width: '100%', padding: '6px 8px', fontSize: '14px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)' }} 
+                                    />
+                                    {showCustomerDropdown && customerName.length > 0 && (
+                                        <div id="customer-dropdown-container" style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '6px', maxHeight: '150px', overflowY: 'auto', zIndex: 10 }}>
+                                            {allCustomersList.filter(c => c.name && c.name.toLowerCase().includes(customerName.toLowerCase())).length > 0 ? (
+                                                allCustomersList.filter(c => c.name && c.name.toLowerCase().includes(customerName.toLowerCase())).map(c => (
+                                                    <div 
+                                                        key={c.id} 
+                                                        style={{ padding: '8px', cursor: 'pointer', borderBottom: '1px solid var(--border)', fontSize: '12px', color: 'var(--text-primary)' }}
+                                                        onMouseDown={() => {
+                                                            setCustomerMobile(c.phone);
+                                                            setCustomerName(c.name || '');
+                                                            setAvailablePoints(c.loyaltyPoints || 0);
+                                                            setShowCustomerDropdown(false);
+                                                        }}
+                                                    >
+                                                        <strong>{c.name}</strong> - {c.phone}
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <div style={{ padding: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>No matches</div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                    <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', marginBottom: '4px' }}>LOYALTY POINTS</label>
+                                    <input type="text" value={availablePoints} readOnly style={{ width: '100%', padding: '6px 8px', fontSize: '14px', fontWeight: 'bold', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-hover)', color: '#3b82f6', cursor: 'not-allowed' }} />
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', height: '34px' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 'bold', cursor: availablePoints > 0 ? 'pointer' : 'not-allowed', color: availablePoints > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                                        <input type="checkbox" checked={redeemPoints} onChange={e => setRedeemPoints(e.target.checked)} disabled={availablePoints <= 0} style={{ width: '16px', height: '16px' }} />
+                                        Redeem
                                     </label>
                                 </div>
-
-                                {billTemplate === 'pharmacy' && (
-                                    <div className="sm-pharmacy-details fade-in-down" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', padding: '10px', borderRadius: '8px' }}>
-                                        <div className="pharmacy-header" onClick={() => setIsPharmacyDetailsOpen(!isPharmacyDetailsOpen)} style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                <span className="sm-icon">📝</span>
-                                                <span style={{ color: 'var(--text-primary)', fontWeight: 'bold', fontSize: '13px' }}>Prescription Details</span>
-                                            </div>
-                                            <span style={{ fontSize: '12px', color: 'var(--text-primary)', transition: 'transform 0.2s', transform: isPharmacyDetailsOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
-                                        </div>
-                                        {isPharmacyDetailsOpen && (
-                                            <div className="pharmacy-grid fade-in-down" style={{ marginTop: '10px', display: 'grid', gap: '10px' }}>
-                                                <div className="sm-cust-field">
-                                                    <label style={{ color: 'var(--text-primary)', fontWeight: 'bold', fontSize: '12px' }}>Doctor Name</label>
-                                                    <input
-                                                        value={doctorName}
-                                                        onChange={e => setDoctorName(e.target.value)}
-                                                        placeholder="Dr. Name..."
-                                                        style={{ width: '100%', padding: '6px', color: 'var(--text-primary)', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '4px' }}
-                                                    />
-                                                </div>
-                                                <div className="sm-cust-field">
-                                                    <label style={{ color: 'var(--text-primary)', fontWeight: 'bold', fontSize: '12px' }}>No. of Days</label>
-                                                    <input
-                                                        type="number"
-                                                        value={numberOfDays}
-                                                        onChange={e => setNumberOfDays(e.target.value)}
-                                                        placeholder="Days"
-                                                        min="1"
-                                                        style={{ width: '100%', padding: '6px', color: 'var(--text-primary)', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '4px' }}
-                                                    />
-                                                </div>
-                                                <div className="sm-cust-field full-width">
-                                                    <label style={{ color: 'var(--text-primary)', fontWeight: 'bold', fontSize: '12px' }}>M/S (Customer Firm)</label>
-                                                    <input
-                                                        value={customerId}
-                                                        onChange={e => setCustomerId(e.target.value)}
-                                                        placeholder="Customer Firm Name"
-                                                        style={{ width: '100%', padding: '6px', color: 'var(--text-primary)', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '4px' }}
-                                                    />
-                                                </div>
-                                                <div className="sm-cust-field">
-                                                    <label style={{ color: 'var(--text-primary)', fontWeight: 'bold', fontSize: '12px' }}>Customer Name</label>
-                                                    <input
-                                                        value={customerName}
-                                                        onChange={e => setCustomerName(e.target.value)}
-                                                        placeholder="Name"
-                                                        style={{ width: '100%', padding: '6px', color: 'var(--text-primary)', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '4px' }}
-                                                    />
-                                                </div>
-                                                <div className="sm-cust-field">
-                                                    <label style={{ color: 'var(--text-primary)', fontWeight: 'bold', fontSize: '12px' }}>Mobile Number</label>
-                                                    <input
-                                                        value={customerMobile}
-                                                        onChange={e => setCustomerMobile(e.target.value)}
-                                                        placeholder="Mobile"
-                                                        style={{ width: '100%', padding: '6px', color: 'var(--text-primary)', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '4px' }}
-                                                    />
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
                             </div>
 
-                            <div className="tender-summary">
-                                <div className="t-sum-item">
-                                    <span>Received</span>
-                                    <span>₹{(tenderCash + tenderUPI + tenderCard).toFixed(2)}</span>
+                            {/* Tender Row (Cash / UPI / Card) */}
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', background: 'var(--bg-secondary)', padding: '10px', borderRadius: '8px', border: '1px solid var(--border)', marginBottom: '15px' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                    <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', marginBottom: '4px' }}>CASH (₹)</label>
+                                    <input autoFocus type="number" min="0" value={tenderCash} onChange={e => { const val = parseFloat(e.target.value)||0; setTenderCash(val); setGivenAmount(val); }} onFocus={e => e.target.select()} style={{ width: '100%', padding: '6px 8px', fontSize: '14px', fontWeight: 'bold', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)' }} />
                                 </div>
-                                <div className="t-sum-item highlight">
-                                    <span>Change to Return</span>
-                                    <span>₹{Math.max(0, (tenderCash + tenderUPI + tenderCard) - grandTotal).toFixed(2)}</span>
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                    <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', marginBottom: '4px' }}>UPI (₹)</label>
+                                    <input type="number" min="0" value={tenderUPI} onChange={e => setTenderUPI(parseFloat(e.target.value)||0)} onFocus={e => e.target.select()} style={{ width: '100%', padding: '6px 8px', fontSize: '14px', fontWeight: 'bold', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)' }} />
                                 </div>
-                                <div className="t-sum-item highlight-red">
-                                    <span>Balance Due</span>
-                                    <span>₹{Math.max(0, grandTotal - (tenderCash + tenderUPI + tenderCard)).toFixed(2)}</span>
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                    <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', marginBottom: '4px' }}>CARD (₹)</label>
+                                    <input type="number" min="0" value={tenderCard} onChange={e => setTenderCard(parseFloat(e.target.value)||0)} onFocus={e => e.target.select()} style={{ width: '100%', padding: '6px 8px', fontSize: '14px', fontWeight: 'bold', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)' }} />
+                                </div>
+                            </div>
+
+                            {/* Print Options & Pharmacy */}
+                            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', color: 'var(--text-primary)' }}>
+                                    <input type="checkbox" checked={printWithGst} onChange={e => setPrintWithGst(e.target.checked)} style={{ width: '16px', height: '16px' }} />
+                                    Print with GST
+                                </label>
+                            </div>
+
+                            {billTemplate === 'pharmacy' && (
+                                <div className="sm-pharmacy-details fade-in-down" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', padding: '10px', borderRadius: '8px', marginBottom: '15px' }}>
+                                    <div className="pharmacy-header" onClick={() => setIsPharmacyDetailsOpen(!isPharmacyDetailsOpen)} style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            <span className="sm-icon">📝</span>
+                                            <span style={{ color: 'var(--text-primary)', fontWeight: 'bold', fontSize: '12px' }}>Prescription Details</span>
+                                        </div>
+                                        <span style={{ fontSize: '12px', color: 'var(--text-primary)', transition: 'transform 0.2s', transform: isPharmacyDetailsOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
+                                    </div>
+                                    {isPharmacyDetailsOpen && (
+                                        <div className="pharmacy-grid fade-in-down" style={{ marginTop: '10px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                            <input value={doctorName} onChange={e => setDoctorName(e.target.value)} placeholder="Doctor Name" style={{ width: '100%', padding: '6px', fontSize: '12px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '4px' }} />
+                                            <input type="number" value={numberOfDays} onChange={e => setNumberOfDays(e.target.value)} placeholder="Days" min="1" style={{ width: '100%', padding: '6px', fontSize: '12px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '4px' }} />
+                                            <input value={customerId} onChange={e => setCustomerId(e.target.value)} placeholder="M/S (Firm)" style={{ width: '100%', padding: '6px', fontSize: '12px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '4px' }} />
+                                            <input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="Customer Name" style={{ width: '100%', padding: '6px', fontSize: '12px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '4px' }} />
+                                            <input value={customerMobile} onChange={e => setCustomerMobile(e.target.value)} placeholder="Mobile" style={{ width: '100%', padding: '6px', fontSize: '12px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '4px', gridColumn: 'span 2' }} />
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Summary Footer */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', background: 'var(--bg-hover)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                    <span style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)' }}>RECEIVED</span>
+                                    <span style={{ fontSize: '16px', fontWeight: '900', color: '#3b82f6' }}>₹{(tenderCash + tenderUPI + tenderCard).toFixed(2)}</span>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                    <span style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)' }}>CHANGE</span>
+                                    <span style={{ fontSize: '16px', fontWeight: '900', color: '#22c55e' }}>₹{Math.max(0, (tenderCash + tenderUPI + tenderCard) - (editableGrandTotal !== undefined ? parseFloat(editableGrandTotal) : grandTotal)).toFixed(2)}</span>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                                    <span style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)' }}>DUE</span>
+                                    <span style={{ fontSize: '16px', fontWeight: '900', color: '#ef4444' }}>₹{Math.max(0, (editableGrandTotal !== undefined ? parseFloat(editableGrandTotal) : grandTotal) - (tenderCash + tenderUPI + tenderCard)).toFixed(2)}</span>
                                 </div>
                             </div>
                             <div className="tender-actions">
@@ -1939,14 +2053,70 @@ export default function SupermarketPOS({ printBill }) {
         localStorage.setItem('sm_pos_active_tab', activeTabId);
     }, [activeTabId]);
 
-    const addTab = () => {
+    useEffect(() => {
+        api.get('/orders/next-invoice').then(res => {
+            let nextInvoiceBase = res.data?.data;
+            if (nextInvoiceBase) {
+                setTabs(prev => {
+                    let newTabs = JSON.parse(JSON.stringify(prev)); // Deep copy to mutate safely
+                    newTabs.forEach(tab => {
+                        if (tab.title === 'New Order') {
+                            let currentInvoice = nextInvoiceBase;
+                            const match = currentInvoice.match(/^(.+?)(\d+)$/);
+                            if (match) {
+                                let prefix = match[1];
+                                let num = parseInt(match[2], 10);
+                                while (newTabs.some(t => t.title === currentInvoice && t.id !== tab.id)) {
+                                    num++;
+                                    currentInvoice = prefix + String(num).padStart(match[2].length, '0');
+                                }
+                            }
+                            tab.title = currentInvoice;
+                        }
+                    });
+                    return newTabs;
+                });
+            }
+        }).catch(()=>{});
+    }, []); // Run once on mount
+
+
+
+    const addTab = async () => {
         const id = Date.now();
-        setTabs([...tabs, { id, title: 'New Order' }]);
+        // Optimistically create the tab
+        setTabs(prev => [...prev, { id, title: 'Loading...' }]);
         setActiveTabId(id);
+        
+        try {
+            const res = await api.get('/orders/next-invoice');
+            const nextInvoice = res.data?.data || 'New Order';
+            
+            setTabs(prev => {
+                let currentInvoice = nextInvoice;
+                const match = currentInvoice.match(/^(.+?)(\d+)$/);
+                if (match) {
+                    let prefix = match[1];
+                    let num = parseInt(match[2], 10);
+                    while (prev.some(t => t.title === currentInvoice && t.id !== id)) {
+                        num++;
+                        currentInvoice = prefix + String(num).padStart(match[2].length, '0');
+                    }
+                } else {
+                    let counter = 1;
+                    while (prev.some(t => t.title === currentInvoice && t.id !== id)) {
+                        currentInvoice = `${nextInvoice} (${counter++})`;
+                    }
+                }
+                return prev.map(t => t.id === id ? { ...t, title: currentInvoice } : t);
+            });
+        } catch (err) {
+            setTabs(prev => prev.map(t => t.id === id ? { ...t, title: 'New Order' } : t));
+        }
     };
 
     const closeTab = (id, e) => {
-        e.stopPropagation();
+        if (e) e.stopPropagation();
         if (tabs.length === 1) return; // Prevent closing the last tab
         const newTabs = tabs.filter(t => t.id !== id);
         setTabs(newTabs);
@@ -2022,9 +2192,21 @@ export default function SupermarketPOS({ printBill }) {
                     >
                         <SupermarketPOSContent 
                             tabId={tab.id}
+                            tabTitle={tab.title}
                             printBill={printBill} 
                             isActive={activeTabId === tab.id}
                             onBillNoChange={(billNo) => handleBillNoChange(tab.id, billNo)}
+                            onNewTab={addTab}
+                            onCloseTab={() => {
+                                if (tabs.length > 1) {
+                                    closeTab(tab.id);
+                                    addTab(); // open the next sequence tab
+                                } else {
+                                    addTab().then(() => {
+                                        setTabs(prev => prev.filter(t => t.id !== tab.id));
+                                    });
+                                }
+                            }}
                         />
                     </div>
                 ))}

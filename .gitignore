@@ -89,3 +89,7 @@ web/dist-packager/
 dist-packager/
 node_modules/
 dist/
+web/python/
+installers-backup/
+*.exe
+

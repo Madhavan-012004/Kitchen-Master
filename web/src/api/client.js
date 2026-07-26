@@ -2,14 +2,26 @@ import axios from 'axios'
 import { globalTriggerOffline } from '../context/NetworkContext.jsx'
 
 const isElectron = window.location.protocol === 'file:';
-const API_BASE_URL = isElectron ? 'http://localhost:8080/api/' : '/api/';
+const isAndroid = /android/i.test(navigator.userAgent);
+// NOTE: Electron backend runs on port 48182 (set by -Dserver.port=48182 in main.cjs)
+const API_BASE_URL = 'https://kitchen-master.onrender.com/api/';
+
+// Set session mode immediately based on runtime context — no network call needed
+if (!sessionStorage.getItem('km_mode')) {
+    sessionStorage.setItem('km_mode', isElectron ? 'offline' : 'online');
+}
+
+
+// Requests that should NOT be retried (mutations that could cause duplicates)
+const NON_RETRYABLE_METHODS = new Set(['post', 'put', 'patch', 'delete'])
+const NON_RETRYABLE_URLS = ['/auth/login', '/auth/register', '/attendance/checkin', '/attendance/checkout', 'license/status', 'config/mode']
 
 const api = axios.create({
     baseURL: API_BASE_URL,
-    timeout: 15000
+    timeout: 90000,       // 90s timeout — allows Render free-tier cold start (30-60s)
 })
 
-// Attach JWT + X-Restaurant-Id (for stakeholder multi-tenancy) to every request
+// ── Request Interceptor: JWT + tenant header + path normalization ──────────────
 api.interceptors.request.use(config => {
     const token = sessionStorage.getItem('km_token')
     if (token) config.headers.Authorization = `Bearer ${token}`
@@ -25,27 +37,27 @@ api.interceptors.request.use(config => {
 
     // Path normalization: ensure requests are relative to the baseURL
     if (config.url) {
-        // Remove leading slash if any
         if (config.url.startsWith('/')) config.url = config.url.substring(1);
-        // Remove 'api/' prefix if any (redundant with baseURL)
         if (config.url.startsWith('api/')) config.url = config.url.substring(4);
     }
+
+    // Initialize retry metadata
+    config._retryCount = config._retryCount || 0
     return config
 })
 
-// Auto-clear token on 401 + Network error detection
+// ── Response Interceptor: auth, retry, offline detection ──────────────────────
 api.interceptors.response.use(
     res => res,
-    err => {
+    async err => {
+        const config = err.config
         const status = err.response?.status
 
-        // ── Auth errors: redirect to login (existing behaviour) ──
-        // EXCEPTION: public display pages (TV Monitor, Customer Menu, Waitlist join)
-        // must never be redirected to /login even if a background request returns 401.
-        const path = window.location.pathname
-        const isPublicDisplayPage = 
-            path.includes('/waitlist-monitor/') || 
-            path.includes('/menu/') || 
+        // ── Auth errors: redirect to login ──
+        const path = window.location.hash?.replace('#', '') || window.location.pathname
+        const isPublicDisplayPage =
+            path.includes('/waitlist-monitor/') ||
+            path.includes('/menu/') ||
             path.includes('/join-waitlist/') ||
             path === '/login' ||
             path === '/license'
@@ -62,44 +74,46 @@ api.interceptors.response.use(
             return Promise.reject(err)
         }
 
+        // ── Retry logic for network failures and timeouts on safe requests ──
+        const isRetryable =
+            config &&
+            !NON_RETRYABLE_METHODS.has(config.method?.toLowerCase()) &&
+            !NON_RETRYABLE_URLS.some(u => config.url?.includes(u)) &&
+            config._retryCount < 5 && // Increased to 5 retries for better resilience
+            (!err.response || err.response.status >= 500)
+
+        if (isRetryable) {
+            config._retryCount += 1
+            // 1s, 2s, 3s, 4s, 5s delay -> gentler backoff to allow server to restart without overwhelming it
+            const delay = Math.min(1000 * config._retryCount, 5000)
+            console.warn(`⚡ Retrying request [${config._retryCount}/5] after ${delay}ms:`, config.url)
+            await new Promise(r => setTimeout(r, delay))
+            return api(config)
+        }
+
         // ── Network / server errors: show offline overlay ──
-        // Note: all API calls go through the Vite proxy to localhost:8080.
-        // "No response" always means the local backend is down — not internet loss.
-        //
-        // IMPORTANT: Only trigger the overlay when the backend is truly unreachable.
-        // Individual API calls returning 5xx (e.g. a transient error on page load)
-        // must NOT flash the overlay — the dedicated /api/status health check already
-        // detects genuine backend downtime via its background polling loop.
         if (!err.response) {
             if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
                 globalTriggerOffline('timeout', null)
             } else {
-                globalTriggerOffline('server_down', null)  // backend not reachable
+                globalTriggerOffline('server_down', null)
             }
         } else if (status === 502 || status === 503 || status === 504) {
-            // Gateway errors → backend process is down behind the proxy
             globalTriggerOffline('server_down', status)
         }
-        // Any other 5xx (500, 501, etc.) is a per-endpoint server error.
-        // Let each page/component handle it locally — do NOT show the overlay.
 
         return Promise.reject(err)
     }
 )
 
 /**
- * Switches the backend database connection mode.
- * @param {string} mode 'online' or 'offline'
+ * Connection mode is set by Spring Boot startup profile.
+ * This function only updates the local sessionStorage flag for UI state.
+ * Browser = online mode. EXE (Electron) = offline mode by default.
  */
-api.setConnectionMode = async (mode) => {
-    try {
-        const res = await api.post('/config/mode', { mode });
-        sessionStorage.setItem('km_mode', mode);
-        return res.data;
-    } catch (err) {
-        console.error('Failed to switch connection mode:', err);
-        throw err;
-    }
+api.setConnectionMode = (mode) => {
+    sessionStorage.setItem('km_mode', mode);
+    return Promise.resolve({ success: true, mode });
 }
 
 export default api

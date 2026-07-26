@@ -147,6 +147,8 @@ export default function BillingScreen({ navigation }: any) {
                                 }
                             } else if (qty === 0) {
                                 addItem({ menuItemId: item._id, name: item.name, price: item.price, quantity: 1, taxRate: item.taxRate, category: item.category });
+                            } else {
+                                useCartStore.getState().updateQuantity(item._id, qty + 1);
                             }
                         }}
                         activeOpacity={0.82}
@@ -189,14 +191,14 @@ export default function BillingScreen({ navigation }: any) {
                                                 else useCartStore.getState().updateQuantity(item._id, qty - 1);
                                             }}
                                         >
-                                            <Ionicons name="remove" size={16} color={colors.white} />
+                                            <Ionicons name="remove" size={16} color={'#000000'} />
                                         </TouchableOpacity>
                                         <Text style={styles.qtyText}>{qty}</Text>
                                         <TouchableOpacity
                                             style={styles.qtyBtn}
                                             onPress={() => useCartStore.getState().updateQuantity(item._id, qty + 1)}
                                         >
-                                            <Ionicons name="add" size={16} color={colors.white} />
+                                            <Ionicons name="add" size={16} color={'#000000'} />
                                         </TouchableOpacity>
                                     </View>
                                 ) : (
@@ -221,7 +223,7 @@ export default function BillingScreen({ navigation }: any) {
                                             }
                                         }}
                                     >
-                                        <Ionicons name={staffMode ? (item.isAvailable ? "eye-outline" : "eye-off-outline") : "add"} size={18} color={item.isAvailable ? colors.white : colors.textMuted} />
+                                        <Ionicons name={staffMode ? (item.isAvailable ? "eye-outline" : "eye-off-outline") : "add"} size={18} color={item.isAvailable ? '#000000' : colors.textMuted} />
                                     </TouchableOpacity>
                                 )}
                             </View>
@@ -423,7 +425,7 @@ export default function BillingScreen({ navigation }: any) {
                                 </View>
                                 <View style={styles.cartRight}>
                                     <Text style={styles.viewCartText}>View Order</Text>
-                                    <Ionicons name="chevron-forward" size={18} color={colors.white} />
+                                    <Ionicons name="chevron-forward" size={18} color={'#000000'} />
                                 </View>
                             </LinearGradient>
                         </TouchableOpacity>
@@ -608,7 +610,7 @@ const createStyles = (colors: any, gradients: any) => StyleSheet.create({
     },
     activeCategoryTab: { borderColor: 'transparent' },
     categoryText: { ...Typography.buttonSm, color: colors.textSecondary },
-    activeCategoryText: { color: colors.white, fontWeight: '700' },
+    activeCategoryText: { color: '#000000', fontWeight: '700' },
     categoriesContent: { paddingHorizontal: Spacing.lg },
     itemList: { padding: Spacing.lg },
     itemCardContainer: {
@@ -659,14 +661,14 @@ const createStyles = (colors: any, gradients: any) => StyleSheet.create({
     cartBarGradient: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 20, justifyContent: 'space-between' },
     cartLeft: { flexDirection: 'row', alignItems: 'center', gap: 14 },
     cartBadge: {
-        width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.25)',
+        width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(0,0,0,0.15)',
         justifyContent: 'center', alignItems: 'center',
     },
-    cartBadgeText: { fontSize: 14, fontWeight: '800', color: colors.white },
-    cartLabel: { ...Typography.caption, color: 'rgba(255,255,255,0.75)' },
-    cartTotal: { ...Typography.h4, color: colors.white },
+    cartBadgeText: { fontSize: 14, fontWeight: '800', color: '#000000' },
+    cartLabel: { ...Typography.caption, color: 'rgba(0,0,0,0.6)' },
+    cartTotal: { ...Typography.h4, color: '#000000' },
     cartRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-    viewCartText: { ...Typography.buttonSm, color: colors.white },
+    viewCartText: { ...Typography.buttonSm, color: '#000000' },
     outOfStockBadgeSmall: {
         backgroundColor: colors.error,
         paddingHorizontal: 4,
@@ -706,7 +708,7 @@ const createStyles = (colors: any, gradients: any) => StyleSheet.create({
         textTransform: 'uppercase',
     },
     setBtnTextActive: {
-        color: colors.white,
+        color: '#000000',
     },
     removeSetBtn: {
         position: 'absolute',

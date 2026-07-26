@@ -10,16 +10,16 @@
     height: 100%;
     width: 100%;
     overflow: hidden;
-    background: #0f172a;
+    background: var(--bg-primary);
 }
 
 .sm-pos-tab-bar {
     display: flex;
     align-items: flex-end;
-    background: #0b0f19;
+    background: var(--bg-secondary);
     padding: 0 10px;
     gap: 2px;
-    border-bottom: 1px solid #1e293b;
+    border-bottom: 1px solid var(--border);
     overflow-x: auto;
     scrollbar-width: none;
     height: 44px;
@@ -33,10 +33,10 @@
     gap: 12px;
     padding: 0 16px;
     height: 36px;
-    background: #1a1f2e;
+    background: var(--bg-elevated);
     border-radius: 8px 8px 0 0;
     cursor: pointer;
-    color: #64748b;
+    color: var(--text-muted);
     font-size: 13px;
     font-weight: 500;
     white-space: nowrap;
@@ -50,16 +50,16 @@
 }
 
 .sm-pos-tab:hover {
-    background: #242b3d;
-    color: #94a3b8;
+    background: var(--bg-hover);
+    color: var(--text-primary);
 }
 
 .sm-pos-tab.active {
-    background: #1a1a2e; /* Matches main UI bg */
-    color: #c6f53d; /* Neon Lime */
+    background: var(--bg-primary);
+    color: var(--accent);
     font-weight: 700;
-    border: 1px solid #1e293b;
-    border-bottom: 1px solid #1a1a2e;
+    border: 1px solid var(--border);
+    border-bottom: 1px solid var(--bg-primary);
     z-index: 2;
 }
 
@@ -70,9 +70,9 @@
     left: 0;
     right: 0;
     height: 3px;
-    background: #c6f53d;
+    background: var(--accent);
     border-radius: 8px 8px 0 0;
-    box-shadow: 0 1px 10px rgba(198, 245, 61, 0.4);
+    box-shadow: 0 1px 10px var(--accent-glow);
 }
 
 .sm-pos-tab-title {
@@ -90,7 +90,7 @@
     justify-content: center;
     border-radius: 4px;
     font-size: 10px;
-    color: #475569;
+    color: var(--text-muted);
     transition: all 0.2s;
     background: transparent;
     border: none;
@@ -115,7 +115,7 @@
     background: transparent;
     border: none;
     border-radius: 6px;
-    color: #64748b;
+    color: var(--text-muted);
     cursor: pointer;
     margin-bottom: 6px;
     margin-left: 4px;
@@ -123,14 +123,14 @@
 }
 
 .sm-pos-tab-add:hover {
-    background: #1e293b;
+    background: var(--bg-hover);
     color: #c6f53d;
 }
 
 .sm-pos-tab-content-area {
     flex: 1;
     position: relative;
-    background: #1a1a2e;
+    background: var(--bg-primary);
 }
 
 .sm-pos-tab-content {
@@ -377,8 +377,8 @@
     z-index: 10;
 }
 .sm-main-table th {
-    background: linear-gradient(180deg, #1d68c1 0%, #124c94 100%);
-    color: #ffffff;
+    background: var(--accent);
+    color: var(--accent-text);
     padding: 7px 6px;
     text-align: center;
     font-size: 11px;
@@ -517,8 +517,8 @@
     border-collapse: collapse;
 }
 .sm-sm-table th {
-    background: #0263c4;
-    color: #fff;
+    background: var(--accent);
+    color: var(--accent-text);
     padding: 5px;
     text-align: left;
     font-size: 11px;
@@ -622,15 +622,15 @@
     overflow-y: auto;
 }
 .sm-summary-header {
-    background: #3a3a5c;
-    color: #e0e0ff;
+    background: var(--bg-elevated);
+    color: var(--text-primary);
     padding: 8px 12px;
     font-size: 11px;
     font-weight: 800;
     text-align: center;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    border-bottom: 1px solid rgba(255,255,255,.1);
+    border-bottom: 1px solid var(--border);
 }
 .sm-summary-field {
     padding: 5px 10px;
@@ -701,8 +701,8 @@
     border-bottom: 1px solid rgba(0,0,0,0.1);
 }
 .kpi-val {
-    background: linear-gradient(180deg, #0277bd 0%, #01579b 100%);
-    color: #ffffff;
+    background: var(--accent);
+    color: var(--accent-text);
     padding: 10px 4px;
     font-size: 26px;
     font-weight: 900;
@@ -772,8 +772,8 @@
 .sm-action-bar {
     display: flex;
     align-items: stretch;
-    background: #2a2a3e;
-    border-top: 2px solid #444466;
+    background: var(--bg-secondary);
+    border-top: 2px solid var(--border);
     flex-shrink: 0;
     gap: 1px;
     flex-wrap: nowrap;
@@ -784,30 +784,36 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 6px 10px;
-    background: #3a3a5c;
+    padding: 8px 10px;
+    background: var(--accent);
     border: none;
-    border-right: 1px solid #4a4a6c;
-    color: #c8c8e8;
+    border-right: 1px solid rgba(255,255,255,0.15);
+    color: var(--accent-text, #ffffff);
     cursor: pointer;
-    gap: 2px;
-    min-width: 70px;
-    transition: .15s;
+    gap: 3px;
+    min-width: 75px;
+    transition: all 0.18s ease;
     flex-shrink: 0;
 }
-.sm-action-btn:hover { background: #5050a0; color: #fff; }
-.sm-action-btn:disabled { opacity: .5; cursor: not-allowed; }
-.sm-action-btn.primary { background: #1e40af; color: #fff; }
-.sm-action-btn.primary:hover { background: #2563eb; }
-.sm-action-btn.green   { background: #065f46; color: #6ee7b7; }
-.sm-action-btn.green:hover { background: #047857; }
-.sm-action-btn.yellow  { background: #78350f; color: #fbbf24; }
-.sm-action-btn.yellow:hover { background: #92400e; }
-.sm-action-btn.red { background: #7f1d1d; color: #fca5a5; }
-.sm-action-btn.red:hover { background: #991b1b; }
-.action-icon  { font-size: 14px; }
-.action-label { font-size: 10px; font-weight: 800; }
-.action-key   { font-size: 8.5px; color: rgba(255,255,255,.45); font-family: monospace; }
+.sm-action-btn:hover {
+    filter: brightness(1.15);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px var(--accent-glow, rgba(0,0,0,0.2));
+    z-index: 2;
+}
+.sm-action-btn:active {
+    transform: translateY(0);
+}
+.sm-action-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    filter: grayscale(1);
+    transform: none;
+    box-shadow: none;
+}
+.action-icon  { font-size: 16px; line-height: 1; }
+.action-label { font-size: 11px; font-weight: 800; letter-spacing: 0.03em; }
+.action-key   { font-size: 9px; opacity: 0.75; font-family: monospace; font-weight: 600; }
 
 .sm-narration-area {
     flex: 1;
@@ -816,12 +822,12 @@
     gap: 8px;
     padding: 6px 12px;
 }
-.sm-narration-area label { font-size: 10px; color: #8888aa; font-weight: 700; white-space: nowrap; }
+.sm-narration-area label { font-size: 10px; color: var(--text-secondary); font-weight: 700; white-space: nowrap; }
 .sm-narration-area input {
     flex: 1;
-    background: #22223a;
-    border: 1px solid #444466;
-    color: #c8c8e8;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
     padding: 4px 10px;
     border-radius: 4px;
     font-size: 11px;
@@ -834,8 +840,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: #1a1a2e;
-    border-top: 1px solid #333355;
+    background: var(--bg-primary);
+    border-top: 1px solid var(--border);
     padding: 3px 10px;
     flex-shrink: 0;
     gap: 10px;
@@ -851,7 +857,7 @@
     align-items: center;
     gap: 3px;
     font-size: 9.5px;
-    color: #8888aa;
+    color: var(--text-secondary);
     cursor: pointer;
     user-select: none;
     font-weight: 600;
@@ -861,10 +867,10 @@
     height: 10px;
     accent-color: var(--accent);
 }
-.sm-status-sep { color: #444466; }
+.sm-status-sep { color: var(--border); }
 .sm-status-hint {
     font-size: 9px;
-    color: #6666aa;
+    color: var(--text-muted);
     font-family: monospace;
 }
 .sm-status-right {
@@ -885,7 +891,7 @@
 .sm-clock {
     font-size: 11px;
     font-weight: 700;
-    color: #a0a0c0;
+    color: var(--text-secondary);
     font-family: monospace;
     white-space: nowrap;
 }
@@ -918,13 +924,13 @@
     to { opacity: 1; transform: scale(1); }
 }
 .sm-modal-header {
-    background: #f8fafc;
-    color: #0f172a;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
     padding: 16px 20px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid var(--border);
 }
 .sm-modal-header h2 {
     margin: 0;
@@ -932,10 +938,10 @@
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: #0f172a;
+    color: var(--text-primary);
 }
 .sm-modal-header button {
-    background: none; border: none; color: #64748b; font-size: 20px; cursor: pointer;
+    background: none; border: none; color: var(--text-muted); font-size: 20px; cursor: pointer;
 }
 .sm-tender-body {
     padding: 20px;
@@ -1094,7 +1100,7 @@
 }
 .sm-scale-toggle-btn:hover {
     background: #e2e8f0;
-    border-color: #94a3b8;
+    border-color: var(--text-primary);
 }
 .sm-scale-toggle-btn.connected {
     background: #dcfce7;

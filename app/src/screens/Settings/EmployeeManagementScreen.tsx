@@ -7,13 +7,20 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { authAPI } from '../../api/auth';
+import { useAuthStore } from '../../store/useAuthStore';
 import { useAppTheme, Typography, Spacing, Radius, Shadows } from '../../theme';
 
-const ROLES = ['manager', 'waiter', 'kitchen', 'inventory', 'biller'];
+const getRolesForMode = (mode: string) => {
+    if (mode === 'clothing') return ['manager', 'biller', 'inventory', 'tailor'];
+    if (mode === 'supermarket') return ['manager', 'biller', 'inventory'];
+    return ['manager', 'waiter', 'kitchen', 'inventory', 'biller'];
+};
 
 export default function EmployeeManagementScreen({ navigation }: any) {
     const { colors, gradients, isDark } = useAppTheme();
     const themedStyles = React.useMemo(() => createStyles(colors, gradients, isDark), [colors, gradients, isDark]);
+    const { user } = useAuthStore();
+    const ROLES = React.useMemo(() => getRolesForMode(user?.preferredPosMode || 'restaurant'), [user?.preferredPosMode]);
     const [employees, setEmployees] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);

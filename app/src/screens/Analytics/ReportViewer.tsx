@@ -58,10 +58,10 @@ export default function ReportViewer({ reportId, reportData, loading }: ReportVi
             return (
                 <View style={styles.container}>
                     {renderSummaryCards([
-                        { label: 'Gross Sales', value: `₹${reportData?.summary?.totalRevenue?.toLocaleString('en-IN') || 0}` },
+                        { label: 'Gross Sales', value: `₹${parseFloat(Number(reportData?.summary?.totalRevenue || 0).toFixed(2)).toLocaleString('en-IN')}` },
                         { label: 'Total Orders', value: String(reportData?.summary?.totalOrders || 0) },
-                        { label: 'Income', value: `₹${reportData?.income || 0}` },
-                        { label: 'Expense', value: `₹${reportData?.expense || 0}` }
+                        { label: 'Income', value: `₹${parseFloat(Number(reportData?.income || 0).toFixed(2))}` },
+                        { label: 'Expense', value: `₹${parseFloat(Number(reportData?.expense || 0).toFixed(2))}` }
                     ])}
                 </View>
             );

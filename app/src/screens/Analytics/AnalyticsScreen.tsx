@@ -309,7 +309,7 @@ export default function AnalyticsScreen() {
                                 <BarChart
                                     data={{
                                         labels: data.expenseBreakdown.map((e: any) => e.name),
-                                        datasets: [{ data: data.expenseBreakdown.map((e: any) => e.value) }]
+                                        datasets: [{ data: data.expenseBreakdown.map((e: any) => parseFloat(Number(e.value || 0).toFixed(2))) }]
                                     }}
                                     width={W - 64}
                                     height={200}
@@ -441,7 +441,7 @@ const createStyles = (colors: any, gradients: any, isDark: boolean) => StyleShee
     },
     periodActive: { borderColor: colors.primary + '66' },
     periodText: { ...Typography.buttonSm, color: colors.textMuted },
-    periodTextActive: { color: colors.white },
+    periodTextActive: { color: '#000000', fontWeight: 'bold' },
     kpiRow: { flexDirection: 'row', gap: 10, marginBottom: Spacing.xl },
     kpiCard: {
         flex: 1, borderRadius: Radius.lg, padding: Spacing.md,
@@ -451,8 +451,8 @@ const createStyles = (colors: any, gradients: any, isDark: boolean) => StyleShee
         width: 38, height: 38, borderRadius: 10,
         backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center',
     },
-    kpiValue: { ...Typography.h4, color: colors.white, fontWeight: '800' },
-    kpiLabel: { ...Typography.caption, color: 'rgba(255,255,255,0.8)' },
+    kpiValue: { ...Typography.h4, color: '#000000', fontWeight: '800' },
+    kpiLabel: { ...Typography.caption, color: '#000000', fontWeight: '600' },
     chartCard: {
         backgroundColor: colors.card, borderRadius: Radius.xl, padding: Spacing.lg,
         marginBottom: Spacing.xl, borderWidth: 1, borderColor: colors.border, overflow: 'hidden',

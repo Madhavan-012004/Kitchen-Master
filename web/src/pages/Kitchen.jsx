@@ -11,6 +11,7 @@ export default function KitchenPage() {
     const { t, i18n } = useTranslation()
     const { showTamilName } = useLanguage()
     const [orders, setOrders] = useState([])
+    const [pendingApprovals, setPendingApprovals] = useState([])
     const [loading, setLoading] = useState(true)
 
     const openConfirm = (message, onConfirm) => {
@@ -33,6 +34,9 @@ export default function KitchenPage() {
             const unique = [...new Map(raw.map(o => [o._id, o])).values()]
             const sorted = unique.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
             setOrders(sorted)
+
+            const pendingRes = await api.get('/orders/pending-ack')
+            setPendingApprovals(pendingRes.data.orders || [])
         } catch (e) {
             console.error(e)
         } finally {
@@ -101,10 +105,25 @@ export default function KitchenPage() {
                 }
             }
 
+            const handleWaiterRequest = (data) => {
+                if (!data.order) return;
+                setPendingApprovals(prev => {
+                    if (prev.find(o => o._id === data.order._id)) return prev;
+                    return [...prev, data.order].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                });
+            }
+
+            const handleWaiterAcknowledged = (data) => {
+                if (!data.orderId) return;
+                setPendingApprovals(prev => prev.filter(o => o._id !== data.orderId));
+            }
+
             socket.on('kot:new', handleKotNew)
             socket.on('kot:update', handleKotUpdate)
             socket.on('kot:itemUpdate', handleItemUpdate)
             socket.on('kot:statusUpdate', handleStatusUpdate)
+            socket.on('waiter:newOrderRequest', handleWaiterRequest)
+            socket.on('waiter:orderAcknowledged', handleWaiterAcknowledged)
 
             return () => {
                 clearInterval(pollInterval)
@@ -114,6 +133,8 @@ export default function KitchenPage() {
                 socket.off('kot:update', handleKotUpdate)
                 socket.off('kot:itemUpdate', handleItemUpdate)
                 socket.off('kot:statusUpdate', handleStatusUpdate)
+                socket.off('waiter:newOrderRequest', handleWaiterRequest)
+                socket.off('waiter:orderAcknowledged', handleWaiterAcknowledged)
             }
         }
 
@@ -172,14 +193,22 @@ export default function KitchenPage() {
         }
     }
 
+    const acknowledgeOrder = async (orderId) => {
+        try {
+            await api.patch(`/orders/${orderId}/waiter-acknowledge`);
+            // Optimistically remove from pending approvals
+            setPendingApprovals(prev => prev.filter(o => o._id !== orderId));
+        } catch (err) {
+            console.error('Ack error:', err);
+            alert(`Failed to accept order: ${err.response?.data?.message || err.message}`);
+        }
+    }
+
     const formatTime = (iso) => {
         return new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
     }
 
-    const getWaitTime = (iso) => {
-        const mins = Math.floor((new Date() - new Date(iso)) / 60000)
-        return mins < 1 ? 'Just now' : `${mins}m ago`
-    }
+
 
     return (
         <div className="kitchen-container">
@@ -195,6 +224,43 @@ export default function KitchenPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Pending Waiter Approvals */}
+            {pendingApprovals.length > 0 && (
+                <div className="pending-approvals-section" style={{ marginBottom: '20px', padding: '16px', background: 'rgba(255,193,7,0.1)', border: '1px solid #ffc107', borderRadius: '12px' }}>
+                    <h3 style={{ margin: '0 0 12px 0', color: '#ffb300', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        🔔 Pending Customer Orders ({pendingApprovals.length})
+                    </h3>
+                    <div className="kot-grid">
+                        {pendingApprovals.map(order => (
+                            <div key={order._id} className="kot-card" style={{ border: '2px dashed #ffc107', background: '#fff9e6', color: '#000' }}>
+                                <div className="kot-header">
+                                    <div className="kot-table-badge" style={{ background: '#ff9800' }}>T - {order.tableNumber}</div>
+                                    <div className="kot-info" style={{ flex: 1, color: '#333' }}>
+                                        <span className="kot-time">{formatTime(order.createdAt)}</span>
+
+                                    </div>
+                                </div>
+                                <div className="kot-items" style={{ maxHeight: '150px', overflowY: 'auto', margin: '10px 0', fontSize: '14px', color: '#555' }}>
+                                    {order.items.map((item, i) => (
+                                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #ffe0b2', padding: '4px 0' }}>
+                                            <span>{item.quantity}x {item.name}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="kot-footer" style={{ borderTop: 'none', background: 'transparent', padding: '0' }}>
+                                    <button 
+                                        onClick={() => acknowledgeOrder(order._id)}
+                                        style={{ width: '100%', padding: '12px', background: '#4caf50', color: 'white', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer' }}
+                                    >
+                                        ✅ Accept & Send to KOT
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {loading ? (
                 <div className="loading" style={{ height: '400px' }}>
@@ -214,7 +280,7 @@ export default function KitchenPage() {
                                 <div className="kot-table-badge">T - {order.tableNumber}</div>
                                 <div className="kot-info" style={{ flex: 1 }}>
                                     <span className="kot-time">{formatTime(order.createdAt)}</span>
-                                    <span className="kot-wait-time">{getWaitTime(order.createdAt)}</span>
+
                                 </div>
                                 <button 
                                     className="item-status-btn" 

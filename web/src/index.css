@@ -12,18 +12,18 @@
   --sidebar-width: 240px;
   --left-panel-width: 340px;
 
-  /* ── NEW BRAND PALETTE: Dark Teal + Neon Lime ── */
-  --accent: #C6F53D;
-  --accent-dark: #a8d42e;
-  --accent-light: rgba(198, 245, 61, 0.12);
-  --accent-glow: rgba(198, 245, 61, 0.25);
-  --accent-text: #0F1D1B;
-  /* Dark text on lime bg for contrast */
+  /* ── BRAND PALETTE: Dark Navy + Amber ── */
+  --accent: #F59E0B;
+  --accent-dark: #D97706;
+  --accent-light: rgba(245, 158, 11, 0.12);
+  --accent-glow: rgba(245, 158, 11, 0.25);
+  --accent-text: #0B0F19;
+  /* Dark text on amber bg for contrast */
 
   /* Status */
-  --success: #2DD479;
-  --success-light: rgba(45, 212, 121, 0.12);
-  --success-text: #2DD479;
+  --success: #10B981;
+  --success-light: rgba(16, 185, 129, 0.12);
+  --success-text: #10B981;
   --warning: #F59E0B;
   --warning-light: rgba(245, 158, 11, 0.12);
   --danger: #ef4444;
@@ -42,44 +42,50 @@
 /* ── DARK MODE (Default / Primary) ── */
 :root,
 .dark-mode {
-  --bg-primary: #081312;
-  --bg-secondary: #0F1D1B;
-  --bg-card: #132221;
-  --bg-elevated: #1A2F2D;
-  --bg-hover: #1F3835;
+  --bg-primary: #0B0F19;
+  --bg-secondary: #111827;
+  --bg-card: #111827;
+  --bg-elevated: #1F2937;
+  --bg-hover: #374151;
   --text-primary: #FFFFFF;
-  --text-secondary: #B0BFBD;
-  --text-muted: #6B8A87;
-  --border: rgba(198, 245, 61, 0.1);
-  --border-hover: rgba(198, 245, 61, 0.25);
+  --text-secondary: #9CA3AF;
+  --text-muted: #6B7280;
+  --border: rgba(245, 158, 11, 0.15);
+  --border-hover: rgba(245, 158, 11, 0.3);
   --shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
   --shadow-lg: 0 10px 40px rgba(0, 0, 0, 0.6);
 
   /* Menu / Sidebar */
-  --menu-bg: #0F1D1B;
+  --menu-bg: #111827;
   --menu-text: #FFFFFF;
-  --menu-text-muted: rgba(176, 191, 189, 0.8);
+  --menu-text-muted: rgba(156, 163, 175, 0.8);
+  --menu-hover-bg: rgba(255, 255, 255, 0.08);
+  --menu-active-bg: rgba(255, 255, 255, 0.03);
+  --menu-border-light: rgba(255, 255, 255, 0.1);
 }
 
 /* ── LIGHT MODE ── */
 .light-mode {
-  --bg-primary: #F0F6F5;
-  --bg-secondary: #E4EDEC;
+  --bg-primary: #F3F4F6;
+  --bg-secondary: #E5E7EB;
   --bg-card: #FFFFFF;
   --bg-elevated: #FFFFFF;
-  --bg-hover: #D6E9E7;
-  --text-primary: #0B2221;
-  --text-secondary: #2B4E4A;
-  --text-muted: #507572;
-  --border: rgba(6, 72, 67, 0.12);
-  --border-hover: rgba(6, 72, 67, 0.28);
-  --shadow: 0 4px 20px rgba(6, 72, 67, 0.08);
-  --shadow-lg: 0 10px 40px rgba(6, 72, 67, 0.15);
+  --bg-hover: #D1D5DB;
+  --text-primary: #111827;
+  --text-secondary: #4B5563;
+  --text-muted: #6B7280;
+  --border: rgba(17, 24, 39, 0.1);
+  --border-hover: rgba(17, 24, 39, 0.2);
+  --shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 10px 40px rgba(0, 0, 0, 0.1);
 
   /* Menu / Sidebar */
-  --menu-bg: #064843;
-  --menu-text: #FFFFFF;
-  --menu-text-muted: rgba(255, 255, 255, 0.7);
+  --menu-bg: #FFFFFF;
+  --menu-text: #111827;
+  --menu-text-muted: rgba(17, 24, 39, 0.7);
+  --menu-hover-bg: rgba(0, 0, 0, 0.05);
+  --menu-active-bg: rgba(0, 0, 0, 0.03);
+  --menu-border-light: rgba(0, 0, 0, 0.1);
 }
 
 html,
@@ -176,4 +182,5 @@ input::-webkit-inner-spin-button {
 /* Firefox */
 input[type=number] {
   -moz-appearance: textfield;
+  appearance: textfield;
 }

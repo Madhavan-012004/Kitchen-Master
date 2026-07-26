@@ -1,0 +1,1169 @@
+/* ================================================================
+   Employees / Staff Management – Full Page Stylesheet
+   ================================================================ */
+
+.staff-page {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg-primary);
+}
+
+/* ─── Hero Header ─────────────────────────────────────────────── */
+.staff-hero {
+    padding: 24px 28px 0;
+    flex-shrink: 0;
+}
+
+.staff-hero-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+}
+
+.staff-hero-title {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+    margin: 0;
+}
+
+.staff-hero-subtitle {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+.staff-hero-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.staff-search {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    border-radius: 10px;
+    padding: 9px 14px 9px 36px;
+    font-size: 13px;
+    width: 200px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.staff-search:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.staff-search-wrap {
+    position: relative;
+}
+
+.staff-search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 13px;
+    pointer-events: none;
+    opacity: 0.5;
+}
+
+.staff-add-btn {
+    background: var(--accent);
+    color: var(--accent-text);
+    border: none;
+    padding: 9px 18px;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 4px 14px var(--accent-glow);
+    transition: filter 0.18s, transform 0.18s;
+    white-space: nowrap;
+}
+
+.staff-add-btn:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+}
+
+/* ─── Tab Bar ─────────────────────────────────────────────────── */
+.staff-tab-bar {
+    display: flex;
+    gap: 4px;
+    padding: 0 28px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    margin-top: 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.staff-tab-bar::-webkit-scrollbar {
+    display: none;
+}
+
+.staff-tab {
+    background: none;
+    border: none;
+    padding: 12px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: color 0.18s, border-color 0.18s;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    white-space: nowrap;
+}
+
+.staff-tab:hover {
+    color: var(--text-primary);
+}
+
+.staff-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+}
+
+.staff-tab-badge {
+    background: var(--accent-light);
+    color: var(--accent);
+    border-radius: 20px;
+    padding: 1px 8px;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+/* ─── Tab Content Wrapper ─────────────────────────────────────── */
+.staff-tab-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 28px;
+}
+
+/* ─── Staff Grid ──────────────────────────────────────────────── */
+.staff-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+.staff-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+    position: relative;
+    overflow: hidden;
+}
+
+.staff-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--accent);
+    opacity: 0;
+    transition: opacity 0.2s;
+    border-radius: 16px 16px 0 0;
+}
+
+.staff-card:hover {
+    transform: translateY(-3px);
+    border-color: var(--border-hover);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+}
+
+.staff-card:hover::before {
+    opacity: 1;
+}
+
+.staff-card-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+}
+
+.staff-avatar-wrap {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.staff-avatar {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    background: var(--accent-light);
+    color: var(--accent);
+    font-size: 20px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+}
+
+/* Live indicator dot */
+.staff-live-dot {
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid var(--bg-card);
+    background: #22c55e;
+}
+
+.staff-live-dot.offline {
+    background: var(--text-muted);
+}
+
+.staff-live-dot.live::after {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 50%;
+    background: rgba(34, 197, 94, 0.35);
+    animation: liveRipple 1.4s ease-out infinite;
+}
+
+@keyframes liveRipple {
+    0% {
+        transform: scale(0.8);
+        opacity: 1;
+    }
+
+    100% {
+        transform: scale(2.2);
+        opacity: 0;
+    }
+}
+
+.staff-card-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.staff-card-name {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.staff-card-email {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.staff-role-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 6px;
+    background: var(--accent-light);
+    color: var(--accent);
+    border: 1px solid rgba(245, 158, 11, 0.2);
+    border-radius: 20px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+/* Role icon mappings */
+.staff-role-badge.waiter {
+    background: rgba(139, 92, 246, 0.12);
+    color: #a78bfa;
+    border-color: rgba(139, 92, 246, 0.2);
+}
+
+.staff-role-badge.biller {
+    background: rgba(59, 130, 246, 0.12);
+    color: #60a5fa;
+    border-color: rgba(59, 130, 246, 0.2);
+}
+
+.staff-role-badge.manager {
+    background: rgba(245, 158, 11, 0.12);
+    color: var(--accent);
+    border-color: rgba(245, 158, 11, 0.2);
+}
+
+.staff-role-badge.kot {
+    background: rgba(239, 68, 68, 0.12);
+    color: #f87171;
+    border-color: rgba(239, 68, 68, 0.2);
+}
+
+.staff-role-badge.owner {
+    background: rgba(16, 185, 129, 0.12);
+    color: #34d399;
+    border-color: rgba(16, 185, 129, 0.2);
+}
+
+.staff-role-badge.inventory {
+    background: rgba(14, 165, 233, 0.12);
+    color: #38bdf8;
+    border-color: rgba(14, 165, 233, 0.2);
+}
+
+.staff-role-badge.tailor {
+    background: rgba(244, 114, 182, 0.12);
+    color: #f472b6;
+    border-color: rgba(244, 114, 182, 0.2);
+}
+
+/* Table chips */
+.staff-tables {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.table-chip {
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.table-chip-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    display: block;
+    margin-bottom: 5px;
+}
+
+/* Card actions */
+.staff-card-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+
+.staff-edit-btn {
+    flex: 1;
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    padding: 8px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.18s, border-color 0.18s;
+}
+
+.staff-edit-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.staff-del-btn {
+    background: rgba(239, 68, 68, 0.08);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.18s;
+}
+
+.staff-del-btn:hover {
+    background: rgba(239, 68, 68, 0.16);
+}
+
+/* Empty state */
+.staff-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 80px 24px;
+    color: var(--text-muted);
+    gap: 12px;
+}
+
+.staff-empty-icon {
+    font-size: 52px;
+    opacity: 0.4;
+}
+
+.staff-empty h3 {
+    margin: 0;
+    font-size: 16px;
+    color: var(--text-secondary);
+}
+
+/* ─── Summary Bar ─────────────────────────────────────────────── */
+.staff-summary-bar {
+    display: flex;
+    gap: 14px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+}
+
+.staff-summary-card {
+    flex: 1;
+    min-width: 130px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.staff-summary-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+}
+
+.staff-summary-value {
+    font-size: 26px;
+    font-weight: 800;
+    color: var(--text-primary);
+    line-height: 1.1;
+}
+
+.staff-summary-value.accent {
+    color: var(--accent);
+}
+
+.staff-summary-value.green {
+    color: #22c55e;
+}
+
+/* ─── Live Attendance Grid ────────────────────────────────────── */
+.live-section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.live-section-title {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+}
+
+.live-pulse-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #22c55e;
+    position: relative;
+}
+
+.live-pulse-dot::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    background: rgba(34, 197, 94, 0.3);
+    animation: liveRipple 1.4s ease-out infinite;
+}
+
+.live-att-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 14px;
+    margin-bottom: 32px;
+}
+
+.live-att-card {
+    background: var(--bg-card);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+    border-radius: 14px;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.live-att-top {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.live-att-avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    background: rgba(34, 197, 94, 0.12);
+    color: #22c55e;
+    font-size: 17px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(34, 197, 94, 0.2);
+    flex-shrink: 0;
+}
+
+.live-att-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.live-att-role {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: capitalize;
+    margin-top: 2px;
+}
+
+.live-badge-pill {
+    margin-left: auto;
+    background: rgba(34, 197, 94, 0.12);
+    color: #22c55e;
+    border: 1px solid rgba(34, 197, 94, 0.25);
+    border-radius: 20px;
+    padding: 3px 9px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
+.live-att-stats {
+    display: flex;
+    gap: 14px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+}
+
+.live-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.live-stat-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+}
+
+.live-stat-value {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.live-stat-value.highlight {
+    color: var(--accent);
+}
+
+/* No active state */
+.staff-no-data {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+    margin-bottom: 24px;
+}
+
+/* ─── Attendance History ──────────────────────────────────────── */
+.hist-filter-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+}
+
+.hist-filter-label {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+}
+
+.hist-date-input {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.18s;
+    width: auto;
+}
+
+.hist-date-input:focus {
+    border-color: var(--accent);
+}
+
+.hist-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.hist-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 18px;
+    transition: border-color 0.18s, background 0.18s;
+}
+
+.hist-row:hover {
+    border-color: var(--border-hover);
+    background: var(--bg-elevated);
+}
+
+.hist-row-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.hist-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: var(--accent-light);
+    color: var(--accent);
+    font-size: 14px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.hist-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.hist-role {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.hist-row-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.hist-time-range {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: right;
+}
+
+.hist-hours {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+    text-align: right;
+}
+
+.hist-status-badge {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 3px 10px;
+    border-radius: 20px;
+    white-space: nowrap;
+}
+
+.hist-status-badge.active {
+    background: rgba(34, 197, 94, 0.12);
+    color: #22c55e;
+    border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+.hist-status-badge.offline {
+    background: rgba(107, 114, 128, 0.12);
+    color: var(--text-muted);
+    border: 1px solid rgba(107, 114, 128, 0.2);
+}
+
+/* ─── Modal (from Simple.css, extended) ──────────────────────── */
+.staff-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 3000;
+    backdrop-filter: blur(12px);
+}
+
+.staff-modal {
+    background: var(--bg-card);
+    width: 95%;
+    max-width: 480px;
+    border-radius: 24px;
+    border: 1px solid var(--border);
+    max-height: 90vh;
+    overflow-y: auto;
+    animation: modalPop 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes modalPop {
+    from {
+        opacity: 0;
+        transform: scale(0.92) translateY(16px);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.staff-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 22px 26px;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: var(--bg-card);
+    z-index: 10;
+}
+
+.staff-modal-header h2 {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.staff-modal-close {
+    background: var(--bg-hover);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.staff-modal-close:hover {
+    color: #ef4444;
+    border-color: rgba(239, 68, 68, 0.3);
+    transform: rotate(90deg);
+}
+
+.staff-modal-body {
+    padding: 22px 26px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.staff-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.staff-form-group label {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.staff-form-group input,
+.staff-form-group select {
+    background: var(--bg-primary);
+    border: 2px solid var(--border);
+    color: var(--text-primary);
+    padding: 11px 14px;
+    border-radius: 12px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    width: 100%;
+}
+
+.staff-form-group input:focus,
+.staff-form-group select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 4px var(--accent-glow);
+}
+
+/* Table select grid */
+.staff-table-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+}
+
+.table-pick-btn {
+    min-width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.table-pick-btn.active {
+    background: var(--accent);
+    color: var(--accent-text);
+    border-color: var(--accent);
+}
+
+.table-pick-btn.taken {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+/* Modal footer buttons */
+.staff-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+.staff-cancel-btn {
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    padding: 11px 22px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.staff-cancel-btn:hover {
+    background: var(--bg-elevated);
+}
+
+.staff-save-btn {
+    background: var(--accent);
+    color: var(--accent-text);
+    border: none;
+    padding: 11px 26px;
+    border-radius: 12px;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    box-shadow: 0 4px 14px var(--accent-glow);
+    transition: filter 0.18s, transform 0.18s;
+}
+
+.staff-save-btn:hover:not(:disabled) {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+}
+
+.staff-save-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Loading spinner */
+.staff-spinner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px;
+    gap: 16px;
+    color: var(--text-muted);
+}
+
+.staff-spin {
+    width: 36px;
+    height: 36px;
+    border: 3px solid var(--accent-light);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: staffSpin 0.9s linear infinite;
+}
+
+@keyframes staffSpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* ─── Clickable card ──────────────────────────────────────────── */
+.staff-card-clickable {
+    cursor: pointer;
+}
+
+.staff-card-clickable:hover {
+    border-color: var(--accent);
+    box-shadow: 0 8px 28px rgba(245, 158, 11, 0.15);
+}
+
+/* Rating pill shown in top-right of card header */
+.staff-rating-pill {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent-light);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    border-radius: 10px;
+    padding: 6px 10px;
+    min-width: 46px;
+    flex-shrink: 0;
+    gap: 2px;
+    margin-left: auto;
+}
+
+.staff-rating-star {
+    font-size: 14px;
+    color: var(--accent);
+    line-height: 1;
+}
+
+.staff-rating-val {
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--accent);
+    line-height: 1;
+}
+
+/* Hint text below tables / role area */
+.staff-reviews-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: -4px;
+    margin-bottom: 2px;
+    font-style: italic;
+}
+
+/* ─── Reviews Modal ───────────────────────────────────────────── */
+.staff-reviews-modal {
+    max-width: 520px !important;
+}
+
+.rev-staff-identity {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 4px 0 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 16px;
+}
+
+.rev-staff-avatar {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    background: var(--accent-light);
+    color: var(--accent);
+    font-size: 22px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.rev-staff-name {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+/* Summary row: avg rating | total completed | written reviews */
+.rev-summary-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 22px;
+}
+
+.rev-summary-card {
+    flex: 1;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: center;
+}
+
+.rev-big-rating {
+    font-size: 26px;
+    font-weight: 800;
+    color: var(--text-primary);
+    line-height: 1;
+}
+
+.rev-stars {
+    display: flex;
+    gap: 2px;
+}
+
+.rev-star {
+    font-size: 14px;
+    color: var(--text-muted);
+    transition: color 0.1s;
+}
+
+.rev-star.filled {
+    color: #F59E0B;
+}
+
+.rev-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.rev-section-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+}
+
+.rev-empty {
+    text-align: center;
+    padding: 32px;
+    color: var(--text-muted);
+    font-size: 13px;
+    background: var(--bg-primary);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+}
+
+.rev-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.rev-card {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    transition: border-color 0.18s;
+}
+
+.rev-card:hover {
+    border-color: var(--accent);
+}
+
+.rev-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.rev-card-stars {
+    display: flex;
+    gap: 2px;
+}
+
+.rev-card-date {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.rev-card-text {
+    font-size: 13px;
+    color: var(--text-primary);
+    line-height: 1.5;
+    margin: 0 0 8px;
+    font-style: italic;
+}
+
+.rev-card-order {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 600;
+}
