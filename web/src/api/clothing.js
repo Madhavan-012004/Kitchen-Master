@@ -24,4 +24,7 @@ export const getJobByToken = (token) => api.get(`/tailoring/jobs/token/${token}`
 export const getJobsByPhone = (phone) => api.get(`/tailoring/jobs/phone/${phone}`)
 export const updateTailoringStatus = (id, status) => api.patch(`/tailoring/jobs/${id}/status`, { status })
 export const deliverTailoringJob = (id, data) => api.patch(`/tailoring/jobs/${id}/deliver`, data)
+export const updateTailoringJob = (id, data) => api.put(`/tailoring/jobs/${id}`, data)
+export const deleteTailoringJob = (id) => api.delete(`/tailoring/jobs/${id}`)
+export const deleteAllTailoringJobs = () => api.delete('/tailoring/jobs')
 export const getTailoringStats = () => api.get('/tailoring/stats')

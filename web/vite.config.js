@@ -9,11 +9,11 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: 'http://144.217.89.193:8080', // Switched from localhost:8080 to your remote server
         changeOrigin: true,
       },
       '/uploads': {
-        target: 'http://localhost:8080',
+        target: 'http://144.217.89.193:8080', // Switched from localhost:8080 to your remote server
         changeOrigin: true,
       },
       '/socket.io': {

@@ -132,6 +132,21 @@ public class User {
     @Column(name = "print_category_in_bill")
     private Boolean printCategoryInBill = false;
 
+    @Column(name = "printer_connection_type")
+    private String printerConnectionType = "network";
+
+    @Column(name = "bill_printer_name")
+    private String billPrinterName;
+
+    @Column(name = "kot_printer_name")
+    private String kotPrinterName;
+
+    @Column(name = "bt_printer_address")
+    private String btPrinterAddress;
+
+    @Column(name = "imin_paper_width")
+    private Integer iminPaperWidth = 58;
+
     // --- BANK DETAILS ---
     @Column(name = "bank_name")
     private String bankName;
@@ -315,6 +330,20 @@ public class User {
 
     @Column(name = "stock_categories", columnDefinition = "TEXT")
     private String stockCategories = "General,Grocery,Clothing,Pharmacy,Others";
+
+    // --- BACKOFFICE BILLING TRACKING ---
+    @Column(name = "advance_amount")
+    private Double advanceAmount = 0.0;
+
+    @Column(name = "amount_paid")
+    private Double amountPaid = 0.0;
+
+    @Column(name = "total_amount")
+    private Double totalAmount = 0.0;
+
+    // App layout type (used in backoffice details & provisioning)
+    @Column(name = "app_layout")
+    private String appLayout;
 
     // Getters and Setters
     public Long getId() {
@@ -798,6 +827,46 @@ public class User {
         this.pharmacyFontSize = i;
     }
 
+    public String getPrinterConnectionType() {
+        return printerConnectionType;
+    }
+
+    public void setPrinterConnectionType(String printerConnectionType) {
+        this.printerConnectionType = printerConnectionType;
+    }
+
+    public String getBillPrinterName() {
+        return billPrinterName;
+    }
+
+    public void setBillPrinterName(String billPrinterName) {
+        this.billPrinterName = billPrinterName;
+    }
+
+    public String getKotPrinterName() {
+        return kotPrinterName;
+    }
+
+    public void setKotPrinterName(String kotPrinterName) {
+        this.kotPrinterName = kotPrinterName;
+    }
+
+    public String getBtPrinterAddress() {
+        return btPrinterAddress;
+    }
+
+    public void setBtPrinterAddress(String btPrinterAddress) {
+        this.btPrinterAddress = btPrinterAddress;
+    }
+
+    public Integer getIminPaperWidth() {
+        return iminPaperWidth;
+    }
+
+    public void setIminPaperWidth(Integer iminPaperWidth) {
+        this.iminPaperWidth = iminPaperWidth;
+    }
+
     public String getBasicBillTemplate() {
         return basicBillTemplate;
     }
@@ -925,6 +994,39 @@ public class User {
 
     public void setStockCategories(String c) {
         this.stockCategories = c;
+    }
+
+    // --- BACKOFFICE BILLING TRACKING ---
+    public Double getAdvanceAmount() {
+        return advanceAmount;
+    }
+
+    public void setAdvanceAmount(Double advanceAmount) {
+        this.advanceAmount = advanceAmount;
+    }
+
+    public Double getAmountPaid() {
+        return amountPaid;
+    }
+
+    public void setAmountPaid(Double amountPaid) {
+        this.amountPaid = amountPaid;
+    }
+
+    public Double getTotalAmount() {
+        return totalAmount;
+    }
+
+    public void setTotalAmount(Double totalAmount) {
+        this.totalAmount = totalAmount;
+    }
+
+    public String getAppLayout() {
+        return appLayout;
+    }
+
+    public void setAppLayout(String appLayout) {
+        this.appLayout = appLayout;
     }
 
     // Online Order Getters/Setters

@@ -3,11 +3,11 @@
   "version": "1.0.0",
   "main": "expo/AppEntry.js",
   "scripts": {
-    "start": "expo start --lan",
-    "tunnel": "expo start --tunnel",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web"
+    "start": "set EXPO_OFFLINE=1&& expo start --lan",
+    "tunnel": "set EXPO_OFFLINE=1&& expo start --tunnel",
+    "android": "set EXPO_OFFLINE=1&& expo run:android",
+    "ios": "set EXPO_OFFLINE=1&& expo run:ios",
+    "web": "set EXPO_OFFLINE=1&& expo start --web"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.2.3",
@@ -30,7 +30,9 @@
     "expo-font": "~13.0.0",
     "expo-image-picker": "~16.0.0",
     "expo-linear-gradient": "~14.0.0",
+    "expo-local-authentication": "~15.0.2",
     "expo-location": "~18.0.10",
+    "expo-secure-store": "~14.0.1",
     "expo-sharing": "~13.0.1",
     "expo-splash-screen": "~0.29.0",
     "expo-status-bar": "~2.0.0",

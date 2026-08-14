@@ -22,6 +22,9 @@ export default function Inventory() {
     const [categoryFilter, setCategoryFilter] = useState('All');
     const [showLowStockOnly, setShowLowStockOnly] = useState(false);
     const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
+    const [vendorFilter, setVendorFilter] = useState('All');
+    const [vendors, setVendors] = useState([]);
+    const [menuCategories, setMenuCategories] = useState([]);
 
     // Modal states
     const [showItemModal, setShowItemModal] = useState(false);
@@ -131,12 +134,19 @@ export default function Inventory() {
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            const [itemsRes, movementsRes] = await Promise.all([
+            const [itemsRes, movementsRes, vendorsRes, menuRes] = await Promise.all([
                 api.get('/inventory'),
-                api.get('/inventory/movements')
+                api.get('/inventory/movements'),
+                api.get('/api/vendors').catch(() => ({ data: { data: [] } })),
+                api.get('/menu').catch(() => ({ data: { data: { items: [] } } }))
             ]);
             setItems(itemsRes.data.data.items || []);
             setMovements(movementsRes.data.data || []);
+            setVendors(vendorsRes.data.data || []);
+
+            const menuItems = menuRes.data?.data?.items || menuRes.data?.data?.menuItems || [];
+            const menuCats = [...new Set(menuItems.map(i => i.category).filter(Boolean))];
+            setMenuCategories(menuCats);
         } catch (err) {
             console.error('Failed to fetch inventory data', err);
         } finally {
@@ -148,8 +158,74 @@ export default function Inventory() {
         fetchData();
     }, [fetchData]);
 
-    // SCALE INTEGRATION (Web Serial API)
+    // SCALE INTEGRATION (Native Android + Web Serial API)
     const connectScale = async () => {
+        const isAndroidApp = /android/i.test(navigator.userAgent) && (window.location.hostname === 'localhost' || !!window.UsbScaleBridge);
+
+        if (isAndroidApp || (window.Capacitor && window.Capacitor.isNative)) {
+            if (!window.UsbScaleBridge) {
+                alert('Native Scale bridge missing. Rebuild APK.');
+                return;
+            }
+            const capSer = window.serial || (window.cordova && window.cordova.plugins && window.cordova.plugins.serial);
+            if (capSer) {
+                try {
+                    await new Promise((resolve) => {
+                        capSer.requestPermission({ baudRate }, resolve, resolve);
+                    });
+                } catch (e) { }
+            }
+            try {
+                let addressToConnect = "";
+                try {
+                    const saved = JSON.parse(localStorage.getItem('km_user') || '{}');
+                    const targetName = saved.usbScaleDeviceName || '';
+                    if (targetName && window.UsbScaleBridge.getConnectedDevices) {
+                        const listObj = JSON.parse(window.UsbScaleBridge.getConnectedDevices());
+                        const target = listObj.find(d => d.name === targetName);
+                        if (target) addressToConnect = target.address;
+                    }
+                } catch (e) { }
+
+                const connected = window.UsbScaleBridge.getConnectedDevices
+                    ? window.UsbScaleBridge.connect(baudRate, addressToConnect)
+                    : window.UsbScaleBridge.connect(baudRate);
+
+                if (typeof connected === 'string' && connected.startsWith('error:')) {
+                    alert(connected.substring(6));
+                } else if (connected === 'ok' || connected === true) {
+                    try { setIsScaleConnected(true); } catch (e) { }
+                    keepReadingRef.current = true;
+                    if (!window.__scaleBuffer) window.__scaleBuffer = '';
+
+                    window.onScaleData = (data) => {
+                        if (!keepReadingRef.current) return;
+                        window.__scaleBuffer += String(data);
+                        if (window.__scaleBuffer.includes('\n') || window.__scaleBuffer.includes('\r')) {
+                            const lines = window.__scaleBuffer.split(/[\r\n]+/);
+                            window.__scaleBuffer = lines.pop(); // keep partial block
+                            for (const line of lines) {
+                                if (!line.trim()) continue;
+                                const match = line.match(/[-+]?\d*\.?\d+/);
+                                if (match) {
+                                    const val = parseFloat(match[0]);
+                                    if (!isNaN(val)) {
+                                        try { setScaleWeight(Math.abs(val)); } catch (e) { }
+                                        try { setScaleData(Math.abs(val)); } catch (e) { }
+                                    }
+                                }
+                            }
+                        }
+                    };
+                } else {
+                    alert('Scale connection failed! Ensure scale is connected and no other apps are using it.');
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+            return;
+        }
+
         if (!("serial" in navigator)) {
             alert("Web Serial API not supported in your browser. Use Chrome or Edge.");
             return;
@@ -214,12 +290,27 @@ export default function Inventory() {
         }
     };
 
+    useEffect(() => {
+        const saved = JSON.parse(localStorage.getItem('km_user') || '{}');
+        if (saved.usbScaleDeviceName) {
+            setTimeout(() => connectScale(), 800);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     const disconnectScale = async () => {
-        setIsScaleConnected(false);
         keepReadingRef.current = false;
+        const isAndroidApp = /android/i.test(navigator.userAgent) && (window.location.hostname === 'localhost' || !!window.UsbScaleBridge);
+        if (isAndroidApp || (window.Capacitor && window.Capacitor.isNative)) {
+            if (window.UsbScaleBridge) {
+                window.UsbScaleBridge.disconnect();
+                try { setIsScaleConnected(false); } catch (e) { }
+            }
+            return;
+        }
 
         if (readerRef.current) {
-            await readerRef.current.cancel();
+            try { await readerRef.current.cancel(); } catch (e) { }
         }
 
         if (port) {
@@ -230,6 +321,7 @@ export default function Inventory() {
             }
             setPort(null);
         }
+        try { setIsScaleConnected(false); } catch (e) { }
     };
 
     // CRUD Handlers
@@ -653,6 +745,10 @@ export default function Inventory() {
                             <select className="filter-select" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
                                 {['All', ...new Set(items.map(i => i.category || 'General'))].map(c => <option key={c} value={c}>{c}</option>)}
                             </select>
+                            <select className="filter-select" value={vendorFilter} onChange={(e) => setVendorFilter(e.target.value)}>
+                                <option value="All">All Suppliers</option>
+                                {vendors.map(v => <option key={v.id || v._id} value={v.name}>{v.name}</option>)}
+                            </select>
                             <div className={`low-stock-toggle ${showLowStockOnly ? 'active' : ''}`} onClick={() => setShowLowStockOnly(!showLowStockOnly)}>
                                 <div className="toggle-switch"></div>
                                 <span>Low Stock Only</span>
@@ -685,7 +781,8 @@ export default function Inventory() {
                                     const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase());
                                     const matchesCategory = categoryFilter === 'All' || item.category === categoryFilter;
                                     const matchesLowStock = !showLowStockOnly || (item.currentStock <= item.lowStockThreshold);
-                                    return matchesSearch && matchesCategory && matchesLowStock;
+                                    const matchesVendor = vendorFilter === 'All' || item.supplierName === vendorFilter;
+                                    return matchesSearch && matchesCategory && matchesLowStock && matchesVendor;
                                 }).map(item => (
                                     <InventoryCard
                                         key={item._id || item.id}
@@ -713,7 +810,8 @@ export default function Inventory() {
                                                             const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase());
                                                             const matchesCategory = categoryFilter === 'All' || item.category === categoryFilter;
                                                             const matchesLowStock = !showLowStockOnly || (item.currentStock <= item.lowStockThreshold);
-                                                            return matchesSearch && matchesCategory && matchesLowStock;
+                                                            const matchesVendor = vendorFilter === 'All' || item.supplierName === vendorFilter;
+                                                            return matchesSearch && matchesCategory && matchesLowStock && matchesVendor;
                                                         });
                                                         handleSelectAll(currentFiltered, e.target.checked);
                                                     }}
@@ -734,7 +832,8 @@ export default function Inventory() {
                                             const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase());
                                             const matchesCategory = categoryFilter === 'All' || item.category === categoryFilter;
                                             const matchesLowStock = !showLowStockOnly || (item.currentStock <= item.lowStockThreshold);
-                                            return matchesSearch && matchesCategory && matchesLowStock;
+                                            const matchesVendor = vendorFilter === 'All' || item.supplierName === vendorFilter;
+                                            return matchesSearch && matchesCategory && matchesLowStock && matchesVendor;
                                         }).map(item => (
                                             <tr key={item._id || item.id} style={{ borderBottom: '1px solid var(--border)', background: selectedA4StockIds.has(item._id || item.id) ? 'rgba(59, 130, 246, 0.05)' : '' }}>
                                                 <td style={{ padding: '12px' }}>
@@ -792,7 +891,8 @@ export default function Inventory() {
                                         {items.filter(item => {
                                             const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase());
                                             const matchesCategory = categoryFilter === 'All' || item.category === categoryFilter;
-                                            return matchesSearch && matchesCategory;
+                                            const matchesVendor = vendorFilter === 'All' || item.supplierName === vendorFilter;
+                                            return matchesSearch && matchesCategory && matchesVendor;
                                         }).map(item => {
                                             const id = item._id || item.id;
                                             const changes = bulkChanges[id] || {};
@@ -859,6 +959,8 @@ export default function Inventory() {
                     isEditing={isEditing}
                     scaleValue={scaleData}
                     allItems={items}
+                    vendors={vendors}
+                    menuCategories={menuCategories}
                 />
             )}
 
@@ -1050,17 +1152,28 @@ function Field({ label, subLabel, children }) {
     );
 }
 
-function ItemModal({ onSubmit, onClose, initialData, isEditing, scaleValue, allItems }) {
+function ItemModal({ onSubmit, onClose, initialData, isEditing, scaleValue, allItems, vendors = [], menuCategories = [] }) {
     const { user } = useAuth();
-    const { isClothing, supermarketMode } = usePOSMode();
+    const { isClothing, supermarketMode, isPoultry } = usePOSMode();
 
     // Use categories strictly defined in Settings (Stock Categories Manager)
     const configuredCats = user?.stockCategories
         ? user.stockCategories.split(',').map(c => c.trim()).filter(Boolean)
         : ['General', 'Grocery', 'Clothing', 'Pharmacy', 'Others'];
 
-    // Include current item category if editing so it doesn't vanish
-    const categories = [...new Set([...configuredCats, initialData?.category])].filter(Boolean);
+    // For Poultry shop, strictly bind inventory options to existing Menu categories.
+    const categoriesList = isPoultry ? [...menuCategories] : [...configuredCats, ...menuCategories];
+
+    // Case-insensitive deduplication so "Chicken" and "chicken" don't duplicate
+    const categoryMap = new Map();
+    [...categoriesList, initialData?.category].forEach(c => {
+        if (!c) return;
+        const normalized = String(c).trim().toLowerCase();
+        if (!categoryMap.has(normalized)) categoryMap.set(normalized, String(c).trim());
+    });
+
+    let categories = Array.from(categoryMap.values());
+    if (categories.length === 0) categories = ['General'];
 
     const itemCats = [...new Set((allItems || []).map(i => i.category).filter(Boolean))];
     const allColors = [...new Set((allItems || []).map(i => i.color).filter(Boolean))];
@@ -1090,6 +1203,7 @@ function ItemModal({ onSubmit, onClose, initialData, isEditing, scaleValue, allI
         isBilliable: true,
         supplierName: '',
         supplierPhone: '',
+        supplierGstin: '',
         batchNo: '',
         mfgDate: '',
         expDate: '',
@@ -1353,12 +1467,28 @@ function ItemModal({ onSubmit, onClose, initialData, isEditing, scaleValue, allI
                             <input type="date" className="inventory-input"
                                 value={formData.purchaseDate} onChange={(e) => f('purchaseDate', e.target.value)} style={{ margin: 0 }} />
                         </Field>
-                        <Field label="Supplier Details" subLabel="Name & Phone">
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                                <input placeholder="Supplier Name" className="inventory-input"
-                                    value={formData.supplierName} onChange={(e) => f('supplierName', e.target.value)} style={{ margin: 0, flex: 2 }} />
+                        <Field label="Supplier Details" subLabel="Name, Phone, GSTIN">
+                            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '8px' }}>
+                                <select className="inventory-input"
+                                    value={formData.supplierName} onChange={(e) => {
+                                        const val = e.target.value;
+                                        f('supplierName', val);
+                                        const v = vendors.find(vend => vend.name === val);
+                                        if (v) {
+                                            f('supplierPhone', v.phone || '');
+                                            f('supplierGstin', v.gstin || '');
+                                        }
+                                    }} style={{ margin: 0 }}>
+                                    <option value="">Select Supplier...</option>
+                                    {vendors.map(v => <option key={v.id || v._id} value={v.name}>{v.name}</option>)}
+                                    {formData.supplierName && !vendors.find(v => v.name === formData.supplierName) && (
+                                        <option value={formData.supplierName}>{formData.supplierName} (Legacy)</option>
+                                    )}
+                                </select>
                                 <input placeholder="Phone" className="inventory-input"
-                                    value={formData.supplierPhone} onChange={(e) => f('supplierPhone', e.target.value)} style={{ margin: 0, flex: 1 }} />
+                                    value={formData.supplierPhone || ''} onChange={(e) => f('supplierPhone', e.target.value)} style={{ margin: 0 }} />
+                                <input placeholder="GSTIN" className="inventory-input"
+                                    value={formData.supplierGstin || ''} onChange={(e) => f('supplierGstin', e.target.value)} style={{ margin: 0 }} />
                             </div>
                         </Field>
                     </div>

@@ -4,13 +4,16 @@ import { useTheme } from '../context/ThemeContext';
 import AuthStack from './AuthStack';
 import MainTabs from './MainTabs';
 import OnboardingStack from './OnboardingStack';
+// @ts-ignore
+import AppLockScreen from '../screens/Auth/AppLockScreen';
 import NetworkErrorScreen from '../components/NetworkErrorScreen';
 
 const RootNavigator = () => {
-    const { isAuthenticated, user } = useAuthStore();
+    const { isAuthenticated, isUnlocked, user } = useAuthStore();
 
     if (!isAuthenticated) return <AuthStack />;
     if (isAuthenticated && user && !user.onboardingCompleted) return <OnboardingStack />;
+    if (isAuthenticated && !isUnlocked) return <AppLockScreen />;
     return <MainTabs />;
 };
 

@@ -2,7 +2,7 @@ import { io } from 'socket.io-client';
 
 const isElectron = window.location.protocol === 'file:';
 const isAndroid = /android/i.test(navigator.userAgent);
-const socketUrl = 'https://kitchen-master.onrender.com';
+const socketUrl = 'http://144.217.89.193:9092'; // Changed from 8080 to 9092
 
 const socket = io(socketUrl, {
     path: '/socket.io', // Expressed explicitly to match vite.config proxy

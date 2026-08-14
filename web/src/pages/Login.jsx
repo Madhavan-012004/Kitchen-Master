@@ -49,6 +49,16 @@ export default function LoginPage() {
             )
         }
 
+        api.get('/master/banners/active')
+            .then(res => {
+                if (res.data?.data && !window.location.search.includes('hq=override')) {
+                    navigate('/maintenance')
+                }
+            })
+            .catch(() => {
+                // Ignore errors
+            })
+
         // Fetch license status quickly (non-blocking, short timeout)
         api.get('/license/status', { timeout: 3000 })
             .then(res => {

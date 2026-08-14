@@ -2,32 +2,36 @@ import React, { useEffect, useState, useRef } from 'react'
 import api from '../api/client.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useLanguage } from '../context/LanguageContext.jsx'
+import { usePOSMode } from '../context/POSModeContext.jsx'
 import { useTranslation } from 'react-i18next'
 import './Simple.css'
 import './Menu.css'
 
-// Vite dev server proxies /uploads → http://localhost:8080
-// So /uploads/menu/xxx.jpg works directly in browser
 function getItemImage(item) {
     if (!item.imageUrl) return null
-    return item.imageUrl  // works for both http://... and /uploads/...
+    return item.imageUrl
 }
 
 export default function MenuPage() {
     const { user } = useAuth()
     const { t, i18n } = useTranslation()
     const { showTamilName } = useLanguage()
+    const { isPoultry } = usePOSMode()
     const isManagerOrOwner = user?.role === 'owner' || user?.role === 'manager'
 
     const [items, setItems] = useState([])
     const [loading, setLoading] = useState(true)
+    const [updatingRates, setUpdatingRates] = useState(false)
+    const [categoryRates, setCategoryRates] = useState({})
 
     // Modal state
     const [showModal, setShowModal] = useState(false)
     const [editingItem, setEditingItem] = useState(null)
     const [formData, setFormData] = useState({
         name: '', tamilName: '', description: '', tamilDescription: '', price: '', category: 'Main Course',
-        isVeg: true, isAvailable: true
+        isVeg: true, isAvailable: true,
+        // Poultry-specific
+        buyingPrice: '', sellingPrice: '', quantityType: 'kg', wastage: '', profit: ''
     })
     const [importing, setImporting] = useState(false)
 
@@ -39,17 +43,95 @@ export default function MenuPage() {
 
     const fetchMenu = () => {
         setLoading(true)
-        api.get('/menu').then(r => setItems(r.data.data?.menuItems || r.data.data?.items || []))
-            .catch(console.error).finally(() => setLoading(false))
+        api.get('/menu').then(r => {
+            let fetchedItems = r.data.data?.menuItems || r.data.data?.items || [];
+            fetchedItems = fetchedItems.map(i => {
+                if (i.description && typeof i.description === 'string' && i.description.includes('||META:')) {
+                    const [desc, metaStr] = i.description.split('||META:');
+                    try {
+                        const meta = JSON.parse(metaStr);
+                        return {
+                            ...i,
+                            description: desc,
+                            buyingPrice: meta.buy !== undefined ? meta.buy : i.buyingPrice,
+                            sellingPrice: meta.sell !== undefined ? meta.sell : i.sellingPrice,
+                            quantityType: meta.qty || i.quantityType,
+                            wastage: meta.wastage || 0,
+                            profit: meta.profit || 0
+                        };
+                    } catch (err) { return i; }
+                }
+                return i;
+            });
+            setItems(fetchedItems);
+
+            // Populate category rates
+            const newRates = {};
+            fetchedItems.forEach(i => {
+                const catStr = (i.category || '').trim().toUpperCase();
+                if (catStr && !newRates[catStr] && i.buyingPrice > 0) {
+                    newRates[catStr] = i.buyingPrice;
+                }
+            });
+            setCategoryRates(newRates);
+        }).catch(console.error).finally(() => setLoading(false))
     }
 
     useEffect(() => {
         fetchMenu()
     }, [])
 
+    const handleUpdateCategoryRates = async () => {
+        setUpdatingRates(true);
+        let successCount = 0;
+        try {
+            const updates = [];
+            for (const item of items) {
+                const catStr = (item.category || '').trim().toUpperCase();
+                const newBase = parseFloat(categoryRates[catStr] || 0);
+                if (newBase > 0) {
+                    const wastage = parseFloat(item.wastage) || 0;
+                    const profit = parseFloat(item.profit) || 0;
+                    const oldBase = parseFloat(item.buyingPrice) || 0;
+
+                    if (oldBase !== newBase) {
+                        const newSelling = newBase + (newBase * wastage / 100) + profit;
+                        const meta = { buy: newBase, sell: +newSelling.toFixed(2), qty: item.quantityType || 'kg', wastage, profit };
+                        const descBase = (item.description || '').split('||META:')[0];
+                        const newDesc = descBase + '||META:' + JSON.stringify(meta);
+
+                        updates.push(api.put(`/menu/${item._id || item.id}`, {
+                            ...item,
+                            buyingPrice: newBase,
+                            sellingPrice: +newSelling.toFixed(2),
+                            price: +newSelling.toFixed(2),
+                            description: newDesc
+                        }));
+                        successCount++;
+                    }
+                }
+            }
+            if (updates.length > 0) {
+                await Promise.all(updates);
+                alert('✅ Successfully updated ' + successCount + ' retail items!');
+                fetchMenu();
+            } else {
+                alert('No category market rates were changed.');
+            }
+        } catch (err) {
+            alert('❌ Failed to update global rates: ' + err.message);
+        }
+        setUpdatingRates(false);
+    };
+
     const handleAdd = () => {
         setEditingItem(null)
-        setFormData({ name: '', tamilName: '', description: '', tamilDescription: '', price: '', category: 'Main Course', isVeg: true, isAvailable: true })
+        setFormData({
+            name: '', tamilName: '', description: '', tamilDescription: '',
+            price: '', category: isPoultry ? 'Chicken' : 'Main Course',
+            isVeg: true, isAvailable: true,
+            buyingPrice: '', sellingPrice: '', quantityType: 'kg', wastage: '', profit: ''
+        })
         setImageFile(null)
         setImagePreview(null)
         setShowModal(true)
@@ -65,7 +147,12 @@ export default function MenuPage() {
             price: String(item.price),
             category: item.category || 'Main Course',
             isVeg: item.isVeg !== false,
-            isAvailable: item.isAvailable !== false
+            isAvailable: item.isAvailable !== false,
+            buyingPrice: item.buyingPrice != null ? String(item.buyingPrice) : '',
+            sellingPrice: item.sellingPrice != null ? String(item.sellingPrice) : '',
+            quantityType: item.quantityType || 'kg',
+            wastage: item.wastage != null ? String(item.wastage) : '0',
+            profit: item.profit != null ? String(item.profit) : '0',
         })
         setImageFile(null)
         setImagePreview(getItemImage(item))
@@ -96,6 +183,22 @@ export default function MenuPage() {
         e.preventDefault()
         try {
             const payload = { ...formData, price: Number(formData.price) }
+
+            if (isPoultry) {
+                payload.quantityType = formData.quantityType || 'kg'
+                payload.wastage = Number(formData.wastage) || 0
+                payload.profit = Number(formData.profit) || 0
+
+                const base = Number(payload.buyingPrice) || Number(categoryRates[(payload.category || '').trim().toUpperCase()]) || 0;
+                payload.buyingPrice = base;
+
+                payload.sellingPrice = +(base + (base * payload.wastage / 100) + payload.profit).toFixed(2);
+                payload.price = payload.sellingPrice;
+
+                const meta = { buy: payload.buyingPrice, sell: payload.sellingPrice, qty: payload.quantityType, wastage: payload.wastage, profit: payload.profit };
+                payload.description = (formData.description || '').split('||META:')[0] + '||META:' + JSON.stringify(meta);
+            }
+
             let savedItem
             if (editingItem) {
                 const res = await api.put(`/menu/${editingItem._id}`, payload)
@@ -105,7 +208,6 @@ export default function MenuPage() {
                 savedItem = res.data.data
             }
 
-            // If an image was selected, upload it
             if (imageFile && savedItem) {
                 setUploadingImage(true)
                 const fd = new FormData()
@@ -128,11 +230,9 @@ export default function MenuPage() {
     const handleImport = async (e) => {
         const file = e.target.files[0]
         if (!file) return
-
         setImporting(true)
         const fd = new FormData()
         fd.append('file', file)
-
         try {
             const res = await api.post('/menu/import', fd)
             alert(`✅ ${res.data.message || t('menu.import_success', 'Import successful!')}`)
@@ -140,7 +240,6 @@ export default function MenuPage() {
         } catch (error) {
             const msg = error.response?.data?.message || error.message || t('menu.upload_failed', 'Upload failed')
             alert('❌ ' + t('menu.bulk_upload_failed', 'Bulk Upload Failed') + ': ' + msg)
-            console.error(error)
         } finally {
             setImporting(false)
             e.target.value = ''
@@ -149,7 +248,6 @@ export default function MenuPage() {
 
     const handleDeleteAll = async () => {
         if (!window.confirm(t('menu.confirm_delete_all', '⚠️ WARNING: This will permanently delete ALL menu items. This action cannot be undone. Are you sure?'))) return
-
         setLoading(true)
         try {
             await api.delete('/menu/all')
@@ -157,7 +255,6 @@ export default function MenuPage() {
             fetchMenu()
         } catch (error) {
             alert('❌ ' + t('menu.delete_all_failed', 'Failed to delete items') + ': ' + (error.response?.data?.message || error.message))
-            console.error(error)
         } finally {
             setLoading(false)
         }
@@ -168,16 +265,7 @@ export default function MenuPage() {
             'name,price,category,type,description,tamilName,image_url',
             'Paneer Butter Masala,280,Main Course,Veg,Creamy paneer dish,பனீர் பட்டர் மசாலா,https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=400',
             'Chicken Biryani,320,Rice & Biryani,Non-Veg,Fragrant rice with chicken,சிக்கன் பிரியாணி,https://images.unsplash.com/photo-1563379091339-03b21bc4a4f8?w=400',
-            'Masala Dosa,80,South Indian,Veg,Crispy dosa with potato filling,மசாலா தோசை,',
-            'Filter Coffee,40,Beverages,Veg,Traditional South Indian coffee,ஃபில்டர் காபி,',
-            'Idli Sambar,60,South Indian,Veg,Soft idlis with sambar,இட்லி சாம்பார்,',
-            'Chicken 65,180,Starters,Non-Veg,Spicy fried chicken,சிக்கன் 65,',
-            'Veg Fried Rice,150,Rice & Biryani,Veg,Stir-fried rice with vegetables,வெஜ் ஃபிரைட் ரைஸ்,',
-            'Mutton Curry,350,Main Course,Non-Veg,Spicy mutton gravy,மட்டன் கறி,',
-            'Samosa,30,Starters,Veg,Crispy potato stuffed pastry,சமோசா,',
-            'Pongal,70,Breakfast,Veg,Rice and lentil comfort dish,பொங்கல்,'
         ].join('\n')
-
         const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
@@ -191,6 +279,16 @@ export default function MenuPage() {
         return (showTamilName && item.tamilName) ? item.tamilName : item.name
     }
 
+    const dedupCats = new Map();
+    const defaultCats = isPoultry ? ['Chicken', 'General'] : ['Main Course', 'Starters', 'Beverages', 'Desserts', 'General'];
+    [...defaultCats, ...items.map(i => i.category)].forEach(c => {
+        if (!c) return;
+        const norm = String(c).trim().toLowerCase();
+        if (!dedupCats.has(norm)) dedupCats.set(norm, String(c).trim());
+    });
+    const uniqueCategories = Array.from(dedupCats.values());
+
+
     return (
         <div className="simple-page">
             <div className="simple-header">
@@ -200,34 +298,16 @@ export default function MenuPage() {
                 </div>
                 {isManagerOrOwner && (
                     <div className="menu-header-actions">
-                        <input
-                            type="file"
-                            id="menuCsvImport"
-                            accept=".csv,.xlsx,.xls"
-                            style={{ display: 'none' }}
-                            onChange={handleImport}
-                        />
-                        <button
-                            className="menu-secondary-btn tooltip-btn"
-                            onClick={handleDownloadTemplate}
-                            title={t('menu.download_template_hint', 'Download a sample CSV with Tamil names and image_url column')}
-                        >
+                        <input type="file" id="menuCsvImport" accept=".csv,.xlsx,.xls" style={{ display: 'none' }} onChange={handleImport} />
+                        <button className="menu-secondary-btn tooltip-btn" onClick={handleDownloadTemplate} title={t('menu.download_template_hint', 'Download a sample CSV')}>
                             📄 <span className="btn-text">{t('menu.download_template', 'Template')}</span>
                         </button>
-                        <button
-                            className="menu-secondary-btn"
-                            onClick={() => document.getElementById('menuCsvImport').click()}
-                            disabled={importing}
-                        >
+                        <button className="menu-secondary-btn" onClick={() => document.getElementById('menuCsvImport').click()} disabled={importing}>
                             {importing ? t('menu.importing', 'Importing...') : (
                                 <>📥 <span className="btn-text">{t('menu.import_csv', 'Import')}</span></>
                             )}
                         </button>
-                        <button
-                            className="menu-danger-btn"
-                            onClick={handleDeleteAll}
-                            disabled={loading}
-                        >
+                        <button className="menu-danger-btn" onClick={handleDeleteAll} disabled={loading}>
                             🗑️ <span className="btn-text">{t('menu.delete_all', 'Delete All')}</span>
                         </button>
                         <button className="menu-primary-btn" onClick={handleAdd}>+ <span className="btn-text">{t('menu.add_item')}</span></button>
@@ -235,10 +315,37 @@ export default function MenuPage() {
                 )}
             </div>
 
+            {/* Daily Market Rates Widget (Poultry Only) */}
+            {isPoultry && isManagerOrOwner && uniqueCategories.length > 0 && (
+                <div className="daily-rates-bar glass-panel">
+                    <div className="rates-bar-header">
+                        <span style={{ fontSize: '26px' }}>📈</span>
+                        <div>
+                            <h3 style={{ margin: 0, fontSize: '15px', color: 'var(--accent)' }}>Today's Market Rates</h3>
+                            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Changes base values & recalculates retail prices automatically</span>
+                        </div>
+                    </div>
+                    <div className="rates-inputs-grid">
+                        {uniqueCategories.map(cat => (
+                            <div key={cat} className="rate-input-card">
+                                <label>{cat}</label>
+                                <div className="rate-input-wrapper">
+                                    <span>₹</span>
+                                    <input type="number" min="0" value={categoryRates[cat] || ''} onChange={e => setCategoryRates({ ...categoryRates, [cat]: e.target.value })} />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <button className="menu-primary-btn" onClick={handleUpdateCategoryRates} disabled={updatingRates} style={{ padding: '12px 20px' }}>
+                        {updatingRates ? '⏳ Updating All...' : '✓ Save Market Rates'}
+                    </button>
+                </div>
+            )}
+
             {loading ? <div className="loading">{t('common.loading')}</div> : (
                 <div className="orders-list">
                     {items.map(i => (
-                        <div key={i._id} className="order-row menu-item-row">
+                        <div key={i._id} className="order-row menu-item-row" style={isPoultry ? { padding: '16px 20px', alignItems: 'center' } : {}}>
                             {/* Thumbnail */}
                             <div className="menu-thumb-wrap">
                                 {getItemImage(i) ? (
@@ -252,7 +359,7 @@ export default function MenuPage() {
 
                             <div className="order-row-left" style={{ flex: 1 }}>
                                 <div className={`veg-indicator ${i.isVeg ? 'veg' : 'nonveg'}`} />
-                                <span className="order-table">
+                                <span className="order-table" style={isPoultry ? { fontSize: '15px', fontWeight: 'bold' } : {}}>
                                     {getDisplayName(i)}
                                     {i.tamilName && i.name !== i.tamilName && !showTamilName && (
                                         <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '6px' }}>({i.tamilName})</span>
@@ -261,10 +368,24 @@ export default function MenuPage() {
                                         <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '6px' }}>({i.name})</span>
                                     )}
                                 </span>
-                                <span className="order-items">{i.category}</span>
+                                <span className="order-items">{i.category} • {i.quantityType || 'kg'}</span>
                             </div>
+
+                            {/* Center Align Math Breakdown in Poultry Mode */}
+                            {isPoultry && (
+                                <div className="poultry-item-pricing" style={{ flex: 1 }}>
+                                    <div className="pricing-math">
+                                        <span title="Base Value">₹{i.buyingPrice || categoryRates[i.category] || 0} Base</span>
+                                        <span>+ {i.wastage || 0}%</span>
+                                        <span>+ ₹{i.profit || 0}</span>
+                                        <span>=</span>
+                                    </div>
+                                    <span className="order-total verify-retail">₹{i.price}</span>
+                                </div>
+                            )}
+
                             <div className="order-row-right">
-                                <span className="order-total" style={{ marginRight: '15px' }}>&#8377;{i.price}</span>
+                                {!isPoultry && <span className="order-total" style={{ marginRight: '15px' }}>&#8377;{i.price}</span>}
                                 {!i.isAvailable && <span className="role-badge" style={{ background: '#fee2e2', color: '#dc2626', borderColor: '#f87171' }}>{t('menu.unavailable')}</span>}
 
                                 {isManagerOrOwner && (
@@ -278,7 +399,7 @@ export default function MenuPage() {
                     ))}
                     {items.length === 0 && (
                         <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px', background: 'var(--bg-card)', borderRadius: '16px', border: '1px dashed var(--border)' }}>
-                            {t('menu.no_items', 'No menu items found. Add items or import a CSV file.')}
+                            {t('menu.no_items', 'No menu items found. Add items to see them here.')}
                         </div>
                     )}
                 </div>
@@ -292,120 +413,156 @@ export default function MenuPage() {
                             <button className="close-modal-btn" onClick={() => setShowModal(false)}>&times;</button>
                         </div>
                         <form className="modal-form" onSubmit={handleSubmit}>
-
-                            {/* Image Upload Section */}
-                            <div className="menu-image-upload-section">
-                                <div
-                                    className="menu-image-dropzone"
-                                    onClick={() => imageInputRef.current?.click()}
-                                >
-                                    {imagePreview ? (
-                                        <img src={imagePreview} alt="Preview" className="menu-image-preview" />
-                                    ) : (
-                                        <div className="menu-image-placeholder">
-                                            <span style={{ fontSize: '36px' }}>🍽️</span>
-                                            <p>Click to upload dish photo</p>
-                                            <span className="menu-image-hint">JPG, PNG, WEBP · Max 5MB</span>
+                            <div style={{ padding: '10px 0' }}>
+                                {/* Top Section */}
+                                <div style={{ display: 'flex', gap: '24px', marginBottom: '16px' }}>
+                                    <div className="menu-image-upload-section" style={{ width: '120px', flexShrink: 0, marginBottom: 0 }}>
+                                        <div className="menu-image-dropzone" onClick={() => imageInputRef.current?.click()}>
+                                            {imagePreview ? (
+                                                <img src={imagePreview} alt="Preview" className="menu-image-preview" />
+                                            ) : (
+                                                <div className="menu-image-placeholder">
+                                                    <span style={{ fontSize: '24px', marginBottom: '4px' }}>🍽️</span>
+                                                    <span style={{ fontSize: '10px', textAlign: 'center' }}>Upload<br />Photo</span>
+                                                </div>
+                                            )}
+                                            <input ref={imageInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImageChange} />
                                         </div>
-                                    )}
-                                    <input
-                                        ref={imageInputRef}
-                                        type="file"
-                                        accept="image/*"
-                                        style={{ display: 'none' }}
-                                        onChange={handleImageChange}
-                                    />
+                                        {imagePreview && (
+                                            <button type="button" style={{ marginTop: '8px', padding: '4px 8px', fontSize: '11px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: 'none', borderRadius: '4px', cursor: 'pointer', width: '100%' }} onClick={() => { setImageFile(null); setImagePreview(null); }}>
+                                                ✕ Remove
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', alignItems: 'start' }}>
+                                        <div className="form-group" style={{ marginBottom: 0 }}>
+                                            <label>📝 {t('menu.item_name_en', 'Item Name')}</label>
+                                            <input required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="E.g. Chicken Lollipops" />
+                                        </div>
+                                        <div className="form-group" style={{ marginBottom: 0 }}>
+                                            <label>🔤 {t('menu.item_name_ta', 'Tamil Name')} <span style={{ opacity: 0.5, fontWeight: 'normal' }}>{t('menu.optional', '(Opt)')}</span></label>
+                                            <input value={formData.tamilName} onChange={e => setFormData({ ...formData, tamilName: e.target.value })} placeholder="E.g. சிக்கன்" />
+                                        </div>
+                                        {!isPoultry && (
+                                            <div className="form-group" style={{ marginBottom: 0 }}>
+                                                <label>💰 {t('menu.price', 'Price')} (&#8377;)</label>
+                                                <input required type="number" min="0" value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value })} placeholder="250" />
+                                            </div>
+                                        )}
+                                        <div className="form-group" style={{ marginBottom: 0 }}>
+                                            <label>🏷️ {t('menu.category_label', 'Category')}</label>
+                                            {(!formData.category || uniqueCategories.includes(formData.category)) ? (
+                                                <select
+                                                    required
+                                                    value={formData.category || ''}
+                                                    onChange={e => {
+                                                        if (e.target.value === '___NEW___') {
+                                                            setFormData({ ...formData, category: ' ' }); // Set space to trigger text input
+                                                        } else {
+                                                            setFormData({ ...formData, category: e.target.value });
+                                                        }
+                                                    }}
+                                                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg-primary)', color: 'var(--text-color)', fontSize: '14px', outline: 'none', appearance: 'auto' }}
+                                                >
+                                                    <option value="" disabled>Select category</option>
+                                                    {uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                                                    <option value="___NEW___" style={{ fontWeight: 'bold' }}>➕ Add New Category...</option>
+                                                </select>
+                                            ) : (
+                                                <div style={{ display: 'flex', gap: '8px' }}>
+                                                    <input
+                                                        required
+                                                        value={formData.category.trimStart()}
+                                                        onChange={e => setFormData({ ...formData, category: e.target.value })}
+                                                        placeholder="Type new category..."
+                                                        style={{ flex: 1 }}
+                                                        autoFocus
+                                                    />
+                                                    <button type="button" onClick={() => setFormData({ ...formData, category: uniqueCategories[0] || '' })} style={{ padding: '0 12px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '8px', cursor: 'pointer' }}>✖</button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
-                                {imagePreview && (
-                                    <button
-                                        type="button"
-                                        className="menu-image-remove-btn"
-                                        onClick={() => { setImageFile(null); setImagePreview(null); if (imageInputRef.current) imageInputRef.current.value = ''; }}
-                                    >
-                                        ✕ Remove Photo
-                                    </button>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                                    <div className="form-group" style={{ marginBottom: 0 }}>
+                                        <label>📄 {t('menu.description', 'Description')} <span style={{ opacity: 0.5, fontWeight: 'normal' }}>(Opt)</span></label>
+                                        <textarea value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} placeholder="Brief description..." rows={2} style={{ resize: 'none' }} />
+                                    </div>
+                                    <div className="form-group" style={{ marginBottom: 0 }}>
+                                        <label>🔤 {t('menu.description_ta', 'Tamil Description')} <span style={{ opacity: 0.5, fontWeight: 'normal' }}>(Opt)</span></label>
+                                        <textarea value={formData.tamilDescription} onChange={e => setFormData({ ...formData, tamilDescription: e.target.value })} placeholder="இந்த உணவு பற்றிய குறிப்பு..." rows={2} style={{ resize: 'none' }} />
+                                    </div>
+                                </div>
+
+                                {/* Dynamic Pricing Engine (Poultry) */}
+                                {isPoultry && (
+                                    <div style={{ background: 'rgba(198,245,61,0.06)', border: '1px solid rgba(198,245,61,0.2)', borderRadius: '10px', padding: '16px', marginBottom: '0' }}>
+                                        <div style={{ fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--accent)', marginBottom: '14px', display: 'flex', justifyContent: 'space-between' }}>
+                                            <span>🐔 Mathematical Pricing Settings</span>
+                                            <span>Current {formData.category || 'Category'} Base: ₹{categoryRates[(formData.category || '').trim().toUpperCase()] || formData.buyingPrice || '0'}</span>
+                                        </div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px', alignItems: 'end' }}>
+                                            <div className="form-group" style={{ marginBottom: 0 }}>
+                                                <label>⚠️ Wastage (%)</label>
+                                                <input required type="number" min="0" step="0.5"
+                                                    value={formData.wastage}
+                                                    onChange={e => setFormData({ ...formData, wastage: e.target.value })}
+                                                    placeholder="20" />
+                                            </div>
+                                            <div className="form-group" style={{ marginBottom: 0 }}>
+                                                <label>🤑 Profit Margin (₹)</label>
+                                                <input required type="number" min="0" step="1"
+                                                    value={formData.profit}
+                                                    onChange={e => setFormData({ ...formData, profit: e.target.value })}
+                                                    placeholder="60" />
+                                            </div>
+                                            <div className="form-group" style={{ marginBottom: 0 }}>
+                                                <label>⚖️ Quantity Type</label>
+                                                <select required
+                                                    value={formData.quantityType}
+                                                    onChange={e => setFormData({ ...formData, quantityType: e.target.value })}
+                                                    style={{ width: '100%' }}>
+                                                    <option value="kg">Per Kilogram (kg)</option>
+                                                    <option value="pcs">Per Piece (pcs)</option>
+                                                </select>
+                                            </div>
+
+                                            <div className="form-group" style={{ marginBottom: 0, gridColumn: '1 / -1', background: 'rgba(0,0,0,0.25)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                                <label style={{ color: 'var(--text-secondary)' }}>💰 Calculated Retail Price</label>
+                                                <div style={{ fontSize: '22px', fontWeight: 'bold', color: 'var(--accent)', marginTop: '4px' }}>
+                                                    {formData.category && (categoryRates[(formData.category || '').trim().toUpperCase()] || formData.buyingPrice) ? (
+                                                        `₹${(
+                                                            parseFloat(formData.buyingPrice || categoryRates[(formData.category || '').trim().toUpperCase()] || 0) +
+                                                            (parseFloat(formData.buyingPrice || categoryRates[(formData.category || '').trim().toUpperCase()] || 0) * (parseFloat(formData.wastage) || 0) / 100) +
+                                                            (parseFloat(formData.profit) || 0)
+                                                        ).toFixed(2)}`
+                                                    ) : '₹0.00 (Enter Base Rate in Widget first)'}
+                                                </div>
+                                                <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Formula: Base Value + (Base Value × Wastage%) + Profit</span>
+                                            </div>
+                                        </div>
+                                    </div>
                                 )}
-                            </div>
 
-                            <div className="menu-modal-fields">
-                                <div className="form-group">
-                                    <label style={{ color: 'var(--text-primary)' }}>📝 {t('menu.item_name_en', 'Item Name (English)')}</label>
-                                    <input required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="E.g. Paneer Butter Masala" />
-                                </div>
-
-                                <div className="form-group">
-                                    <label style={{ color: 'var(--text-primary)' }}>
-                                        🔤 {t('menu.item_name_ta', 'Tamil Name (தமிழ் பெயர்)')}
-                                        <span className="optional-text">{t('menu.optional', '(Optional)')}</span>
-                                    </label>
-                                    <input value={formData.tamilName} onChange={e => setFormData({ ...formData, tamilName: e.target.value })} placeholder="E.g. பனீர் பட்டர் மசாலா" />
-                                </div>
-
-                                <div className="form-group">
-                                    <label style={{ color: 'var(--text-primary)' }}>💰 {t('menu.price', 'Price')} (&#8377;)</label>
-                                    <input required type="number" min="0" value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value })} placeholder="E.g. 250" />
-                                </div>
-
-                                <div className="form-group">
-                                    <label style={{ color: 'var(--text-primary)' }}>🏷️ {t('menu.category_label', 'Category (Select or type new)')}</label>
-                                    <input
-                                        list="category-suggestions"
-                                        required
-                                        value={formData.category}
-                                        onChange={e => setFormData({ ...formData, category: e.target.value })}
-                                        placeholder="e.g. Starters"
-                                    />
-                                    <datalist id="category-suggestions">
-                                        <option value="Starters" />
-                                        <option value="Main Course" />
-                                        <option value="Lunch Special" />
-                                        <option value="Breakfast" />
-                                        <option value="South Indian" />
-                                        <option value="Rice & Biryani" />
-                                        <option value="Breads" />
-                                        <option value="Desserts" />
-                                        <option value="Snacks & Sides" />
-                                        <option value="Beverages" />
-                                    </datalist>
-                                </div>
-
-                                <div className="form-group">
-                                    <label style={{ color: 'var(--text-primary)' }}>📄 {t('menu.description', 'Description')}</label>
-                                    <textarea
-                                        value={formData.description}
-                                        onChange={e => setFormData({ ...formData, description: e.target.value })}
-                                        placeholder="Brief description of the dish..."
-                                        rows={2}
-                                    />
-                                </div>
-
-                                <div className="form-group">
-                                    <label style={{ color: 'var(--text-primary)' }}>🔤 {t('menu.description_ta', 'Tamil Description')}</label>
-                                    <textarea
-                                        value={formData.tamilDescription}
-                                        onChange={e => setFormData({ ...formData, tamilDescription: e.target.value })}
-                                        placeholder="இந்த உணவு பற்றிய சிறு குறிப்பு..."
-                                        rows={2}
-                                    />
-                                </div>
-
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                                    <div className="form-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '10px', background: 'var(--bg-primary)', padding: '10px', borderRadius: '12px', border: '1px solid var(--border)' }}>
-                                        <input type="checkbox" id="isVeg" checked={formData.isVeg} onChange={e => setFormData({ ...formData, isVeg: e.target.checked })} style={{ width: '18px', height: '18px', cursor: 'pointer' }} />
-                                        <label htmlFor="isVeg" style={{ fontSize: '14px', cursor: 'pointer', marginBottom: 0, color: 'var(--text-primary)' }}>{t('menu.is_veg', 'Vegetarian')}</label>
+                                <div style={{ display: 'flex', gap: '20px', background: 'var(--bg-primary)', padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--border)', marginTop: '16px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <input type="checkbox" id="isVeg" checked={formData.isVeg} onChange={e => setFormData({ ...formData, isVeg: e.target.checked })} style={{ width: '16px', height: '16px', margin: 0 }} />
+                                        <label htmlFor="isVeg" style={{ fontSize: '13px', margin: 0, textTransform: 'none', fontWeight: 500 }}>{t('menu.is_veg', 'Vegetarian Item')}</label>
                                     </div>
-
-                                    <div className="form-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '10px', background: 'var(--bg-primary)', padding: '10px', borderRadius: '12px', border: '1px solid var(--border)' }}>
-                                        <input type="checkbox" id="isAvailable" checked={formData.isAvailable} onChange={e => setFormData({ ...formData, isAvailable: e.target.checked })} style={{ width: '18px', height: '18px', cursor: 'pointer' }} />
-                                        <label htmlFor="isAvailable" style={{ fontSize: '14px', cursor: 'pointer', marginBottom: 0, color: 'var(--text-primary)' }}>{t('menu.is_available', 'In Stock')}</label>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <input type="checkbox" id="isAvailable" checked={formData.isAvailable} onChange={e => setFormData({ ...formData, isAvailable: e.target.checked })} style={{ width: '16px', height: '16px', margin: 0 }} />
+                                        <label htmlFor="isAvailable" style={{ fontSize: '13px', margin: 0, textTransform: 'none', fontWeight: 500 }}>{t('menu.is_available', 'Currently In Stock')}</label>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="modal-actions">
+                            <div className="modal-actions" style={{ marginTop: '20px' }}>
                                 <button type="button" className="cancel-modal-btn" onClick={() => setShowModal(false)}>{t('common.cancel')}</button>
                                 <button type="submit" className="save-modal-btn" disabled={uploadingImage}>
-                                    {uploadingImage ? '⏳ Uploading Image...' : editingItem ? t('menu.save_changes', 'Save Changes') : t('menu.add_item')}
+                                    {uploadingImage ? '⏳ Uploading...' : editingItem ? t('menu.save_changes', 'Save Changes') : t('menu.add_item')}
                                 </button>
                             </div>
                         </form>

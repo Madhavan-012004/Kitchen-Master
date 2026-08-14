@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 @Service
-@SuppressWarnings("null")
+
 public class ClothingService {
 
     @Autowired

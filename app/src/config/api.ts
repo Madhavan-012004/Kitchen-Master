@@ -33,17 +33,7 @@ export async function getApiBaseUrl(): Promise<string> {
         }
     } catch (_) { }
 
-    // Pro-fix: Automatically detect computer IP when running in Expo Go/Local
-    // Constants.expoConfig.hostUri or debuggerHost usually contains the computer's IP (e.g. 192.168.1.5:8081)
-    const hostUri = Constants.expoConfig?.hostUri;
-    if (hostUri) {
-        const computerIp = hostUri.split(':')[0];
-        const autoUrl = `http://${computerIp}:8080/api`;
-        console.log('[PROBLOOM] Auto-detected Server IP:', autoUrl);
-        return autoUrl;
-    }
-    
-    // Last resort fallback (localhost for emulators)
+    // Last resort fallback (localhost for emulators or app.json config)
     return FALLBACK_URL.endsWith('/api') ? FALLBACK_URL : `${FALLBACK_URL}/api`;
 }
 
@@ -63,12 +53,6 @@ export async function getServerBaseUrl(): Promise<string> {
             return stored.endsWith('/api') ? stored.replace('/api', '') : stored;
         }
     } catch (_) { }
-
-    const hostUri = Constants.expoConfig?.hostUri;
-    if (hostUri) {
-        const computerIp = hostUri.split(':')[0];
-        return `http://${computerIp}:8080`;
-    }
 
     return FALLBACK_URL.endsWith('/api') ? FALLBACK_URL.replace('/api', '') : FALLBACK_URL;
 }

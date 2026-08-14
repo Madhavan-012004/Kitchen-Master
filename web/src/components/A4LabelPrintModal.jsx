@@ -175,9 +175,10 @@ const A4LabelPrintModal = ({ show, onClose, items, onSuccess }) => {
 // ── Styles ─────────────────────────────────────────────────────────────────────
 const styles = {
     overlay: {
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+        background: 'rgba(0,0,0,0.55)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        zIndex: 9000, backdropFilter: 'blur(4px)',
+        zIndex: 9000, WebkitBackdropFilter: 'blur(4px)', backdropFilter: 'blur(4px)',
     },
     dialog: {
         background: '#fff', borderRadius: '16px', width: '90vw', maxWidth: '820px',

@@ -32,47 +32,70 @@
   line-height: 1;
 }
 
-/* ── Modal wider for image ── */
+/* ── Modal Professional Refactor ── */
 .menu-modal-content {
-  max-width: 760px !important;
-  width: 94vw !important;
+  width: 100% !important;
+  max-width: 650px !important;
+  height: auto !important;
+  max-height: 90vh !important;
+  display: flex;
+  flex-direction: column;
 }
 
-/* ── Image upload section ── */
+.menu-modal-content .modal-header {
+  padding-bottom: 15px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 15px;
+}
+
 .menu-image-upload-section {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  margin-bottom: 20px;
 }
 
 .menu-image-dropzone {
-  width: 100%;
-  height: 160px;
-  border-radius: 14px;
-  border: 2px dashed var(--border, rgba(255, 255, 255, 0.15));
-  background: var(--bg-primary, rgba(255, 255, 255, 0.04));
+  width: 120px !important;
+  height: 120px !important;
+  border-radius: 12px;
+  border: 2px dashed var(--border, rgba(0,0,0,0.1));
+  background: var(--bg-primary, #ffffff);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  transition: border-color 0.2s ease, background 0.2s ease;
   position: relative;
+  transition: all 0.2s;
 }
 
 .menu-image-dropzone:hover {
-  border-color: #667eea;
-  background: rgba(102, 126, 234, 0.06);
+  border-color: var(--accent, #667eea);
 }
 
 .menu-image-preview {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  display: block;
-  border-radius: 12px;
+}
+
+.menu-modal-content input, .menu-modal-content textarea, .menu-modal-content select {
+  background: var(--bg-primary, #ffffff) !important;
+  color: var(--text-primary, #111827) !important;
+  border: 1px solid var(--border) !important;
+  padding: 8px 12px !important;
+  font-size: 13px !important;
+  border-radius: 6px !important;
+}
+
+.menu-modal-content label {
+  font-size: 11px !important;
+  font-weight: 600;
+  color: var(--text-secondary, #6b7280) !important;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
 }
 
 .menu-image-placeholder {
@@ -182,6 +205,92 @@
   filter: brightness(1.1);
 }
 
+/* ── Poultry Daily Market Rates Bar ── */
+.daily-rates-bar {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin: 16px 24px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+}
+.rates-bar-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-right: 1px solid var(--border);
+  padding-right: 20px;
+}
+.rates-inputs-grid {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.rate-input-card {
+  display: flex;
+  flex-direction: column;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 8px 12px;
+  border-radius: 8px;
+  min-width: 140px;
+}
+.rate-input-card label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+.rate-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+}
+.rate-input-wrapper input {
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: bold;
+  width: 100%;
+  outline: none;
+  padding: 0;
+}
+
+/* ── Poultry Math Breakdown UI ── */
+.poultry-item-pricing {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.pricing-math {
+  display: flex;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: monospace;
+}
+.pricing-math span:first-child {
+  color: var(--accent);
+  font-weight: bold;
+}
+.verify-retail {
+  font-size: 18px !important;
+  color: var(--text-primary) !important;
+}
+
 @media (max-width: 768px) {
   .menu-header-actions {
     gap: 8px;
@@ -190,7 +299,6 @@
 
   .btn-text {
     display: none;
-    /* Hide text on very small screens, show only icons */
   }
 
   .menu-secondary-btn,

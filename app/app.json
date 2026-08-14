@@ -29,6 +29,7 @@
         "backgroundColor": "#1A1A2E"
       },
       "package": "com.probloom.app",
+      "usesCleartextTraffic": true,
       "permissions": [
         "RECORD_AUDIO",
         "CAMERA",
@@ -58,10 +59,11 @@
         }
       ],
       "expo-font",
-      "expo-location"
+      "expo-location",
+      "expo-secure-store"
     ],
     "extra": {
-      "API_URL": "https://kitchen-master.onrender.com",
+      "API_URL": "http://144.217.89.193:8080",
       "eas": {
         "projectId": "9a30d950-23b0-4f0f-870d-bf37cc0ea95b"
       }

@@ -1,5 +1,12 @@
 {
   "appId": "com.probloom.app",
   "appName": "ProBloom",
-  "webDir": "dist"
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
+  }
 }

@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
 
 @Service
 @Slf4j
-@SuppressWarnings("null")
+
 public class DatabaseBackupService {
 
     @Value("${spring.datasource.url}")
@@ -47,7 +47,8 @@ public class DatabaseBackupService {
     public String exportDatabase(String prefix) throws IOException, InterruptedException {
         // 1. Ensure backup directory exists
         File dir = new File(BACKUP_DIR);
-        if (!dir.exists()) dir.mkdirs();
+        if (!dir.exists())
+            dir.mkdirs();
 
         // 2. Parse DB details from URL
         // jdbc:postgresql://localhost:5432/db_name
@@ -65,14 +66,13 @@ public class DatabaseBackupService {
 
         // 4. Build command
         ProcessBuilder pb = new ProcessBuilder(
-            pgDumpPath,
-            "-h", host,
-            "-p", port,
-            "-U", dbUser,
-            "-F", "p", // plain text format
-            "-f", outputFile.getAbsolutePath(),
-            dbName
-        );
+                pgDumpPath,
+                "-h", host,
+                "-p", port,
+                "-U", dbUser,
+                "-F", "p", // plain text format
+                "-f", outputFile.getAbsolutePath(),
+                dbName);
 
         // Set password via environment variable to avoid prompt
         pb.environment().put("PGPASSWORD", dbPassword);
@@ -94,9 +94,11 @@ public class DatabaseBackupService {
 
     public List<String> listBackups() {
         File dir = new File(BACKUP_DIR);
-        if (!dir.exists()) return new ArrayList<>();
+        if (!dir.exists())
+            return new ArrayList<>();
         File[] files = dir.listFiles((d, name) -> name.endsWith(".sql"));
-        if (files == null) return new ArrayList<>();
+        if (files == null)
+            return new ArrayList<>();
         return Arrays.stream(files)
                 .map(File::getName)
                 .sorted((a, b) -> b.compareTo(a)) // Latest first
@@ -104,7 +106,8 @@ public class DatabaseBackupService {
     }
 
     private String findPgDump() {
-        // 1. Try system PATH first (most likely to match user's installed server version in dev)
+        // 1. Try system PATH first (most likely to match user's installed server
+        // version in dev)
         try {
             Process p = Runtime.getRuntime().exec("pg_dump --version");
             if (p.waitFor() == 0) {
@@ -124,7 +127,7 @@ public class DatabaseBackupService {
                 log.info("Found pg_dump.exe in property path: {}", f.getAbsolutePath());
                 return f.getAbsolutePath();
             }
-            
+
             f = new File(propertyPath, "pg_dump");
             if (f.exists()) {
                 log.info("Found pg_dump in property path: {}", f.getAbsolutePath());
@@ -151,10 +154,10 @@ public class DatabaseBackupService {
 
         // 4. Try common Windows installation paths (hardcoded as backup)
         String[] commonInstallPaths = {
-            "C:/Program Files/PostgreSQL/18/bin/pg_dump.exe",
-            "C:/Program Files/PostgreSQL/17/bin/pg_dump.exe",
-            "C:/Program Files/PostgreSQL/16/bin/pg_dump.exe",
-            "C:/Program Files/PostgreSQL/15/bin/pg_dump.exe"
+                "C:/Program Files/PostgreSQL/18/bin/pg_dump.exe",
+                "C:/Program Files/PostgreSQL/17/bin/pg_dump.exe",
+                "C:/Program Files/PostgreSQL/16/bin/pg_dump.exe",
+                "C:/Program Files/PostgreSQL/15/bin/pg_dump.exe"
         };
         for (String p : commonInstallPaths) {
             File f = new File(p);
@@ -166,12 +169,12 @@ public class DatabaseBackupService {
 
         // 5. Try typical relative paths
         String[] possiblePaths = {
-            "pgsql/bin/pg_dump.exe",
-            "../pgsql/bin/pg_dump.exe",
-            "../web/pgsql/bin/pg_dump.exe",
-            "../../pgsql/bin/pg_dump.exe",
-            "bin/pg_dump.exe",
-            "pg_dump.exe"
+                "pgsql/bin/pg_dump.exe",
+                "../pgsql/bin/pg_dump.exe",
+                "../web/pgsql/bin/pg_dump.exe",
+                "../../pgsql/bin/pg_dump.exe",
+                "bin/pg_dump.exe",
+                "pg_dump.exe"
         };
 
         for (String p : possiblePaths) {
@@ -206,11 +209,11 @@ public class DatabaseBackupService {
                     if (cloudDir.exists() && cloudDir.isDirectory()) {
                         File destFile = new File(cloudDir, fileName);
                         java.nio.file.Files.copy(
-                            outputFile.toPath(),
-                            destFile.toPath(),
-                            java.nio.file.StandardCopyOption.REPLACE_EXISTING
-                        );
-                        log.info("Copied backup successfully to cloud path: {} for user {}", destFile.getAbsolutePath(), u.getEmail());
+                                outputFile.toPath(),
+                                destFile.toPath(),
+                                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                        log.info("Copied backup successfully to cloud path: {} for user {}", destFile.getAbsolutePath(),
+                                u.getEmail());
                     } else {
                         log.warn("Cloud backup path could not be created or is not a directory: {}", pathStr);
                     }

@@ -5,9 +5,9 @@ const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(() => {
-        try { return JSON.parse(sessionStorage.getItem('km_user')) } catch { return null }
+        try { return JSON.parse(localStorage.getItem('km_user')) } catch { return null }
     })
-    const [token, setToken] = useState(() => sessionStorage.getItem('km_token') || null)
+    const [token, setToken] = useState(() => localStorage.getItem('km_token') || null)
     const [attendance, setAttendance] = useState({ isActive: false, checkInTime: null })
 
     const fetchAttendanceStatus = async () => {
@@ -60,8 +60,8 @@ export function AuthProvider({ children }) {
         if (userData && userData.role) userData.role = userData.role.toLowerCase()
         setUser(userData)
         setToken(authToken)
-        sessionStorage.setItem('km_user', JSON.stringify(userData))
-        sessionStorage.setItem('km_token', authToken)
+        localStorage.setItem('km_user', JSON.stringify(userData))
+        localStorage.setItem('km_token', authToken)
     }
 
     const logout = async () => {
@@ -76,14 +76,14 @@ export function AuthProvider({ children }) {
         setUser(null)
         setToken(null)
         setAttendance({ isActive: false, checkInTime: null })
-        sessionStorage.removeItem('km_user')
-        sessionStorage.removeItem('km_token')
+        localStorage.removeItem('km_user')
+        localStorage.removeItem('km_token')
     }
 
     const updateUser = (userData) => {
         if (userData && userData.role) userData.role = userData.role.toLowerCase()
         setUser(userData)
-        sessionStorage.setItem('km_user', JSON.stringify(userData))
+        localStorage.setItem('km_user', JSON.stringify(userData))
     }
 
     const isAuthenticated = !!token && !!user

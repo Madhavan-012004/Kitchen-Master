@@ -153,7 +153,7 @@ public class WhatsAppDeliveryService {
             return null;
         String digits = rawPhone.replaceAll("[^0-9+]", "");
         if (!digits.startsWith("+"))
-            digits = "+91" + digits;
+            digits = "+91 " + digits;
         return digits;
     }
 

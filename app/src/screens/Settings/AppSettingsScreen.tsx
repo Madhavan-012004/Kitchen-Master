@@ -11,7 +11,7 @@ import { useAuthStore } from '../../store/useAuthStore';
 export default function AppSettingsScreen({ navigation }: any) {
     const { theme, toggleTheme, isDark, colors, gradients } = useAppTheme();
     const styles = React.useMemo(() => createStyles(colors, gradients), [colors, gradients]);
-    
+
     const { t, i18n } = useTranslation();
     const { user, updateProfile } = useAuthStore();
     const [notifications, setNotifications] = useState(true);
@@ -76,26 +76,33 @@ export default function AppSettingsScreen({ navigation }: any) {
                                         <Text style={styles.settingText}>Store Type (POS Layout)</Text>
                                     </View>
                                     <View style={styles.layoutOptions}>
-                                        <TouchableOpacity 
+                                        <TouchableOpacity
                                             style={[styles.layoutBtn, currentMode === 'restaurant' && styles.layoutBtnActive]}
                                             onPress={() => handleLayoutChange('restaurant')}
                                             disabled={updatingLayout}
                                         >
                                             <Text style={[styles.layoutBtnText, currentMode === 'restaurant' && styles.layoutBtnTextActive]}>Restaurant</Text>
                                         </TouchableOpacity>
-                                        <TouchableOpacity 
+                                        <TouchableOpacity
                                             style={[styles.layoutBtn, currentMode === 'supermarket' && styles.layoutBtnActive]}
                                             onPress={() => handleLayoutChange('supermarket')}
                                             disabled={updatingLayout}
                                         >
                                             <Text style={[styles.layoutBtnText, currentMode === 'supermarket' && styles.layoutBtnTextActive]}>Market</Text>
                                         </TouchableOpacity>
-                                        <TouchableOpacity 
+                                        <TouchableOpacity
                                             style={[styles.layoutBtn, currentMode === 'clothing' && styles.layoutBtnActive]}
                                             onPress={() => handleLayoutChange('clothing')}
                                             disabled={updatingLayout}
                                         >
                                             <Text style={[styles.layoutBtnText, currentMode === 'clothing' && styles.layoutBtnTextActive]}>Clothing</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={[styles.layoutBtn, currentMode === 'poultry' && styles.layoutBtnActive]}
+                                            onPress={() => handleLayoutChange('poultry')}
+                                            disabled={updatingLayout}
+                                        >
+                                            <Text style={[styles.layoutBtnText, currentMode === 'poultry' && styles.layoutBtnTextActive]}>Poultry</Text>
                                         </TouchableOpacity>
                                     </View>
                                 </View>
@@ -186,8 +193,8 @@ const createStyles = (colors: any, gradients: any) => StyleSheet.create({
     actionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: Spacing.sm },
     actionText: { ...Typography.body1, color: colors.textPrimary },
     layoutSection: { paddingVertical: Spacing.sm },
-    layoutOptions: { flexDirection: 'row', marginTop: Spacing.md, gap: 8 },
-    layoutBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: Radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+    layoutOptions: { flexDirection: 'row', marginTop: Spacing.md, gap: 8, flexWrap: 'wrap' },
+    layoutBtn: { width: '48%', marginBottom: 4, paddingVertical: 10, alignItems: 'center', borderRadius: Radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
     layoutBtnActive: { backgroundColor: colors.primary, borderColor: colors.primary },
     layoutBtnText: { ...Typography.caption, color: colors.textSecondary, fontWeight: '600' },
     layoutBtnTextActive: { color: '#000000', fontWeight: '800' },

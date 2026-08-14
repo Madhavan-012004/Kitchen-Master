@@ -20,7 +20,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Service
 @RequiredArgsConstructor
-@SuppressWarnings("null")
+
 public class InventoryService {
 
     private final InventoryItemRepository inventoryItemRepository;

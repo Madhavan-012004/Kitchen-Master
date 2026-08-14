@@ -69,7 +69,7 @@ public class ProductionService {
     }
 
     @Transactional
-    @SuppressWarnings("null")
+
     public ProductionBatch startProduction(User restaurant, User creator, Long menuItemId, Double quantity) {
         Long safeItemId = Objects.requireNonNull(menuItemId, "Menu Item ID must not be null");
 

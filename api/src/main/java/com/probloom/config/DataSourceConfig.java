@@ -42,7 +42,7 @@ public class DataSourceConfig {
 
     @Bean
     @Primary
-    @SuppressWarnings("null")
+
     public DataSource dataSource() {
         // ── Offline (embedded) datasource ────────────────────────────────
         DataSource offlineDs = buildOfflineDataSource();

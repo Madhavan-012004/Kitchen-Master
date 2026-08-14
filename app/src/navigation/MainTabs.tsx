@@ -35,6 +35,10 @@ import NewTailoringJobScreen from '../screens/Tailoring/NewTailoringJobScreen';
 import TokenLookupScreen from '../screens/Tailoring/TokenLookupScreen';
 import WaitersDashboardScreen from '../screens/POS/WaitersDashboardScreen'; // dashboard import
 import WaitersCompletedOrdersScreen from '../screens/POS/WaitersCompletedOrdersScreen';
+import PoultryClientsScreen from '../screens/Poultry/PoultryClientsScreen';
+import PoultryPurchaseDetailScreen from '../screens/Poultry/PoultryPurchaseDetailScreen';
+import PoultryPOSScreen from '../screens/Poultry/PoultryPOSScreen';
+import PoultryHistoryScreen from '../screens/Poultry/PoultryHistoryScreen';
 
 const Tab = createBottomTabNavigator();
 const MenuStack = createNativeStackNavigator();
@@ -43,6 +47,7 @@ const InventoryStack = createNativeStackNavigator();
 const ProfileStack = createNativeStackNavigator();
 const ClothingStack = createNativeStackNavigator();
 const TailoringStack = createNativeStackNavigator();
+const PoultryStack = createNativeStackNavigator();
 
 function POSNavigator() {
     return (
@@ -112,6 +117,17 @@ function TailoringNavigator() {
     );
 }
 
+const PoultryClientsStack = createNativeStackNavigator();
+function PoultryClientsNavigator() {
+    return (
+        <PoultryClientsStack.Navigator screenOptions={{ headerShown: false }}>
+            <PoultryClientsStack.Screen name="PoultryClientsMain" component={PoultryClientsScreen} />
+            <PoultryClientsStack.Screen name="PoultryPOS" component={PoultryPOSScreen} />
+            <PoultryClientsStack.Screen name="PoultryPurchaseDetail" component={PoultryPurchaseDetailScreen} />
+        </PoultryClientsStack.Navigator>
+    );
+}
+
 const tabIcons: Record<string, { active: any; inactive: any }> = {
     POS: { active: 'receipt', inactive: 'receipt-outline' },
     Menu: { active: 'restaurant', inactive: 'restaurant-outline' },
@@ -122,6 +138,9 @@ const tabIcons: Record<string, { active: any; inactive: any }> = {
     Clothing: { active: 'shirt', inactive: 'shirt-outline' },
     Tailoring: { active: 'cut', inactive: 'cut-outline' },
     Dashboard: { active: 'stats-chart', inactive: 'stats-chart-outline' },
+    Poultry: { active: 'receipt', inactive: 'receipt-outline' },
+    'Poultry History': { active: 'list', inactive: 'list-outline' },
+    'Poultry Clients': { active: 'people', inactive: 'people-outline' },
 };
 
 function TabBarBackground() {
@@ -152,6 +171,7 @@ export default function MainTabs() {
     const { isActive } = useAttendanceStore();
     const isClothingMode = user?.preferredPosMode === 'clothing';
     const isSupermarketMode = user?.preferredPosMode === 'supermarket';
+    const isPoultryMode = user?.preferredPosMode === 'poultry';
     const isRestaurantMode = user?.preferredPosMode === 'restaurant' || !user?.preferredPosMode;
     const { colors, isDark } = useAppTheme();
     const socket = useSocket();
@@ -179,15 +199,17 @@ export default function MainTabs() {
         if (tabName === 'Kitchen' && !isRestaurantMode) return false;
         if (tabName === 'Clothing' && !isClothingMode) return false;
         if (tabName === 'Tailoring' && !isClothingMode) return false;
-        
-        // Market POS and Clothing POS do not use the Mobile POS/Menu screens.
+        if (tabName === 'Poultry' && !isPoultryMode) return false;
+
+        // Market POS, Clothing POS, Poultry POS do not use the Mobile POS/Menu screens.
+        if (isPoultryMode && ['POS', 'Kitchen', 'Tailoring', 'Clothing'].includes(tabName)) return false;
         if (isSupermarketMode && ['POS', 'Kitchen', 'Menu', 'Tailoring', 'Clothing'].includes(tabName)) return false;
         if (isClothingMode && ['POS', 'Kitchen', 'Menu', 'Clothing'].includes(tabName)) return false;
 
         // Owners and stakeholders bypass shift locks
         if (role === 'owner' || role === 'manager') {
             // Managers and Owners don't need Waiter Dashboard
-            if (tabName === 'Dashboard') return false; 
+            if (tabName === 'Dashboard') return false;
             return true;
         }
 
@@ -206,13 +228,13 @@ export default function MainTabs() {
         if (role === 'biller') return ['POS', 'Menu', 'Profile'].includes(tabName);
         if (role === 'inventory') return ['Inventory', 'Clothing', 'Menu', 'Profile'].includes(tabName);
         if (role === 'tailor') return ['Tailoring', 'Profile'].includes(tabName);
-        
+
         return false;
     };
 
     const getTabBarVisibility = (route: any) => {
         const routeName = getFocusedRouteNameFromRoute(route) ?? '';
-        const hiddenRoutes = ['AddInventory', 'Expenditure', 'EmployeeManagement', 'AppSettings', 'HelpSupport', 'EditMenuItem', 'MenuDigitizer', 'OrderHistory', 'Checkout', 'Order', 'KitchenOrders', 'NewTailoringJob', 'TokenLookup'];
+        const hiddenRoutes = ['AddInventory', 'Expenditure', 'EmployeeManagement', 'AppSettings', 'HelpSupport', 'EditMenuItem', 'MenuDigitizer', 'OrderHistory', 'Checkout', 'Order', 'KitchenOrders', 'NewTailoringJob', 'TokenLookup', 'PoultryPurchaseDetail', 'PoultryPOS', 'PoultryHistory'];
         if (hiddenRoutes.includes(routeName)) {
             return 'none';
         }
@@ -222,6 +244,7 @@ export default function MainTabs() {
     return (
         <Tab.Navigator
             key={`tabs-${user?.preferredPosMode || 'restaurant'}-${role}-${isActive}`}
+            initialRouteName={role === 'owner' || role === 'stakeholder' ? 'Analytics' : 'POS'}
             screenOptions={({ route }) => ({
                 headerShown: false,
                 tabBarBackground: TabBarBackground,
@@ -265,12 +288,15 @@ export default function MainTabs() {
                 },
             })}
         >
+            {(role === 'owner' || role === 'stakeholder') && canSeeTab('Analytics') && <Tab.Screen name="Analytics" component={AnalyticsScreen} />}
             {canSeeTab('POS') && <Tab.Screen name="POS" component={POSNavigator} options={{ title: 'POS' }} />}
+            {canSeeTab('Poultry') && <Tab.Screen name="Poultry Clients" component={PoultryClientsNavigator} />}
+            {canSeeTab('Poultry') && <Tab.Screen name="Poultry History" component={PoultryHistoryScreen} />}
             {canSeeTab('Dashboard') && <Tab.Screen name="Dashboard" component={DashboardNavigator} options={{ title: 'Dashboard' }} />}
             {canSeeTab('Kitchen') && <Tab.Screen name="Kitchen" component={KitchenNavigator} options={{ title: 'KOT' }} />}
             {canSeeTab('Menu') && <Tab.Screen name="Menu" component={MenuNavigator} />}
             {canSeeTab('Inventory') && <Tab.Screen name="Inventory" component={InventoryNavigator} />}
-            {canSeeTab('Analytics') && <Tab.Screen name="Analytics" component={AnalyticsScreen} />}
+            {role !== 'owner' && role !== 'stakeholder' && canSeeTab('Analytics') && <Tab.Screen name="Analytics" component={AnalyticsScreen} />}
             {canSeeTab('AI Tools') && <Tab.Screen name="AI Tools" component={AIToolsScreen} />}
             {canSeeTab('Clothing') && <Tab.Screen name="Clothing" component={ClothingNavigator} />}
             {canSeeTab('Tailoring') && <Tab.Screen name="Tailoring" component={TailoringNavigator} />}

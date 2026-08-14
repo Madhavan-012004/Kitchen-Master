@@ -24,7 +24,7 @@ import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
-@SuppressWarnings("null")
+
 public class AiService {
 
     @Value("${app.gemini.api-key}")
@@ -43,11 +43,14 @@ public class AiService {
     private final ObjectMapper objectMapper;
 
     /**
-     * Calls Gemini API for image parsing or voice decoding (if needed by other modules).
-     * The Chatbot now uses a Local Knowledge Engine completely bypassing external APIs.
+     * Calls Gemini API for image parsing or voice decoding (if needed by other
+     * modules).
+     * The Chatbot now uses a Local Knowledge Engine completely bypassing external
+     * APIs.
      */
     private String callGemini(List<Map<String, Object>> parts) {
-        if (geminiApiUrl == null) throw new RuntimeException("Gemini API URL is not configured");
+        if (geminiApiUrl == null)
+            throw new RuntimeException("Gemini API URL is not configured");
         WebClient client = webClientBuilder.baseUrl(geminiApiUrl).build();
 
         Map<String, Object> content = Map.of("parts", parts);
@@ -61,10 +64,12 @@ public class AiService {
                 .bodyToMono(Map.class)
                 .block();
 
-        if (response == null) throw new RuntimeException("Empty response from Gemini");
+        if (response == null)
+            throw new RuntimeException("Empty response from Gemini");
 
         List<?> candidates = (List<?>) response.get("candidates");
-        if (candidates == null || candidates.isEmpty()) throw new RuntimeException("No AI response generated");
+        if (candidates == null || candidates.isEmpty())
+            throw new RuntimeException("No AI response generated");
 
         Map<?, ?> candidate = (Map<?, ?>) candidates.get(0);
         Map<?, ?> responseContent = (Map<?, ?>) candidate.get("content");
@@ -99,56 +104,58 @@ public class AiService {
         String text = callGemini(parts);
         String json = extractJson(text, true);
         try {
-            return objectMapper.readValue(json, new TypeReference<List<Map<String, Object>>>() {});
+            return objectMapper.readValue(json, new TypeReference<List<Map<String, Object>>>() {
+            });
         } catch (Exception e) {
             throw new RuntimeException("Failed to decode the menu.");
         }
     }
 
     public List<Map<String, Object>> analyzeInvoiceImage(byte[] imageBytes, String mimeType) {
-        String prompt =
-            "You are an expert FMCG wholesale invoice data extraction engine. " +
-            "Carefully analyze the provided invoice image and extract every line item from the product table.\n\n" +
+        String prompt = "You are an expert FMCG wholesale invoice data extraction engine. " +
+                "Carefully analyze the provided invoice image and extract every line item from the product table.\n\n" +
 
-            "The invoice table columns are (in order from left to right):\n" +
-            "  S.No | Material Description | HSN Code | Cas/EA (Cases = Box number) | Pcs (Pieces = Quantity) | MRP (Maximum Retail Price = Selling Rate) | Rate (Buying/Purchase Rate) | Free Qty (Free pieces given) | Dis. Amt (Discount Amount) | SGST (State GST amount) | CGST (Central GST amount) | Total Amt (Line total amount)\n\n" +
+                "The invoice table columns are (in order from left to right):\n" +
+                "  S.No | Material Description | HSN Code | Cas/EA (Cases = Box number) | Pcs (Pieces = Quantity) | MRP (Maximum Retail Price = Selling Rate) | Rate (Buying/Purchase Rate) | Free Qty (Free pieces given) | Dis. Amt (Discount Amount) | SGST (State GST amount) | CGST (Central GST amount) | Total Amt (Line total amount)\n\n"
+                +
 
-            "Rules:\n" +
-            "- 'Cas' or 'Cases' or 'EA' = number of boxes/cases (field: cases)\n" +
-            "- 'Pcs' = number of individual pieces = quantity (field: qty)\n" +
-            "- 'MRP' = selling rate / maximum retail price (field: mrp)\n" +
-            "- 'Rate' = buying price / purchase cost per unit (field: costPerUnit)\n" +
-            "- 'Free Qty' or 'Free' = free pieces given at no cost (field: free)\n" +
-            "- 'Dis. Amt' or 'Discount' = monetary discount amount (field: discount)\n" +
-            "- 'SGST' = State GST tax amount in rupees (field: sgst)\n" +
-            "- 'CGST' = Central GST tax amount in rupees (field: cgst)\n" +
-            "- 'Total Amt' = final line total amount in rupees (field: totalAmount)\n" +
-            "- If any field is missing or zero, use 0 (number), not null.\n" +
-            "- Extract the supplier name, invoice number, invoice date, and grand total from the invoice header/footer.\n\n" +
+                "Rules:\n" +
+                "- 'Cas' or 'Cases' or 'EA' = number of boxes/cases (field: cases)\n" +
+                "- 'Pcs' = number of individual pieces = quantity (field: qty)\n" +
+                "- 'MRP' = selling rate / maximum retail price (field: mrp)\n" +
+                "- 'Rate' = buying price / purchase cost per unit (field: costPerUnit)\n" +
+                "- 'Free Qty' or 'Free' = free pieces given at no cost (field: free)\n" +
+                "- 'Dis. Amt' or 'Discount' = monetary discount amount (field: discount)\n" +
+                "- 'SGST' = State GST tax amount in rupees (field: sgst)\n" +
+                "- 'CGST' = Central GST tax amount in rupees (field: cgst)\n" +
+                "- 'Total Amt' = final line total amount in rupees (field: totalAmount)\n" +
+                "- If any field is missing or zero, use 0 (number), not null.\n" +
+                "- Extract the supplier name, invoice number, invoice date, and grand total from the invoice header/footer.\n\n"
+                +
 
-            "Return ONLY a valid JSON object in this exact structure — no markdown, no extra text:\n" +
-            "{\n" +
-            "  \"supplier\": \"supplier name here\",\n" +
-            "  \"invoiceNo\": \"invoice number here\",\n" +
-            "  \"invoiceDate\": \"date here\",\n" +
-            "  \"invoiceTotalAmount\": 0.00,\n" +
-            "  \"items\": [\n" +
-            "    {\n" +
-            "      \"sNo\": 1,\n" +
-            "      \"name\": \"Material Description\",\n" +
-            "      \"hsnCode\": \"21050000\",\n" +
-            "      \"cases\": 6,\n" +
-            "      \"qty\": 144,\n" +
-            "      \"mrp\": 10.00,\n" +
-            "      \"costPerUnit\": 8.38,\n" +
-            "      \"free\": 0,\n" +
-            "      \"discount\": 0.00,\n" +
-            "      \"sgst\": 30.17,\n" +
-            "      \"cgst\": 30.17,\n" +
-            "      \"totalAmount\": 1267.20\n" +
-            "    }\n" +
-            "  ]\n" +
-            "}";
+                "Return ONLY a valid JSON object in this exact structure — no markdown, no extra text:\n" +
+                "{\n" +
+                "  \"supplier\": \"supplier name here\",\n" +
+                "  \"invoiceNo\": \"invoice number here\",\n" +
+                "  \"invoiceDate\": \"date here\",\n" +
+                "  \"invoiceTotalAmount\": 0.00,\n" +
+                "  \"items\": [\n" +
+                "    {\n" +
+                "      \"sNo\": 1,\n" +
+                "      \"name\": \"Material Description\",\n" +
+                "      \"hsnCode\": \"21050000\",\n" +
+                "      \"cases\": 6,\n" +
+                "      \"qty\": 144,\n" +
+                "      \"mrp\": 10.00,\n" +
+                "      \"costPerUnit\": 8.38,\n" +
+                "      \"free\": 0,\n" +
+                "      \"discount\": 0.00,\n" +
+                "      \"sgst\": 30.17,\n" +
+                "      \"cgst\": 30.17,\n" +
+                "      \"totalAmount\": 1267.20\n" +
+                "    }\n" +
+                "  ]\n" +
+                "}";
 
         String base64Image = Base64.getEncoder().encodeToString(imageBytes);
         List<Map<String, Object>> parts = new ArrayList<>();
@@ -158,15 +165,19 @@ public class AiService {
         String text = callGemini(parts);
         String json = extractJson(text, false); // object-level extraction
         try {
-            Map<String, Object> result = objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
-            // Return items list; wrap the full envelope as the first element for compatibility
-            // The controller returns List<Map> so we wrap the full response as a single-element list
+            Map<String, Object> result = objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {
+            });
+            // Return items list; wrap the full envelope as the first element for
+            // compatibility
+            // The controller returns List<Map> so we wrap the full response as a
+            // single-element list
             // and let the frontend detect the 'items' key
             List<Map<String, Object>> envelope = new ArrayList<>();
             envelope.add(result);
             return envelope;
         } catch (Exception e) {
-            throw new RuntimeException("Failed to parse invoice data from image. Raw: " + text.substring(0, Math.min(200, text.length())));
+            throw new RuntimeException(
+                    "Failed to parse invoice data from image. Raw: " + text.substring(0, Math.min(200, text.length())));
         }
     }
 
@@ -175,29 +186,34 @@ public class AiService {
         String text = callGemini(List.of(Map.of("text", prompt)));
         String json = extractJson(text, false);
         try {
-            return objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+            return objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {
+            });
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse voice order");
         }
     }
 
-    public List<Map<String, Object>> getUpsellSuggestions(List<Map<String, Object>> cartItems, List<Map<String, Object>> allMenuItems, List<Map<String, Object>> topPairs) {
+    public List<Map<String, Object>> getUpsellSuggestions(List<Map<String, Object>> cartItems,
+            List<Map<String, Object>> allMenuItems, List<Map<String, Object>> topPairs) {
         String prompt = "Suggest 3 upsell items in JSON.";
         String text = callGemini(List.of(Map.of("text", prompt)));
         String json = extractJson(text, true);
         try {
-            return objectMapper.readValue(json, new TypeReference<List<Map<String, Object>>>() {});
+            return objectMapper.readValue(json, new TypeReference<List<Map<String, Object>>>() {
+            });
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse upsell suggestions");
         }
     }
 
-    public List<Map<String, Object>> forecastInventoryNeeds(List<Map<String, Object>> lowStockItems, List<Map<String, Object>> salesSummary) {
+    public List<Map<String, Object>> forecastInventoryNeeds(List<Map<String, Object>> lowStockItems,
+            List<Map<String, Object>> salesSummary) {
         String prompt = "Forecast inventory needs in JSON.";
         String text = callGemini(List.of(Map.of("text", prompt)));
         String json = extractJson(text, true);
         try {
-            return objectMapper.readValue(json, new TypeReference<List<Map<String, Object>>>() {});
+            return objectMapper.readValue(json, new TypeReference<List<Map<String, Object>>>() {
+            });
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse inventory forecast");
         }
@@ -207,9 +223,10 @@ public class AiService {
      * Advanced Local AI Reasoning Engine (No External APIs)
      */
     public String chatWithAi(String prompt, @NonNull Map<String, Object> context) {
-        if (prompt == null || prompt.trim().isEmpty()) return "How can I help you today?";
+        if (prompt == null || prompt.trim().isEmpty())
+            return "How can I help you today?";
         String input = prompt.toLowerCase().trim();
-        
+
         Object resObj = context.get("restaurant");
         if (!(resObj instanceof User)) {
             return "Context missing: Restaurant information is required for analysis.";
@@ -222,14 +239,16 @@ public class AiService {
         }
 
         // 2. EMPLOYEES / WORKFORCE (Parsing specific roles)
-        if (input.contains("employee") || input.contains("staff") || input.contains("worker") || input.contains("team") || input.contains("waiter") || input.contains("manager")) {
+        if (input.contains("employee") || input.contains("staff") || input.contains("worker") || input.contains("team")
+                || input.contains("waiter") || input.contains("manager")) {
             List<User> employees = userRepository.findByParentOwnerAndIsActiveTrue(restaurant);
             if (employees.isEmpty()) {
                 return "You currently have no active team members registered in the system. You can add staff members from the **Employees** dashboard.";
             }
 
-            Map<User.Role, Long> roleCounts = employees.stream().collect(Collectors.groupingBy(User::getRole, Collectors.counting()));
-            
+            Map<User.Role, Long> roleCounts = employees.stream()
+                    .collect(Collectors.groupingBy(User::getRole, Collectors.counting()));
+
             // Check if asking for specific role (e.g., "how many waiters do i have?")
             for (User.Role r : User.Role.values()) {
                 if (input.contains(r.name().toLowerCase())) {
@@ -243,17 +262,21 @@ public class AiService {
             sb.append("Here is your restaurant's active staff distribution:\n\n");
             sb.append("| Role Profile | Active Count |\n");
             sb.append("| :--- | :--- |\n");
-            roleCounts.forEach((role, count) -> sb.append("| ").append(role.name()).append(" | **").append(count).append("** |\n"));
+            roleCounts.forEach((role, count) -> sb.append("| ").append(role.name()).append(" | **").append(count)
+                    .append("** |\n"));
             sb.append("\n**Total Active Workforce:** ").append(employees.size()).append(" members.");
             return sb.toString();
         }
 
         // 3. MENU / CATEGORIES / PRICING
-        if (input.contains("menu") || input.contains("category") || input.contains("item") || input.contains("dish") || input.contains("price") || input.contains("food")) {
+        if (input.contains("menu") || input.contains("category") || input.contains("item") || input.contains("dish")
+                || input.contains("price") || input.contains("food")) {
             List<MenuItem> items = menuItemRepository.findByRestaurantOrderBySortOrderAsc(restaurant);
-            if (items.isEmpty()) return "Your digital menu catalog is currently empty. Please configure it in the Menu Management module.";
+            if (items.isEmpty())
+                return "Your digital menu catalog is currently empty. Please configure it in the Menu Management module.";
 
-            Map<String, Long> categoryCounts = items.stream().collect(Collectors.groupingBy(MenuItem::getCategory, Collectors.counting()));
+            Map<String, Long> categoryCounts = items.stream()
+                    .collect(Collectors.groupingBy(MenuItem::getCategory, Collectors.counting()));
             OptionalDouble avgPrice = items.stream().mapToDouble(MenuItem::getPrice).average();
 
             StringBuilder sb = new StringBuilder();
@@ -262,16 +285,19 @@ public class AiService {
             sb.append("- **Total Active Items:** ").append(items.size()).append("\n");
             sb.append("- **Total Categories:** ").append(categoryCounts.size()).append("\n");
             if (avgPrice.isPresent()) {
-                sb.append("- **Average Item Price:** ₹").append(String.format("%.2f", avgPrice.getAsDouble())).append("\n\n");
+                sb.append("- **Average Item Price:** ₹").append(String.format("%.2f", avgPrice.getAsDouble()))
+                        .append("\n\n");
             }
             sb.append("#### Category Distribution\n");
             sb.append("| Menu Category | Item Count |\n| :--- | :--- |\n");
-            categoryCounts.forEach((cat, count) -> sb.append("| ").append(cat).append(" | **").append(count).append("** |\n"));
+            categoryCounts.forEach(
+                    (cat, count) -> sb.append("| ").append(cat).append(" | **").append(count).append("** |\n"));
             return sb.toString();
         }
 
         // 4. SALES / REVENUE (Advanced Date Processing)
-        if (input.contains("sales") || input.contains("revenue") || input.contains("report") || input.contains("earn") || input.contains("make") || input.contains("sold")) {
+        if (input.contains("sales") || input.contains("revenue") || input.contains("report") || input.contains("earn")
+                || input.contains("make") || input.contains("sold")) {
             LocalDateTime start;
             LocalDateTime end = LocalDateTime.now();
             String periodLabel;
@@ -293,33 +319,38 @@ public class AiService {
                 start = LocalDateTime.of(LocalDate.now(), LocalTime.MIN);
                 periodLabel = "Today";
             }
-            
+
             Double revenue = ordersRepository.sumRevenueByRestaurantAndDateRange(restaurant, start, end);
             Long orderCount = ordersRepository.countOrdersByRestaurantAndDateRange(restaurant, start, end);
-            
+
             if (orderCount == null || orderCount == 0) {
-                return String.format("A scan of the local transaction ledger reveals **no completed orders** for %s.", periodLabel);
+                return String.format("A scan of the local transaction ledger reveals **no completed orders** for %s.",
+                        periodLabel);
             }
 
             StringBuilder sb = new StringBuilder();
             sb.append(String.format("### 📊 Financial Query: %s\n\n", periodLabel));
             sb.append("Here is the requested locally-generated data:\n\n");
             sb.append("| Financial Metric | Calculated Value |\n| :--- | :--- |\n");
-            sb.append("| **Gross Revenue** | ₹").append(String.format("%.2f", revenue != null ? revenue : 0.0)).append(" |\n");
+            sb.append("| **Gross Revenue** | ₹").append(String.format("%.2f", revenue != null ? revenue : 0.0))
+                    .append(" |\n");
             sb.append("| **Total Orders** | ").append(orderCount).append(" |\n");
-            sb.append("| **Average Order Value** | ₹").append(String.format("%.2f", (revenue != null && orderCount > 0) ? (revenue / orderCount) : 0.0)).append(" |\n");
+            sb.append("| **Average Order Value** | ₹")
+                    .append(String.format("%.2f", (revenue != null && orderCount > 0) ? (revenue / orderCount) : 0.0))
+                    .append(" |\n");
             return sb.toString();
         }
 
         // 5. HELP COMMAND
-        if (input.contains("help") || input.contains("what can you do") || input.contains("features") || input.contains("how to")) {
+        if (input.contains("help") || input.contains("what can you do") || input.contains("features")
+                || input.contains("how to")) {
             return "**System Capabilities (Local AI Engine)**\n\n" +
-                   "I am running a custom deterministic AI locally on your server. I do not use external APIs.\n\n" +
-                   "**Try typing these phrases naturally:**\n" +
-                   "- *\"How much revenue did we make this month?\"*\n" +
-                   "- *\"What is the total number of waiters we have?\"*\n" +
-                   "- *\"Analyze my menu and give me the average price.\"*\n" +
-                   "- *\"Show me yesterday's sales summary.\"*";
+                    "I am running a custom deterministic AI locally on your server. I do not use external APIs.\n\n" +
+                    "**Try typing these phrases naturally:**\n" +
+                    "- *\"How much revenue did we make this month?\"*\n" +
+                    "- *\"What is the total number of waiters we have?\"*\n" +
+                    "- *\"Analyze my menu and give me the average price.\"*\n" +
+                    "- *\"Show me yesterday's sales summary.\"*";
         }
 
         // 6. DEFAULT HEURISTIC FALLBACK

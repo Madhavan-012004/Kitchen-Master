@@ -13,7 +13,7 @@ import java.nio.file.Path;
 import java.util.stream.Collectors;
 
 @Service
-@SuppressWarnings("null")
+
 public class InvoiceOcrService {
 
     private final ObjectMapper objectMapper = new ObjectMapper();

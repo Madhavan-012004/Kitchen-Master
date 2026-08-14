@@ -10,7 +10,7 @@ import java.util.*;
 
 @Service
 @RequiredArgsConstructor
-@SuppressWarnings("null")
+
 public class AIChatService {
 
     private final OrdersRepository orderRepository;

@@ -8,6 +8,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import { useMenuStore } from '../../store/useMenuStore';
+import { useAuthStore } from '../../store/useAuthStore';
+import apiClient from '../../api/client';
 import { useAppTheme, Typography, Spacing, Radius, Shadows } from '../../theme';
 
 const CATEGORY_COLORS: Record<string, readonly [string, string]> = {
@@ -26,9 +28,71 @@ export default function MenuListScreen({ navigation }: any) {
     const { colors, gradients, isDark } = useAppTheme();
     const themedStyles = React.useMemo(() => createStyles(colors, gradients, isDark), [colors, gradients, isDark]);
     const { items, isLoading, fetchMenu, toggleItem, deleteItem } = useMenuStore();
+    const { user } = useAuthStore();
+    const isPoultry = user?.preferredPosMode === 'poultry';
+    const isManagerOrOwner = user?.role === 'owner' || user?.role === 'manager';
     const [searchQuery, setSearchQuery] = useState('');
+    const [categoryRates, setCategoryRates] = useState<Record<string, string>>({});
+    const [updatingRates, setUpdatingRates] = useState(false);
+    const [ratesExpanded, setRatesExpanded] = useState(false);
 
     useEffect(() => { fetchMenu(); }, []);
+
+    useEffect(() => {
+        if (isPoultry && items.length > 0) {
+            const rates: any = {};
+            items.forEach((i: any) => {
+                const catStr = (i.category || '').trim().toUpperCase();
+                if (catStr && !rates[catStr] && i.buyingPrice > 0) rates[catStr] = String(i.buyingPrice);
+            });
+            setCategoryRates(prev => ({ ...rates, ...prev }));
+        }
+    }, [items, isPoultry]);
+
+    const handleUpdateCategoryRates = async () => {
+        setUpdatingRates(true);
+        let successCount = 0;
+        try {
+            const updates = [];
+            for (const item of (items as any[])) {
+                const catStr = (item.category || '').trim().toUpperCase();
+                const newBase = parseFloat(categoryRates[catStr] || '0');
+                if (newBase > 0) {
+                    const wastage = parseFloat(item.wastage) || 0;
+                    const profit = parseFloat(item.profit) || 0;
+                    const oldBase = parseFloat(item.buyingPrice) || 0;
+
+                    if (oldBase !== newBase) {
+                        const newSelling = newBase + (newBase * wastage / 100) + profit;
+                        const meta = { buy: newBase, sell: +newSelling.toFixed(2), qty: item.quantityType || 'kg', wastage, profit };
+                        const descBase = (item.description || '').split('||META:')[0];
+                        const newDesc = descBase + '||META:' + JSON.stringify(meta);
+
+                        updates.push(apiClient.put(`/menu/${item._id || item.id}`, {
+                            ...item,
+                            buyingPrice: newBase,
+                            sellingPrice: +newSelling.toFixed(2),
+                            price: +newSelling.toFixed(2),
+                            description: newDesc
+                        }));
+                        successCount++;
+                    }
+                }
+            }
+            if (updates.length > 0) {
+                await Promise.all(updates);
+                Toast.show({ type: 'success', text1: 'Rates Updated', text2: `Updated ${successCount} items` });
+                fetchMenu();
+            } else {
+                Toast.show({ type: 'info', text1: 'No changes', text2: 'No base rates were altered' });
+            }
+        } catch (err) {
+            Toast.show({ type: 'error', text1: 'Update Failed' });
+        }
+        setUpdatingRates(false);
+    };
+
+    const uniqueCategories = Array.from(new Set(items.map(i => (i.category || '').trim().toUpperCase()))).filter(Boolean);
 
     const filteredItems = (items || []).filter(item =>
         item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -84,9 +148,9 @@ export default function MenuListScreen({ navigation }: any) {
 
                 <View style={themedStyles.cardActions}>
                     <TouchableOpacity
-                        style={[themedStyles.availBtn, { 
-                            backgroundColor: isAvailable ? (colors.success || '#00D68F') + '1A' : (colors.error || '#FF5C7C') + '1A', 
-                            borderColor: isAvailable ? (colors.success || '#00D68F') + '4D' : (colors.error || '#FF5C7C') + '4D' 
+                        style={[themedStyles.availBtn, {
+                            backgroundColor: isAvailable ? (colors.success || '#00D68F') + '1A' : (colors.error || '#FF5C7C') + '1A',
+                            borderColor: isAvailable ? (colors.success || '#00D68F') + '4D' : (colors.error || '#FF5C7C') + '4D'
                         }]}
                         onPress={handleToggle}
                     >
@@ -143,6 +207,46 @@ export default function MenuListScreen({ navigation }: any) {
                         </TouchableOpacity>
                     )}
                 </View>
+
+                {isPoultry && isManagerOrOwner && uniqueCategories.length > 0 && (
+                    <View style={themedStyles.ratesBanner}>
+                        <View style={themedStyles.ratesHeader}>
+                            <Ionicons name="trending-up-outline" size={24} color={colors.accent || '#00D68F'} />
+                            <View style={{ flex: 1, marginLeft: 12 }}>
+                                <Text style={themedStyles.ratesTitle}>Today's Market Rates</Text>
+                                <Text style={themedStyles.ratesSub}>Sets base values & recalculates retail prices</Text>
+                            </View>
+                            <TouchableOpacity onPress={() => setRatesExpanded(!ratesExpanded)} style={{ padding: 4 }}>
+                                <Ionicons name={ratesExpanded ? 'chevron-up' : 'chevron-down'} size={24} color={colors.textPrimary} />
+                            </TouchableOpacity>
+                        </View>
+                        {ratesExpanded && (
+                            <>
+                                <View style={themedStyles.ratesGrid}>
+                                    {uniqueCategories.map(cat => (
+                                        <View key={cat} style={themedStyles.rateInputCard}>
+                                            <Text style={themedStyles.rateLabel}>{cat}</Text>
+                                            <View style={themedStyles.rateInputWrapper}>
+                                                <Text style={themedStyles.rateSymbol}>₹</Text>
+                                                <TextInput
+                                                    style={themedStyles.rateInput}
+                                                    value={categoryRates[cat] || ''}
+                                                    onChangeText={v => setCategoryRates(prev => ({ ...prev, [cat]: v }))}
+                                                    keyboardType="numeric"
+                                                    placeholder="0"
+                                                    placeholderTextColor={colors.textMuted}
+                                                />
+                                            </View>
+                                        </View>
+                                    ))}
+                                </View>
+                                <TouchableOpacity style={themedStyles.ratesSaveBtn} onPress={handleUpdateCategoryRates} disabled={updatingRates}>
+                                    <Text style={themedStyles.ratesSaveBtnText}>{updatingRates ? 'Updating...' : 'Save Market Rates'}</Text>
+                                </TouchableOpacity>
+                            </>
+                        )}
+                    </View>
+                )}
 
                 {isLoading && items.length === 0 ? (
                     <View style={themedStyles.center}>
@@ -235,4 +339,19 @@ const createStyles = (colors: any, gradients: any, isDark: boolean) => StyleShee
     },
     emptyTitle: { ...Typography.h4, color: colors.textSecondary },
     emptyText: { ...Typography.body2, color: colors.textMuted },
+    ratesBanner: {
+        backgroundColor: colors.card, marginHorizontal: Spacing.lg, marginBottom: Spacing.md,
+        borderRadius: Radius.md, padding: Spacing.md, borderWidth: 1, borderColor: colors.border
+    },
+    ratesHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.md },
+    ratesTitle: { ...Typography.h5, color: colors.textPrimary },
+    ratesSub: { ...Typography.caption, color: colors.textMuted },
+    ratesGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: Spacing.md },
+    rateInputCard: { flex: 1, minWidth: 80, backgroundColor: colors.background, padding: 8, borderRadius: 8, borderWidth: 1, borderColor: colors.border },
+    rateLabel: { ...Typography.overline, color: colors.textSecondary, marginBottom: 4 },
+    rateInputWrapper: { flexDirection: 'row', alignItems: 'center' },
+    rateSymbol: { color: colors.primary, marginRight: 4, fontWeight: '700' },
+    rateInput: { flex: 1, color: colors.textPrimary, padding: 0, fontSize: 16 },
+    ratesSaveBtn: { backgroundColor: colors.accent || '#00D68F', paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
+    ratesSaveBtnText: { color: '#0f172a', fontWeight: '700' },
 });

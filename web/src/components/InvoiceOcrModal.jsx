@@ -65,10 +65,14 @@ function mapNumTokens(numTokens) {
     const n = numTokens;
     const len = n.length;
 
-    // Helper: check if qty * rate ≈ expected total (within 1%)
-    const matchesQtyRate = (q, r, t) => q > 0 && r > 0 && Math.abs(q * r - t) < Math.max(1, t * 0.015);
+    // Helper: check if qty * rate ≈ expected total (within 3% + flat ₹2 tolerance)
+    const matchesQtyRate = (q, r, t) => q > 0 && r > 0 && t > 0 && Math.abs(q * r - t) <= Math.max(2, t * 0.03);
 
-    if (len >= 9) {
+    if (len >= 10) {
+        // 10-col: Cases, Qty, MRP, Rate, Free, Discount, SGST, CGST, IGST, Total
+        [cases, qty, mrp, costPerUnit, free, discount, sgst, cgst] = n;
+        totalAmount = n[9];
+    } else if (len === 9) {
         // Standard 9-col: Cases, Qty, MRP, Rate, Free, Discount, SGST, CGST, Total
         [cases, qty, mrp, costPerUnit, free, discount, sgst, cgst, totalAmount] = n;
 
@@ -247,6 +251,62 @@ function detectFieldFromText(text) {
 //  4. Mode A (Row-based): find a header row, use X-positions to assign values per row
 //  5. Mode B (Column-based): each column is at the same Y; use keyword-labeled groups
 // ═════════════════════════════════════════════════════════════════════════════
+// parseImageItems: shared row-grouping + parsing for Tesseract image OCR output
+// (same logic as parsePdfInvoice but accepts pre-built allItems + flatText)
+// ═════════════════════════════════════════════════════════════════════════════
+function parseImageItems(allItems, flatText) {
+    let invoiceNo = '', supplier = '', date = new Date().toISOString().split('T')[0];
+
+    const invM = flatText.match(/Invoice\s*No\.?\s*[:\-]?\s*([A-Z0-9][A-Z0-9/\-]{2,20})/i) || flatText.match(/Bill\s*No\.?\s*[:\-]?\s*([A-Z0-9][A-Z0-9/\-]{2,20})/i) || flatText.match(/Invoice\s*No[^:]*:\s*(\d{5,})/i);
+    if (invM) invoiceNo = invM[1].replace(/\s/g, '');
+
+    const dateM = flatText.match(/(?:Invoice|Bill)\s*Date\s*[:\-]?\s*(\d{2}[.\-\/]\d{2}[.\-\/]\d{4})/i) || flatText.match(/(\d{2}[.\-\/]\d{2}[.\-\/]\d{4})/);
+    if (dateM) { const dp = dateM[1].split(/[.\-\/]/); date = dp[0].length===4 ? `${dp[0]}-${dp[1]}-${dp[2]}` : `${dp[2]}-${dp[1]}-${dp[0]}`; }
+
+    // Group by Y
+    const Y_TOL = 5, yGroups = new Map();
+    for (const item of allItems) {
+        let canon = null;
+        for (const k of yGroups.keys()) { if (Math.abs(item.y - k) <= Y_TOL) { canon = k; break; } }
+        if (canon === null) yGroups.set(item.y, [item]); else yGroups.get(canon).push(item);
+    }
+    for (const [, g] of yGroups) g.sort((a, b) => a.x - b.x);
+
+    // Simple row parsing: find rows with HSN code or at least alpha + 2+ numbers
+    const productRows = [];
+    const sortedByY = [...yGroups.entries()].sort((a, b) => b[0] - a[0]);
+    for (const [, items] of sortedByY) {
+        const texts = items.map(i => i.str);
+        const joined = texts.join(' ');
+        if (/(total|payable|grand|amount in words|rupees|vat|cess|round)/i.test(joined.substring(0, 50))) continue;
+        const hsnIdx = texts.findIndex(t => /^\d{4,8}$/.test(t));
+        const hasAlpha = texts.some(t => /[a-zA-Z]{3,}/.test(t));
+        const numTokens = texts.map(t => parseFloat(t.replace(/[,₹]/g, ''))).filter(v => !isNaN(v) && v > 0 && v < 999999);
+        if (!hasAlpha || numTokens.length < 2) continue;
+
+        let nameStart = /^\d{1,3}$/.test(texts[0]) ? 1 : 0;
+        const nameEnd = hsnIdx > 0 ? hsnIdx : texts.findIndex(t => /^\d+\.\d/.test(t));
+        const name = texts.slice(nameStart, nameEnd > 0 ? nameEnd : texts.length).filter(t => /[a-zA-Z]{2,}/.test(t) && !UOM_TOKENS.has(t.toLowerCase())).join(' ').trim();
+        if (!name || name.length < 2) continue;
+
+        const rowData = mapNumTokens(numTokens);
+        if (rowData.qty === 0 && rowData.totalAmount === 0) continue;
+        productRows.push({ name, hsnCode: hsnIdx >= 0 ? texts[hsnIdx] : '', ...rowData });
+    }
+
+    // Supplier heuristic
+    const skipRE = /invoice|bill|tax|original|gstin|gst no|pan|date|place|mobile|phone|fax|email|www|ref|order|state|district|address|pincode|buyer|consignee/i;
+    const topItems = allItems.slice(0, Math.min(35, Math.ceil(allItems.length * 0.2)));
+    for (const item of topItems) {
+        const s = item.str.trim();
+        if (s.length < 5 || s.length > 80 || skipRE.test(s)) continue;
+        if (/^[A-Z][A-Za-z\s.&',()\-]{5,}/.test(s)) { supplier = s; break; }
+    }
+
+    return { invoiceNo, supplier, date, productRows };
+}
+
+
 async function parsePdfInvoice(file) {
     const arrayBuffer = await file.arrayBuffer();
     const doc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -271,6 +331,23 @@ async function parsePdfInvoice(file) {
 
     // ── Metadata ──────────────────────────────────────────────────────────────
     let invoiceNo = '', supplier = '', date = new Date().toISOString().split('T')[0];
+    let supplierGstin = '', buyerGstin = '', state = '', igstTotal = 0, extractedGrandTotal = null;
+
+    // ── GSTIN extraction (15-char Indian GST format) ───────────────────────────
+    const GST_STATE_CODES = {'01':'Jammu & Kashmir','02':'Himachal Pradesh','03':'Punjab','04':'Chandigarh','05':'Uttarakhand','06':'Haryana','07':'Delhi','08':'Rajasthan','09':'Uttar Pradesh','10':'Bihar','11':'Sikkim','12':'Arunachal Pradesh','13':'Nagaland','14':'Manipur','15':'Mizoram','16':'Tripura','17':'Meghalaya','18':'Assam','19':'West Bengal','20':'Jharkhand','21':'Odisha','22':'Chhattisgarh','23':'Madhya Pradesh','24':'Gujarat','27':'Maharashtra','29':'Karnataka','30':'Goa','32':'Kerala','33':'Tamil Nadu','34':'Puducherry','36':'Telangana','37':'Andhra Pradesh'};
+    const gstMatches = [...flatText.matchAll(/\b([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z])\b/gi)];
+    if (gstMatches.length > 0) { supplierGstin = gstMatches[0][1].toUpperCase(); state = GST_STATE_CODES[supplierGstin.substring(0,2)] || ''; }
+    if (gstMatches.length > 1) buyerGstin = gstMatches[1][1].toUpperCase();
+    if (!state) { const sm = flatText.match(/State\s*[:\-]?\s*([A-Za-z\s]{3,25})(?=\s*(?:Code|GSTIN|\d))/i); if (sm) state = sm[1].trim(); }
+
+    // ── IGST extraction ────────────────────────────────────────────────────────
+    const igstM = flatText.match(/IGST\s*(?:Amount|Amt|Tax)?\s*[:\-]?\s*(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{1,2})?)/i);
+    if (igstM) igstTotal = parseFloat(igstM[1].replace(/,/g,''));
+
+    // ── Grand total extraction (try multiple labels, pick highest) ─────────────
+    const gtPats = [/Grand\s*Total[^\d]*(\d[\d,]*\.?\d{0,2})/i,/Net\s*Payable[^\d]*(\d[\d,]*\.?\d{0,2})/i,/Total\s*Payable[^\d]*(\d[\d,]*\.?\d{0,2})/i,/Invoice\s*(?:Total|Value)[^\d]*(\d[\d,]*\.?\d{0,2})/i,/Bill\s*Amount[^\d]*(\d[\d,]*\.?\d{0,2})/i,/Amount\s*Payable[^\d]*(\d[\d,]*\.?\d{0,2})/i];
+    const gtCandidates = gtPats.map(p=>{ const m=flatText.match(p); return m?parseFloat(m[1].replace(/,/g,'')):null; }).filter(Boolean);
+    if (gtCandidates.length) extractedGrandTotal = Math.max(...gtCandidates);
 
     // ── Invoice Number ─────────────────────────────────────────────────────────
     const invMatch = flatText.match(/Invoice\s*No\.?\s*[:\-]?\s*([A-Z0-9][A-Z0-9/-]{2,20})/i)
@@ -289,8 +366,12 @@ async function parsePdfInvoice(file) {
         || flatText.match(/(\d{4}-\d{2}-\d{2})/)
         || flatText.match(/(\d{2}[.\-\/]\d{2}[.\-\/]\d{4})/);
     if (dateMatch) {
-        // Normalize DD.MM.YYYY → DD/MM/YYYY for consistency
-        date = dateMatch[1].replace(/\./g, '/');
+        // Normalize to YYYY-MM-DD
+        const dp = dateMatch[1].trim().split(/[\.\-\/]/);
+        if (dp.length === 3) {
+            if (dp[0].length === 4) date = `${dp[0]}-${dp[1].padStart(2,'0')}-${dp[2].padStart(2,'0')}`;
+            else date = `${dp[2]}-${dp[1].padStart(2,'0')}-${dp[0].padStart(2,'0')}`;
+        }
     }
 
     // ── Supplier Name ──────────────────────────────────────────────────────────
@@ -312,7 +393,7 @@ async function parsePdfInvoice(file) {
     }
 
     // Step 2: Group by Y (within 8px tolerance)
-    const Y_TOL = 8;
+    const Y_TOL = 5; // tighter = better row separation
     const yGroups = new Map(); // canonicalY → items[]
     for (const item of allItems) {
         let canon = null;
@@ -575,7 +656,7 @@ async function parsePdfInvoice(file) {
         }
     }
 
-    return { invoiceNo, supplier, date, productRows };
+    return { invoiceNo, supplier, date, productRows, supplierGstin, buyerGstin, state, igstTotal, extractedGrandTotal };
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -586,6 +667,11 @@ export default function InvoiceOcrModal({ onClose, onComplete, toast }) {
     const [parsedData, setParsedData] = useState(null);
     const [invoiceNo, setInvoiceNo]   = useState('');
     const [supplierName, setSupplierName] = useState('');
+    const [supplierGstin, setSupplierGstin] = useState('');
+    const [buyerGstin, setBuyerGstin] = useState('');
+    const [stateName, setStateName] = useState('');
+    const [igstAmount, setIgstAmount] = useState('0.00');
+    const [extractedTotal, setExtractedTotal] = useState(null);
     const [invoiceDate, setInvoiceDate]   = useState('');
     const [paymentMethod, setPaymentMethod] = useState('Cash');
     const [saving, setSaving]         = useState(false);
@@ -609,31 +695,60 @@ export default function InvoiceOcrModal({ onClose, onComplete, toast }) {
         if (!file) return;
         setScanning(true);
         try {
-            const formData = new FormData();
-            formData.append('file', file);
-            
-            const response = await api.post('/api/inventory/scan-invoice-python', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-                timeout: 120000 // Allow up to 2 minutes for python OCR
-            });
+            let result;
+            if (file.type === 'application/pdf') {
+                result = await parsePdfInvoice(file);
+            } else {
+                toast?.success?.("Initializing OCR engine...");
+                const worker = await createWorker('eng');
+                const ret = await worker.recognize(file);
+                await worker.terminate();
+                const allItems = [];
+                if (ret.data?.lines) {
+                    for (const line of ret.data.lines) {
+                        if (!line.words) continue;
+                        const lineY = -Math.round(line.bbox.y0);
+                        for (const word of line.words) {
+                            if (!word.text.trim()) continue;
+                            allItems.push({ str: word.text.trim(), x: word.bbox.x0, y: lineY, page: 1 });
+                        }
+                    }
+                }
+                // Re-use parsePdfInvoice logic via the shared grouping inside
+                // For images, we build a fake result using the same allItems structure
+                const flatText = allItems.map(i => i.str).join(' ');
+                const GST_STATE_CODES = {'01':'Jammu & Kashmir','02':'Himachal Pradesh','03':'Punjab','04':'Chandigarh','05':'Uttarakhand','06':'Haryana','07':'Delhi','08':'Rajasthan','09':'Uttar Pradesh','10':'Bihar','11':'Sikkim','12':'Arunachal Pradesh','13':'Nagaland','14':'Manipur','15':'Mizoram','16':'Tripura','17':'Meghalaya','18':'Assam','19':'West Bengal','20':'Jharkhand','21':'Odisha','22':'Chhattisgarh','23':'Madhya Pradesh','24':'Gujarat','27':'Maharashtra','29':'Karnataka','30':'Goa','32':'Kerala','33':'Tamil Nadu','34':'Puducherry','36':'Telangana','37':'Andhra Pradesh'};
+                const gstMs = [...flatText.matchAll(/\b([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z])\b/gi)];
+                const sGstin = gstMs[0]?.[1]?.toUpperCase() || '';
+                const bGstin = gstMs[1]?.[1]?.toUpperCase() || '';
+                const sState = sGstin ? (GST_STATE_CODES[sGstin.substring(0,2)] || '') : '';
+                const igstMx = flatText.match(/IGST\s*(?:Amount|Amt)?\s*[:\-]?\s*[\d,]+(?:\.\d{1,2})?/i);
+                const igstTx = igstMx ? parseFloat(igstMx[0].match(/[\d,]+(?:\.\d{1,2})?$/)?.[0]?.replace(/,/g,'') || '0') : 0;
+                const gtPx = [/Grand\s*Total[^\d]*([\d,]+\.?\d{0,2})/i,/Net\s*Payable[^\d]*([\d,]+\.?\d{0,2})/i,/Total\s*Payable[^\d]*([\d,]+\.?\d{0,2})/i];
+                const gtCx = gtPx.map(p => { const m=flatText.match(p); return m?parseFloat(m[1].replace(/,/g,'')):null; }).filter(Boolean);
+                result = { ...parseImageItems(allItems, flatText), supplierGstin: sGstin, buyerGstin: bGstin, state: sState, igstTotal: igstTx, extractedGrandTotal: gtCx.length ? Math.max(...gtCx) : null };
+            }
 
-            const result = response.data;
             const items = (result.productRows || []).map(r => ({ _idx: Math.random().toString(), ...r }));
-
             setInvoiceNo(result.invoiceNo || 'INV-' + Math.floor(1000 + Math.random() * 9000));
-            setSupplierName(result.supplier || 'LOCAL DISTRIBUTOR');
+            setSupplierName(result.supplier || '');
+            setSupplierGstin(result.supplierGstin || '');
+            setBuyerGstin(result.buyerGstin || '');
+            setStateName(result.state || '');
+            setIgstAmount((result.igstTotal || 0).toFixed(2));
+            setExtractedTotal(result.extractedGrandTotal || null);
             setInvoiceDate(result.date || new Date().toISOString().split('T')[0]);
-            
+
             if (items.length > 0) {
                 setParsedData(items);
-                toast?.success?.(`✅ Extracted ${items.length} line items using Offline AI!`);
+                toast?.success?.(`✅ Extracted ${items.length} line items!`);
             } else {
                 setParsedData([{ _idx: '1', name: '', hsnCode: '', cases: 0, qty: 1, mrp: 0, costPerUnit: 0, free: 0, discount: 0, sgst: 0, cgst: 0, totalAmount: 0 }]);
                 toast?.error?.('Could not detect rows. Please enter data manually.');
             }
         } catch (err) {
             console.error('Scan error:', err);
-            toast?.error?.('Scan failed: ' + (err.response?.data || err.message));
+            toast?.error?.('Scan failed: ' + (err.message || err.response?.data));
         } finally { setScanning(false); }
     };
 
@@ -756,6 +871,10 @@ export default function InvoiceOcrModal({ onClose, onComplete, toast }) {
                                 {[
                                     { label: 'Invoice Number', value: invoiceNo, set: setInvoiceNo },
                                     { label: 'Supplier / Distributor', value: supplierName, set: setSupplierName },
+                                    { label: 'Supplier GSTIN', value: supplierGstin, set: setSupplierGstin },
+                                    { label: 'Buyer GSTIN', value: buyerGstin, set: setBuyerGstin },
+                                    { label: 'State', value: stateName, set: setStateName },
+                                    { label: 'IGST Amount ₹', value: igstAmount, set: setIgstAmount },
                                     { label: 'Invoice Date', value: invoiceDate, set: setInvoiceDate },
                                     { label: 'Payment Method', isSelect: true },
                                 ].map(({ label, value, set, isSelect }) => (
@@ -844,6 +963,22 @@ export default function InvoiceOcrModal({ onClose, onComplete, toast }) {
                                     <span style={{ fontWeight: '700' }}>Net Payable Total</span>
                                     <strong style={{ color: C.accent, fontSize: '18px' }}>₹{totals.grandTotal}</strong>
                                 </div>
+                                {extractedTotal !== null && (() => {
+                                    const diff = Math.abs(extractedTotal - parseFloat(totals.grandTotal));
+                                    const ok = diff <= 2;
+                                    return (
+                                        <div style={{ marginTop: '8px', padding: '10px 12px', borderRadius: '8px', fontSize: '12px', lineHeight: '1.6', background: ok ? 'rgba(16,185,129,0.10)' : 'rgba(239,68,68,0.10)', border: `1px solid ${ok ? C.green : C.red}`, color: ok ? C.green : C.red, display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                                            <span style={{ fontSize: '18px', lineHeight: 1 }}>{ok ? '✅' : '⚠️'}</span>
+                                            <div>
+                                                <strong style={{ display: 'block', marginBottom: '2px' }}>Invoice Total Validation</strong>
+                                                Invoice states: <strong>₹{extractedTotal.toFixed(2)}</strong><br />
+                                                Calculated: <strong>₹{totals.grandTotal}</strong>
+                                                {!ok && <span style={{ display: 'block', marginTop: '3px', fontSize: '11px' }}>Difference ₹{diff.toFixed(2)} — check for missing items or IGST.</span>}
+                                                {ok && <span style={{ fontSize: '11px' }}> — Amounts match ✓</span>}
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
                             </div>
                         </div>
                     )}

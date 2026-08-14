@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import api from '../api/client.js'
 import socket from '../api/socket.js'
+import { getPrinterSettings, printBill as networkPrintBill } from '../api/printerUtils.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import logo from '../assets/LOGO.jpeg'
 import { useTranslation } from 'react-i18next'
@@ -9,6 +10,14 @@ import './Simple.css'
 const STATUS_COLORS = { open: '#f59e0b', preparing: '#f59e0b', ready: '#3b82f6', served: '#8b5cf6', paid: '#22c55e', completed: '#22c55e', cancelled: '#ef4444' }
 
 export default function OrdersPage() {
+    const getDisplayOrderNumber = (order) => {
+        if (order && order.notes && typeof order.notes === 'string') {
+            const bMatch = order.notes.match(/\|\|BILLNO:([^|]+)\|\|/);
+            if (bMatch && bMatch[1]) return bMatch[1];
+        }
+        return order ? (order.orderNumber || String(order._id || order.id).slice(-8).toUpperCase()) : '';
+    };
+
     const { t } = useTranslation()
     const { user } = useAuth()
     const [orders, setOrders] = useState([])
@@ -24,8 +33,8 @@ export default function OrdersPage() {
     const [pendingPrintOrder, setPendingPrintOrder] = useState(null)
 
     // Filters
-    const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0]) 
-    const [filterType, setFilterType] = useState('All') 
+    const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0])
+    const [filterType, setFilterType] = useState('All')
     const [filterStatus, setFilterStatus] = useState('All')
     const [searchTerm, setSearchTerm] = useState('')
 
@@ -39,7 +48,40 @@ export default function OrdersPage() {
         if (searchTerm) params.append('search', searchTerm)
 
         api.get(`/orders/history?${params.toString()}`).then(r => {
-            setOrders(r.data.data?.orders || [])
+            let fetched = r.data.data?.orders || [];
+            try {
+                const rawLocal = localStorage.getItem('poultry_history_bills');
+                if (rawLocal) {
+                    const localBills = JSON.parse(rawLocal);
+                    // Filter those already existing on backend by matching billNumber
+                    const localOnly = localBills.filter(lb => !fetched.some(fb => fb.orderNumber === lb.billNumber || fb.billNumber === lb.billNumber || fb.notes?.includes(`||BILLNO:${lb.billNumber}||`)));
+                    // Structure local bills closely to backend model so they display perfectly
+                    const formattedLocal = localOnly.map(lb => ({
+                        _id: lb._id,
+                        id: lb.id,
+                        orderNumber: lb.billNumber,
+                        billNumber: lb.billNumber,
+                        source: 'poultry',
+                        orderType: 'takeaway',
+                        status: lb.status === 'PENDING' ? 'PENDING' : 'PAID',
+                        total: lb.total,
+                        items: (lb.items || []).map(i => ({
+                            menuItemId: i.menuItemId,
+                            name: i.itemName || i.name || 'Item',
+                            price: i.rate || i.price || 0,
+                            quantity: i.quantity || i.qty || 0,
+                            amount: i.amount
+                        })),
+                        createdAt: lb.createdAt || new Date().toISOString(),
+                        paymentMethod: lb.paymentMethod || 'CASH',
+                        notes: lb.notes || `||BILLNO:${lb.billNumber}||`
+                    }));
+
+                    fetched = [...formattedLocal, ...fetched];
+                    fetched.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                }
+            } catch (e) { console.warn('Failed merging offline poultry bills', e); }
+            setOrders(fetched);
         }).catch(() => { }).finally(() => setLoading(false))
     }, [filterDate, filterType, filterStatus, searchTerm])
 
@@ -88,7 +130,14 @@ export default function OrdersPage() {
     const handlePrintWithLanguage = (lang) => {
         setShowPrintLangModal(false);
         if (pendingPrintOrder) {
-            printBill(pendingPrintOrder, lang);
+            const printerSettings = getPrinterSettings();
+            const connectionType = printerSettings.connectionType;
+
+            if (connectionType === 'network' || !connectionType) {
+                printBill(pendingPrintOrder, lang);
+            } else {
+                networkPrintBill(pendingPrintOrder._id, { connectionType, printLang: lang });
+            }
             setPendingPrintOrder(null);
         }
     };
@@ -126,7 +175,7 @@ export default function OrdersPage() {
             const job = queueRef.current.shift();
             const { order, type, isKot, printLang = 'en' } = job;
             const displayName = order.tableNumber || (order.tokenNumber ? `Token ${order.tokenNumber}` : 'Takeaway');
-            
+
             const getBillBody = () => {
                 const items = order.items || [];
                 const totalItemsCount = items.reduce((acc, item) => acc + item.quantity, 0);
@@ -135,7 +184,7 @@ export default function OrdersPage() {
                 const cgstPct = taxRate / 2;
                 const effectiveTaxType = order.taxType || user?.taxType || 'Inclusive';
                 const isPrintWithGst = order.taxAmount !== undefined ? order.taxAmount > 0 : true;
-                
+
                 const originalSubtotal = items.reduce((s, item) => {
                     const price = parseFloat(item.price || 0);
                     const qty = parseFloat(item.quantity || 0);
@@ -152,11 +201,11 @@ export default function OrdersPage() {
                     }
                     return s + (basePrice * qty);
                 }, 0);
-                
-                const discountRate = order.discountPct !== undefined 
-                    ? (parseFloat(order.discountPct) || 0) 
+
+                const discountRate = order.discountPct !== undefined
+                    ? (parseFloat(order.discountPct) || 0)
                     : (originalSubtotal > 0 ? (parseFloat(order.discountAmount || 0) / originalSubtotal) * 100 : 0);
-                
+
                 const discountAmount = originalSubtotal * (discountRate / 100);
                 const netSubtotal = originalSubtotal - discountAmount;
                 const taxableSubtotal = netSubtotal;
@@ -168,7 +217,7 @@ export default function OrdersPage() {
                         const qty = parseFloat(item.quantity || 0);
                         const itemTaxRate = typeof item.taxRate === 'number' ? item.taxRate : taxRate;
                         const finalItemPrice = price * (1 - discountRate / 100);
-                        
+
                         if (effectiveTaxType === 'Inclusive') {
                             const itemBaseRate = finalItemPrice / (1 + itemTaxRate / 100);
                             totalGstAmount += (finalItemPrice - itemBaseRate) * qty;
@@ -180,8 +229,8 @@ export default function OrdersPage() {
 
                 const sgstAmount = totalGstAmount / 2;
                 const cgstAmount = totalGstAmount / 2;
-                
-                const extraChargesTotal = order.extraCharges ? order.extraCharges.reduce((s,c) => s + Number(c.amount || 0), 0) : 0;
+
+                const extraChargesTotal = order.extraCharges ? order.extraCharges.reduce((s, c) => s + Number(c.amount || 0), 0) : 0;
                 const grandTotal = (netSubtotal + totalGstAmount + extraChargesTotal).toFixed(2);
 
                 return `
@@ -194,7 +243,7 @@ export default function OrdersPage() {
                         ${(!isKot && isPrintWithGst) ? `<div style="font-size: 15px; margin-bottom: 3px; font-weight: normal;">GSTIN: ${user?.gstNumber || 'N/A'}</div>` : ''}
                         <div style="border-top: 1px solid #000; border-bottom: 1px solid #000; margin: 4px 0; padding: 3px 0;">
                             <div style="display: flex; justify-content: space-between; font-size: 15px; padding: 0 5px; font-weight: normal;">
-                                <span>Bill No: <span>${order.orderNumber || String(order._id).slice(-8).toUpperCase()}</span></span>
+                                <span>Bill No: <span>${getDisplayOrderNumber(order)}</span></span>
                                 <span>Table: <span>${displayName}</span></span>
                             </div>
                         </div>
@@ -211,27 +260,27 @@ export default function OrdersPage() {
                         </thead>
                         <tbody>
                             ${items.map((c, index) => {
-                                const matchedMenu = menuItems.find(m => String(m._id) === String(c.menuItemId));
-                                const tName = c.tamilName || (matchedMenu ? matchedMenu.tamilName : null);
-                                const displayName = (printLang === 'ta' && tName) ? tName : c.name;
-                                
-                                let itemBaseRate, rowTotal;
-                                if (isPrintWithGst) {
-                                    const finalItemPrice = parseFloat(c.price || 0) * (1 - discountRate / 100);
-                                    const itemTaxRate = typeof c.taxRate === 'number' ? c.taxRate : taxRate;
-                                    if (effectiveTaxType === 'Exclusive') {
-                                        itemBaseRate = finalItemPrice;
-                                    } else {
-                                        itemBaseRate = finalItemPrice / (1 + itemTaxRate / 100);
-                                    }
-                                    rowTotal = itemBaseRate * c.quantity;
-                                } else {
-                                    const finalItemPrice = parseFloat(c.price || 0) * (1 - discountRate / 100);
-                                    itemBaseRate = finalItemPrice;
-                                    rowTotal = itemBaseRate * c.quantity;
-                                }
+                    const matchedMenu = menuItems.find(m => String(m._id) === String(c.menuItemId));
+                    const tName = c.tamilName || (matchedMenu ? matchedMenu.tamilName : null);
+                    const displayName = (printLang === 'ta' && tName) ? tName : c.name;
 
-                                return `
+                    let itemBaseRate, rowTotal;
+                    if (isPrintWithGst) {
+                        const finalItemPrice = parseFloat(c.price || 0) * (1 - discountRate / 100);
+                        const itemTaxRate = typeof c.taxRate === 'number' ? c.taxRate : taxRate;
+                        if (effectiveTaxType === 'Exclusive') {
+                            itemBaseRate = finalItemPrice;
+                        } else {
+                            itemBaseRate = finalItemPrice / (1 + itemTaxRate / 100);
+                        }
+                        rowTotal = itemBaseRate * c.quantity;
+                    } else {
+                        const finalItemPrice = parseFloat(c.price || 0) * (1 - discountRate / 100);
+                        itemBaseRate = finalItemPrice;
+                        rowTotal = itemBaseRate * c.quantity;
+                    }
+
+                    return `
                                 <tr>
                                     <td style="padding: 2px 0; font-size: ${printLang === 'ta' ? '12px' : '14px'}; font-weight: bold; padding-right: 2px;">${displayName}</td>
                                     <td style="padding: 2px 0; text-align: center; font-size: ${printLang === 'ta' ? '12px' : '14px'}; font-weight: normal;">${c.quantity}</td>
@@ -239,7 +288,7 @@ export default function OrdersPage() {
                                     ${!isKot ? `<td style="padding: 2px 0; text-align: right; font-size: ${printLang === 'ta' ? '12px' : '14px'}; font-weight: normal;">${rowTotal.toFixed(2)}</td>` : ''}
                                 </tr>
                                 `;
-                            }).join('')}
+                }).join('')}
                         </tbody>
                     </table>
                     ${!isKot ? `
@@ -290,7 +339,7 @@ export default function OrdersPage() {
                     ` : `
                         <div class="footer center" style="margin-top: 5px; border-top: 1px dashed #000; padding-top: 5px;">
                             <div style="font-weight: bold; margin-bottom: 2px;">Total Items: ${totalItemsCount}</div>
-                            <div class="bold" style="font-size: 16px;">ORDER REF: #${order.orderNumber || String(order._id).slice(-8).toUpperCase()}</div>
+                            <div class="bold" style="font-size: 16px;">ORDER REF: #${getDisplayOrderNumber(order)}</div>
                             <div style="font-size: 11px; margin-top: 3px; font-weight: bold;">(KITCHEN COPY)</div>
                         </div>
                     `}
@@ -336,7 +385,7 @@ export default function OrdersPage() {
             printWindow.document.open();
             printWindow.document.write(billHTML);
             printWindow.document.close();
-            
+
             await new Promise(resolve => {
                 const img = printWindow.document.querySelector('img');
                 if (img && !img.complete) {
@@ -361,7 +410,7 @@ export default function OrdersPage() {
             const url = window.URL.createObjectURL(new Blob([res.data]));
             const link = document.createElement('a');
             link.href = url;
-            link.setAttribute('download', `Invoice-${order.orderNumber || order._id}.pdf`);
+            link.setAttribute('download', `Invoice-${getDisplayOrderNumber(order)}.pdf`);
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -372,7 +421,7 @@ export default function OrdersPage() {
     };
 
     const handleWhatsApp = (order) => {
-        const text = `*${user?.restaurantName || 'RESTAURANT'}*\n\nOrder #${order.orderNumber || String(order._id).slice(-8).toUpperCase()}\nAmount: ₹${order.total?.toFixed(2) || 0}\nStatus: ${order.status}\n\nThank you for your order!`;
+        const text = `*${user?.restaurantName || 'RESTAURANT'}*\n\nOrder #${getDisplayOrderNumber(order)}\nAmount: ₹${order.total?.toFixed(2) || 0}\nStatus: ${order.status}\n\nThank you for your order!`;
         const phone = order.customerPhone || '';
         const url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
         window.open(url, '_blank');
@@ -380,7 +429,7 @@ export default function OrdersPage() {
 
     const handleDeleteOrder = async (order) => {
         const orderId = order._id;
-        const orderNo = order.orderNumber || String(orderId).slice(-8).toUpperCase();
+        const orderNo = getDisplayOrderNumber(order);
         if (!window.confirm(`Are you sure you want to delete bill #${orderNo}? This will restore stock levels for all items and permanently delete the record.`)) return;
         try {
             await api.delete(`/orders/${orderId}`);
@@ -411,13 +460,13 @@ export default function OrdersPage() {
                         <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span>Date</span>
                             {filterDate && (
-                                <button 
-                                    onClick={() => setFilterDate('')} 
-                                    style={{ 
-                                        border: 'none', 
-                                        background: 'none', 
-                                        color: '#ef4444', 
-                                        cursor: 'pointer', 
+                                <button
+                                    onClick={() => setFilterDate('')}
+                                    style={{
+                                        border: 'none',
+                                        background: 'none',
+                                        color: '#ef4444',
+                                        cursor: 'pointer',
                                         fontSize: '11px',
                                         padding: '0 4px',
                                         fontWeight: '600'
@@ -491,7 +540,7 @@ export default function OrdersPage() {
                         <button onClick={loadOrders} className="refresh-btn">
                             <span className="btn-icon">↻</span> Refresh
                         </button>
-                        <button 
+                        <button
                             onClick={async () => {
                                 if (!window.confirm("Are you sure you want to CLEAR ALL order history? This action cannot be undone.")) return;
                                 if (!window.confirm("FINAL WARNING: This will PERMANENTLY DELETE all orders for your restaurant. Proceed?")) return;
@@ -502,8 +551,8 @@ export default function OrdersPage() {
                                 } catch (err) {
                                     alert("Failed to clear history");
                                 }
-                            }} 
-                            className="refresh-btn" 
+                            }}
+                            className="refresh-btn"
                             style={{ background: '#ef4444', borderColor: '#ef4444', color: '#fff' }}
                         >
                             <span className="btn-icon">🗑️</span> Clear All
@@ -540,8 +589,8 @@ export default function OrdersPage() {
                                         )}
                                         <h3 className="table-identifier">
                                             {user?.businessType === 'restaurant'
-                                                ? (o.tableNumber ? o.tableNumber : (o.tokenNumber ? `Token ${o.tokenNumber}` : 'Takeaway'))
-                                                : `Bill #${o.orderNumber}`}
+                                                ? (o.tableNumber ? o.tableNumber : (o.tokenNumber ? `Token ${o.tokenNumber}` : `Bill #${getDisplayOrderNumber(o)}`))
+                                                : `Bill #${getDisplayOrderNumber(o)}`}
                                         </h3>
                                     </div>
                                     <span className="time-badge">
@@ -557,7 +606,7 @@ export default function OrdersPage() {
                                             {o.items?.length > 3 && ' ...'}
                                         </p>
                                     </div>
-                                    
+
                                     {o.rating && (
                                         <div style={{ marginTop: '12px', padding: '10px', background: 'var(--surface-2)', borderRadius: '8px', border: '1px solid var(--border)' }}>
                                             <div style={{ color: '#FFD700', fontSize: '14px', marginBottom: '4px' }}>
@@ -682,12 +731,12 @@ export default function OrdersPage() {
             <iframe
                 id="orders-print-iframe"
                 title="orders-print-iframe"
-                style={{ 
-                    position: 'absolute', 
-                    top: '-10000px', 
-                    left: '-10000px', 
-                    width: '0px', 
-                    height: '0px', 
+                style={{
+                    position: 'absolute',
+                    top: '-10000px',
+                    left: '-10000px',
+                    width: '0px',
+                    height: '0px',
                     border: 'none',
                     visibility: 'hidden'
                 }}

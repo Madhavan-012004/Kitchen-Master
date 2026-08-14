@@ -18,7 +18,7 @@ export function StakeholderProvider({ children }) {
 
     const loadRestaurants = useCallback(async () => {
         try {
-            const user = JSON.parse(sessionStorage.getItem('km_user') || 'null')
+            const user = JSON.parse(localStorage.getItem('km_user') || 'null')
             if (!user) return
             const role = user.role?.toLowerCase()
             if (role !== 'stakeholder' && role !== 'owner') return

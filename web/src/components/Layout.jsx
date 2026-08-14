@@ -22,10 +22,12 @@ const NAV_ITEMS = [
     { path: 'ai-assistant', icon: '✨', tKey: 'assistant' },
     { path: 'inventory', icon: '📦', tKey: 'inventory', section: 'inventory' },
     { path: 'tailoring-jobs', icon: '🧵', tKey: 'tailoring', section: 'tailoring' },
-    { path: 'expenditures', icon: '💸', tKey: 'expenditures', section: 'expenditures' },
+    { path: 'expenditures', icon: '💰', tKey: 'expenditures', section: 'expenditures' },
     { path: 'kanban', icon: '📋', tKey: 'kanban' },
-    { path: 'customers', icon: '⭐', tKey: 'customers' },
-    { path: 'whatsapp', icon: '💬', tKey: 'whatsapp' },
+    { path: 'customers', icon: '👥', tKey: 'customers' },
+    { path: 'poultry-clients', icon: '👥', tKey: 'customers', section: 'pos' },
+    { path: 'poultry-history', icon: '📜', tKey: 'ledger_short', section: 'pos' },
+    { path: 'whatsapp', icon: '📱', tKey: 'whatsapp' },
     { path: 'profile', icon: '⚙️', tKey: 'settings' },
 ]
 
@@ -34,6 +36,8 @@ const TOP_NAV_ITEMS = [
     { path: 'kitchen', tKey: 'kot_short', section: 'kitchen' },
     { path: 'billing-queue', tKey: 'bill_short', section: 'billing' },
     { path: 'orders', tKey: 'history_short', section: 'orders' },
+    { path: 'poultry-clients', tKey: 'customers', section: 'pos' },
+    { path: 'poultry-history', tKey: 'ledger_short', section: 'pos' },
     { path: 'profile', tKey: 'settings_short' }
 ]
 
@@ -44,12 +48,14 @@ const SIDE_NAV_ITEMS = [
     { path: 'analytics', icon: '📊', tKey: 'analytics', section: 'analytics' },
     { path: 'attendance', icon: '📍', tKey: 'attendance', section: 'attendance' },
     { path: 'inventory', icon: '📦', tKey: 'inventory', section: 'inventory' },
-    { path: 'tailoring-jobs', icon: '🧵', tKey: 'tailoring', section: 'tailoring' },
-    { path: 'expenditures', icon: '💸', tKey: 'expenditures', section: 'expenditures' },
+    { path: 'tailoring-jobs', icon: '✂️', tKey: 'tailoring', section: 'tailoring' },
+    { path: 'expenditures', icon: '💰', tKey: 'expenditures', section: 'expenditures' },
     { path: 'kanban', icon: '📋', tKey: 'kanban' },
-    { path: 'customers', icon: '⭐', tKey: 'customers' },
-    { path: 'whatsapp', icon: '💬', tKey: 'whatsapp' },
-    { path: 'ai-assistant', icon: '✨', tKey: 'assistant' },
+    { path: 'customers', icon: '👥', tKey: 'customers' },
+    { path: 'poultry-clients', icon: '👥', tKey: 'customers', section: 'pos' },
+    { path: 'poultry-history', icon: '📜', tKey: 'ledger_short', section: 'pos' },
+    { path: 'whatsapp', icon: '📱', tKey: 'whatsapp' },
+    { path: 'ai-assistant', icon: '🤖', tKey: 'assistant' },
 ]
 
 // ─── License Expiry Banner ────────────────────────────────────────────────────
@@ -94,7 +100,7 @@ export default function Layout() {
     const { user, logout, canAccess, attendance, checkIn, checkOut } = useAuth()
     const { accessibleRestaurants, selectedRestaurantId, selectRestaurant } = useStakeholder()
     const { theme, toggleTheme } = useTheme()
-    const { supermarketMode, toggleSupermarketMode, isClothing, isMarket, cycleMode } = usePOSMode()
+    const { supermarketMode, toggleSupermarketMode, isClothing, isMarket, cycleMode, isPoultry } = usePOSMode()
     const { itemNameLanguage, setItemNameLanguage } = useLanguage()
     const { t, i18n } = useTranslation()
     const navigate = useNavigate()
@@ -168,8 +174,10 @@ export default function Layout() {
                 <div className="top-bar-center">
                     {TOP_NAV_ITEMS.filter(item => {
                         if (!isClothing && item.section === 'tailoring') return false;
-                        if ((supermarketMode || isClothing) && item.section === 'kitchen') return false;
-                        if ((supermarketMode || isClothing) && item.section === 'billing') return false;
+                        if ((supermarketMode || isClothing || isPoultry) && item.section === 'kitchen') return false;
+                        if ((supermarketMode || isClothing || isPoultry) && item.section === 'billing') return false;
+                        if (!isPoultry && item.path === 'poultry-clients') return false;
+                        if (!isPoultry && item.path === 'poultry-history') return false;
                         return !item.section || canAccess(item.section);
                     }).map(item => (
                         <NavLink
@@ -257,9 +265,13 @@ export default function Layout() {
             <aside className="mini-side-bar">
                 {SIDE_NAV_ITEMS.filter(item => {
                     if (item.path === 'customers' && !user?.enableCustomerPointsPage) return false;
+                    if (isPoultry && item.path === 'customers') return false; // Hide regular customers page in poultry mode
+                    if (!isPoultry && item.path === 'poultry-clients') return false;
+                    if (!isPoultry && item.path === 'poultry-history') return false;
                     if (!isClothing && item.section === 'tailoring') return false;
                     if ((supermarketMode || isClothing) && item.section === 'menu') return false;
-                    if ((supermarketMode || isClothing) && item.section === 'billing') return false;
+                    if ((supermarketMode || isClothing || isPoultry) && item.section === 'billing') return false;
+                    if (isPoultry && item.section === 'kitchen') return false;
                     return !item.section || canAccess(item.section);
                 }).map(item => (
                     <NavLink
@@ -281,10 +293,13 @@ export default function Layout() {
                 <nav className="sidebar-nav">
                     {NAV_ITEMS.filter(item => {
                         if (item.path === 'customers' && !user?.enableCustomerPointsPage) return false;
+                        if (isPoultry && item.path === 'customers') return false; // Hide regular customers page in poultry mode
+                        if (!isPoultry && item.path === 'poultry-clients') return false;
+                        if (!isPoultry && item.path === 'poultry-history') return false;
                         if (!isClothing && item.section === 'tailoring') return false;
                         if ((supermarketMode || isClothing) && item.section === 'menu') return false;
-                        if ((supermarketMode || isClothing) && item.section === 'billing') return false;
-                        if ((supermarketMode || isClothing) && item.section === 'kitchen') return false;
+                        if ((supermarketMode || isClothing || isPoultry) && item.section === 'billing') return false;
+                        if ((supermarketMode || isClothing || isPoultry) && item.section === 'kitchen') return false;
                         // Items without a section (profile, ai-assistant) are always accessible
                         if (!item.section) return true;
                         return canAccess(item.section);

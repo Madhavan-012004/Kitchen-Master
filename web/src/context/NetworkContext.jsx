@@ -4,17 +4,17 @@ const NetworkContext = createContext(null)
 
 const isElectron = window.location.protocol === 'file:';
 const isAndroid = /android/i.test(navigator.userAgent);
-const BASE = 'https://kitchen-master.onrender.com/api';
+const BASE = 'http://144.217.89.193:8080/api';
 const HEALTH_URL = `${BASE}/status`;
 const PING_URL = `${BASE}/status/ping`;   // ultra-fast liveness check (no DB query)
 
 // Timing constants — tuned for Render free tier which cold-starts in 30-60s
 const BG_CHECK_INTERVAL_MS = 30_000   // background liveness check every 30s
-const RECOVERY_POLL_MS = 5_000   // when offline, re-check every 5s for fast recovery
+const RECOVERY_POLL_MS = 8_000   // when offline, re-check every 8s
 const PING_TIMEOUT_MS = 70_000   // allow 70s for cold start wake-up
 const HEALTH_TIMEOUT_MS = 90_000   // allow 90s for full health check on cold start
 const RECHECK_DELAY_MS = 5_000   // wait before confirming a failure (avoid flash)
-const RETRY_COUNTDOWN_SEC = 5       // countdown shown on overlay
+const RETRY_COUNTDOWN_SEC = 8       // countdown shown on overlay
 
 export function NetworkProvider({ children }) {
     const [isOffline, setIsOffline] = useState(false)
@@ -49,28 +49,35 @@ export function NetworkProvider({ children }) {
 
     // ── Fast ping: just checks server liveness (no DB) ────────────────────────
     const ping = useCallback(async () => {
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), PING_TIMEOUT_MS);
         try {
             const res = await fetch(PING_URL, {
                 method: 'GET',
-                signal: AbortSignal.timeout(PING_TIMEOUT_MS),
+                signal: controller.signal,
                 cache: 'no-store',
-            })
-            return res.ok
-        } catch {
-            return false
+            });
+            clearTimeout(id);
+            return res.ok;
+        } catch (e) {
+            clearTimeout(id);
+            return false;
         }
     }, [])
 
     // ── Full health check with DB validation ─────────────────────────────────
     const checkHealth = useCallback(async (isRecheck = false) => {
+        const controller = new AbortController();
+        const timerId = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
         try {
-            const token = sessionStorage.getItem('km_token')
+            const token = localStorage.getItem('km_token')
             const res = await fetch(HEALTH_URL, {
                 method: 'GET',
                 headers: token ? { Authorization: `Bearer ${token}` } : {},
-                signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
+                signal: controller.signal,
                 cache: 'no-store',
             })
+            clearTimeout(timerId);
 
             // Any real HTTP response (even auth errors) means server is reachable
             if (res.ok || res.status === 401 || res.status === 403 || res.status === 404) {
@@ -97,9 +104,10 @@ export function NetworkProvider({ children }) {
             return false
 
         } catch (e) {
+            clearTimeout(timerId);
             // No response at all — backend is down or unreachable
             if (!isOfflineRef.current) {
-                const isTimeout = e?.name === 'TimeoutError' || e?.message?.includes('timeout')
+                const isTimeout = e?.name === 'TimeoutError' || e?.name === 'AbortError' || e?.message?.includes('timeout')
                 setIsOffline(true)
                 setErrorType(isTimeout ? 'timeout' : 'server_down')
                 setStatusCode(null)

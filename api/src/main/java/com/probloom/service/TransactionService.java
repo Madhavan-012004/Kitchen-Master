@@ -136,7 +136,7 @@ public class TransactionService {
      * Otherwise, create a new one.
      */
     @Transactional
-    @SuppressWarnings("null")
+
     public Transaction createOrUpdateByInvoice(
             @NonNull User restaurant,
             @NonNull String invoiceNumber,

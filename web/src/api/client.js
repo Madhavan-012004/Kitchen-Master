@@ -4,11 +4,11 @@ import { globalTriggerOffline } from '../context/NetworkContext.jsx'
 const isElectron = window.location.protocol === 'file:';
 const isAndroid = /android/i.test(navigator.userAgent);
 // NOTE: Electron backend runs on port 48182 (set by -Dserver.port=48182 in main.cjs)
-const API_BASE_URL = 'https://kitchen-master.onrender.com/api/';
+const API_BASE_URL = 'http://144.217.89.193:8080/api/';
 
 // Set session mode immediately based on runtime context — no network call needed
-if (!sessionStorage.getItem('km_mode')) {
-    sessionStorage.setItem('km_mode', isElectron ? 'offline' : 'online');
+if (!localStorage.getItem('km_mode')) {
+    localStorage.setItem('km_mode', isElectron ? 'offline' : 'online');
 }
 
 
@@ -18,20 +18,20 @@ const NON_RETRYABLE_URLS = ['/auth/login', '/auth/register', '/attendance/checki
 
 const api = axios.create({
     baseURL: API_BASE_URL,
-    timeout: 90000,       // 90s timeout — allows Render free-tier cold start (30-60s)
+    timeout: 90000,       // 90s timeout — allows server cold start
 })
 
 // ── Request Interceptor: JWT + tenant header + path normalization ──────────────
 api.interceptors.request.use(config => {
-    const token = sessionStorage.getItem('km_token')
+    const token = localStorage.getItem('km_token')
     if (token) config.headers.Authorization = `Bearer ${token}`
 
     // Inject stakeholder restaurant scope header if applicable
     const user = (() => {
-        try { return JSON.parse(sessionStorage.getItem('km_user')) } catch { return null }
+        try { return JSON.parse(localStorage.getItem('km_user')) } catch { return null }
     })()
     if (user?.role === 'stakeholder') {
-        const selectedId = sessionStorage.getItem('km_selected_restaurant') || 'ALL'
+        const selectedId = localStorage.getItem('km_selected_restaurant') || 'ALL'
         config.headers['X-Restaurant-Id'] = selectedId
     }
 
@@ -67,9 +67,9 @@ api.interceptors.response.use(
                 console.warn('Skipping auth redirect because user is on a public display page:', path)
                 return Promise.reject(err)
             }
-            sessionStorage.removeItem('km_token')
-            sessionStorage.removeItem('km_user')
-            sessionStorage.removeItem('km_selected_restaurant')
+            localStorage.removeItem('km_token')
+            localStorage.removeItem('km_user')
+            localStorage.removeItem('km_selected_restaurant')
             window.location.href = '/login'
             return Promise.reject(err)
         }
@@ -79,14 +79,13 @@ api.interceptors.response.use(
             config &&
             !NON_RETRYABLE_METHODS.has(config.method?.toLowerCase()) &&
             !NON_RETRYABLE_URLS.some(u => config.url?.includes(u)) &&
-            config._retryCount < 5 && // Increased to 5 retries for better resilience
-            (!err.response || err.response.status >= 500)
+            config._retryCount < 2 && // Reduced to 2 retries for ultra-fast UX failure recovery
+            (!err.response || (err.response.status > 500 && err.response.status <= 504)) // Exclude 500 (permanent backend bugs)
 
         if (isRetryable) {
             config._retryCount += 1
-            // 1s, 2s, 3s, 4s, 5s delay -> gentler backoff to allow server to restart without overwhelming it
-            const delay = Math.min(1000 * config._retryCount, 5000)
-            console.warn(`⚡ Retrying request [${config._retryCount}/5] after ${delay}ms:`, config.url)
+            const delay = Math.min(1000 * config._retryCount, 2000)
+            console.warn(`⚡ Retrying request [${config._retryCount}/2] after ${delay}ms:`, config.url)
             await new Promise(r => setTimeout(r, delay))
             return api(config)
         }
@@ -108,11 +107,11 @@ api.interceptors.response.use(
 
 /**
  * Connection mode is set by Spring Boot startup profile.
- * This function only updates the local sessionStorage flag for UI state.
+ * This function only updates the local localStorage flag for UI state.
  * Browser = online mode. EXE (Electron) = offline mode by default.
  */
 api.setConnectionMode = (mode) => {
-    sessionStorage.setItem('km_mode', mode);
+    localStorage.setItem('km_mode', mode);
     return Promise.resolve({ success: true, mode });
 }
 

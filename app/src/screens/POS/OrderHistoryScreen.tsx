@@ -14,14 +14,14 @@ import { useAuthStore } from '../../store/useAuthStore';
 const FilterPill = ({ label, active, onPress, colors, themedStyles }: { label: string, active: boolean, onPress: () => void, colors: any, themedStyles: any }) => (
     <TouchableOpacity
         style={[
-            themedStyles.filterPill, 
+            themedStyles.filterPill,
             { backgroundColor: colors.glass, borderColor: colors.border },
             active && { backgroundColor: colors.primary + '26', borderColor: colors.primary }
         ]}
         onPress={onPress}
     >
         <Text style={[
-            themedStyles.filterPillText, 
+            themedStyles.filterPillText,
             { color: colors.textSecondary },
             active && { color: colors.primary, fontWeight: '700' }
         ]}>{label}</Text>
@@ -30,6 +30,15 @@ const FilterPill = ({ label, active, onPress, colors, themedStyles }: { label: s
 
 export default function OrderHistoryScreen({ navigation }: any) {
     const { colors, gradients, isDark } = useAppTheme();
+
+    const getDisplayOrderNumber = (order: any) => {
+        if (order && order.notes && typeof order.notes === 'string') {
+            const match = order.notes.match(/\|\|BILLNO:([^|]+)\|\|/);
+            if (match && match[1]) return match[1];
+        }
+        return order ? (order.orderNumber || String(order._id).slice(-8).toUpperCase()) : '';
+    };
+
     const themedStyles = React.useMemo(() => createStyles(colors, gradients, isDark), [colors, gradients, isDark]);
     const { user } = useAuthStore();
     const isOwner = user?.role === 'owner';
@@ -132,7 +141,7 @@ export default function OrderHistoryScreen({ navigation }: any) {
                     text: 'Send',
                     onPress: (phone) => {
                         if (!phone) return;
-                        const text = `*${user?.restaurantName || 'RESTAURANT'}*\n\nOrder #${order.orderNumber || String(order._id).slice(-8).toUpperCase()}\nAmount: ₹${order.total?.toFixed(2) || order.subtotal?.toFixed(2) || 0}\nStatus: ${order.status || 'PREPARING'}\n\nThank you for your order!`;
+                        const text = `*${user?.restaurantName || 'RESTAURANT'}*\n\nOrder #${getDisplayOrderNumber(order)}\nAmount: ₹${order.total?.toFixed(2) || order.subtotal?.toFixed(2) || 0}\nStatus: ${order.status || 'PREPARING'}\n\nThank you for your order!`;
                         const url = `whatsapp://send?phone=${phone}&text=${encodeURIComponent(text)}`;
                         Linking.canOpenURL(url).then(supported => {
                             if (supported) {
@@ -174,9 +183,9 @@ export default function OrderHistoryScreen({ navigation }: any) {
                 <View style={themedStyles.cardHeader}>
                     <View style={themedStyles.headerLeft}>
                         <View style={[themedStyles.typeBadge,
-                        { 
-                            backgroundColor: isTakeaway ? (colors.accentPurple || '#A855F7') + '1A' : colors.primary + '1A', 
-                            borderColor: isTakeaway ? (colors.accentPurple || '#A855F7') + '4D' : colors.primary + '4D' 
+                        {
+                            backgroundColor: isTakeaway ? (colors.accentPurple || '#A855F7') + '1A' : colors.primary + '1A',
+                            borderColor: isTakeaway ? (colors.accentPurple || '#A855F7') + '4D' : colors.primary + '4D'
                         }
                         ]}>
                             <Text style={[themedStyles.typeText, { color: isTakeaway ? (colors.accentPurple || '#A855F7') : colors.primary }]}>
@@ -184,7 +193,7 @@ export default function OrderHistoryScreen({ navigation }: any) {
                             </Text>
                         </View>
                         <Text style={themedStyles.orderNumberTitle}>
-                            {item.tableNumber ? item.tableNumber : (item.tokenNumber ? `Token ${item.tokenNumber}` : 'Takeaway')}
+                            {item.tableNumber ? item.tableNumber : (item.tokenNumber ? `Token ${item.tokenNumber}` : `Bill #${getDisplayOrderNumber(item)}`)}
                         </Text>
                     </View>
                     <View style={themedStyles.timeBadgeView}>

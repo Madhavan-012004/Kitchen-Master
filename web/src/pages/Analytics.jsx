@@ -1,17 +1,19 @@
 import React, { useEffect, useState } from 'react'
 import api from '../api/client.js'
 import { useStakeholder } from '../context/StakeholderContext.jsx'
+import { usePOSMode } from '../context/POSModeContext.jsx'
 import StakeholderRestaurantTabs from '../components/StakeholderRestaurantTabs'
 import './Analytics.css'
 
 // Recharts imports for professional graphics
-import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  PieChart, Pie, Cell, Legend, BarChart, Bar
+import {
+    AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+    PieChart, Pie, Cell, Legend, BarChart, Bar
 } from 'recharts'
 
 export default function AnalyticsPage() {
     const { selectedRestaurantId } = useStakeholder()
+    const { isPoultry } = usePOSMode()
     const [data, setData] = useState(null)
     const [period, setPeriod] = useState('7d')
     const [loading, setLoading] = useState(true)
@@ -20,7 +22,6 @@ export default function AnalyticsPage() {
     const [reportLoading, setReportLoading] = useState(false)
     const [showSelector, setShowSelector] = useState(false)
     const [selectedDate, setSelectedDate] = useState('')
-
     const reports = [
         { id: 'sales-summary', label: 'Sales Summary', icon: '📊' },
         { id: 'sales-report', label: 'Sales Report', icon: '📝' },
@@ -57,7 +58,17 @@ export default function AnalyticsPage() {
                 url += `&from=${from}&to=${to}`
             }
             const res = await api.get(url)
-            setData(res.data.data)
+            let fetchedData = res.data.data;
+            if (fetchedData && fetchedData.topItems) {
+                const tailoringItems = fetchedData.topItems.filter(i => i._id && i._id.startsWith('Tailoring: '));
+                const tRev = tailoringItems.reduce((acc, curr) => acc + (curr.totalRevenue || 0), 0);
+                if (tRev > 0 && fetchedData.summary) {
+                    fetchedData.summary.totalRevenue = Math.max(0, fetchedData.summary.totalRevenue - tRev);
+                    fetchedData.summary.grossProfit -= tRev;
+                    fetchedData.summary.netProfit -= tRev;
+                }
+            }
+            setData(fetchedData)
         } catch (e) {
             console.error(e)
         } finally {
@@ -80,7 +91,7 @@ export default function AnalyticsPage() {
     const handleDownload = async (reportId, format = 'pdf') => {
         try {
             const mimeMap = {
-                pdf:  'application/pdf',
+                pdf: 'application/pdf',
                 word: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                 json: 'application/json',
             }
@@ -176,7 +187,7 @@ export default function AnalyticsPage() {
                 <button className="export-btn export-word" onClick={() => handleDownload(selectedReport.id, 'word')}>
                     <span className="export-icon">📝</span> Word
                 </button>
-                <button className="export-btn export-excel" onClick={() => handleDownload(selectedReport.id, 'excel')} style={{background: 'rgba(0, 214, 143, 0.1)', color: '#00D68F', border: '1px solid rgba(0, 214, 143, 0.3)'}}>
+                <button className="export-btn export-excel" onClick={() => handleDownload(selectedReport.id, 'excel')} style={{ background: 'rgba(0, 214, 143, 0.1)', color: '#00D68F', border: '1px solid rgba(0, 214, 143, 0.3)' }}>
                     <span className="export-icon">📊</span> Excel
                 </button>
                 <button className="export-btn export-json" onClick={() => handleDownload(selectedReport.id, 'json')}>
@@ -215,26 +226,26 @@ export default function AnalyticsPage() {
                     <div className="report-content-view">
                         <div className="report-table-wrapper">
                             <table className="premium-table">
-                               <thead>
-                                   <tr>
-                                       <th>Order #</th>
-                                       <th>Date</th>
-                                       <th>Customer</th>
-                                       <th>Total</th>
-                                       <th>Status</th>
-                                   </tr>
-                               </thead>
-                               <tbody>
-                                   {reportData?.sales?.map((s, i) => (
-                                       <tr key={i}>
-                                           <td>{s.orderNumber}</td>
-                                           <td>{new Date(s.date).toLocaleDateString()}</td>
-                                           <td>{s.customer || '-'}</td>
-                                           <td>₹{s.total?.toLocaleString()}</td>
-                                           <td><span className={`status-pill ${s.status.toLowerCase()}`}>{s.status}</span></td>
-                                       </tr>
-                                   ))}
-                               </tbody>
+                                <thead>
+                                    <tr>
+                                        <th>Order #</th>
+                                        <th>Date</th>
+                                        <th>Customer</th>
+                                        <th>Total</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {reportData?.sales?.map((s, i) => (
+                                        <tr key={i}>
+                                            <td>{s.orderNumber}</td>
+                                            <td>{new Date(s.date).toLocaleDateString()}</td>
+                                            <td>{s.customer || '-'}</td>
+                                            <td>₹{s.total?.toLocaleString()}</td>
+                                            <td><span className={`status-pill ${s.status.toLowerCase()}`}>{s.status}</span></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
                             </table>
                         </div>
                         <div className="report-footer-summary">
@@ -275,7 +286,7 @@ export default function AnalyticsPage() {
                                 </thead>
                                 <tbody>
                                     {reportData?.sales?.map((s, i) => {
-                                        const tax  = s.taxAmount || 0
+                                        const tax = s.taxAmount || 0
                                         const base = s.baseAmount ?? (s.total - tax)
                                         return (
                                             <tr key={i}>
@@ -643,7 +654,7 @@ export default function AnalyticsPage() {
             case 'purchase-recipe-stock':
                 return (
                     <div className="report-content-view">
-                         <div className="report-table-wrapper">
+                        <div className="report-table-wrapper">
                             <table className="premium-table">
                                 <thead>
                                     <tr>
@@ -660,7 +671,7 @@ export default function AnalyticsPage() {
                                             <td>{p.inventoryItem?.name}</td>
                                             <td>
                                                 {p.paidQuantity > 0 ? p.paidQuantity : p.quantity} {p.inventoryItem?.unit}
-                                                {p.freeQuantity > 0 && <span style={{color:'#16a34a',fontSize:'0.9em',display:'block'}}>+{p.freeQuantity} Free</span>}
+                                                {p.freeQuantity > 0 && <span style={{ color: '#16a34a', fontSize: '0.9em', display: 'block' }}>+{p.freeQuantity} Free</span>}
                                             </td>
                                             <td>{p.createdBy?.name || 'System'}</td>
                                         </tr>
@@ -698,7 +709,7 @@ export default function AnalyticsPage() {
             case 'cancelled-item-summary':
                 return (
                     <div className="report-content-view">
-                         <div className="report-summary-grid mini">
+                        <div className="report-summary-grid mini">
                             <div className="summary-val-card warning">
                                 <span className="label">Cancelled Count</span>
                                 <span className="val">{reportData?.count}</span>
@@ -991,74 +1002,74 @@ export default function AnalyticsPage() {
                     <div className="an-header-right">
                         {/* Report Selector */}
                         <div className="report-selector-wrapper">
-                            <button 
+                            <button
                                 className={`report-selector-btn ${showSelector ? 'active' : ''}`}
                                 onClick={() => setShowSelector(!showSelector)}
                             >
                                 📋 {selectedReport ? selectedReport.label : 'Select Report'}
                                 <span className={`chevron ${showSelector ? 'open' : ''}`}>▼</span>
                             </button>
-                        {showSelector && (
-                            <div className="report-dropdown-premium">
-                                {reports.map(r => (
-                                    <div 
-                                        key={r.id} 
-                                        className={`dropdown-item ${selectedReport?.id === r.id ? 'active' : ''}`}
-                                        onClick={() => {
-                                            setSelectedReport(r)
-                                            setShowSelector(false)
-                                        }}
-                                    >
-                                        <div className="item-content">
-                                            <span className="item-icon">{r.icon}</span>
-                                            <span className="item-label">{r.label}</span>
+                            {showSelector && (
+                                <div className="report-dropdown-premium">
+                                    {reports.map(r => (
+                                        <div
+                                            key={r.id}
+                                            className={`dropdown-item ${selectedReport?.id === r.id ? 'active' : ''}`}
+                                            onClick={() => {
+                                                setSelectedReport(r)
+                                                setShowSelector(false)
+                                            }}
+                                        >
+                                            <div className="item-content">
+                                                <span className="item-icon">{r.icon}</span>
+                                                <span className="item-label">{r.label}</span>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
 
-                    {/* Period Switcher */}
-                    <div className="an-period-switcher">
-                        {[
-                            { id: '1d', label: 'Today' },
-                            { id: '7d', label: '1 Week' },
-                            { id: '30d', label: '1 Month' },
-                            { id: '90d', label: '3 Months' }
-                        ].map(p => (
-                            <button
-                                key={p.id}
-                                onClick={() => setPeriod(p.id)}
-                                className={`an-period-btn ${period === p.id ? 'active' : ''}`}
-                            >
-                                {p.label}
-                            </button>
-                        ))}
-                        
-                        <div className="period-btn-calendar">
-                            <button
-                                onClick={() => document.getElementById('analytics-date-picker').showPicker()}
-                                className={`an-period-btn calendar-btn ${period === 'custom' ? 'active' : ''}`}
-                                title="Pick a specific date"
-                            >
-                                📅 {period === 'custom' ? selectedDate : 'Custom'}
-                            </button>
-                            <input 
-                                type="date" 
-                                id="analytics-date-picker"
-                                value={selectedDate}
-                                onChange={(e) => {
-                                    setSelectedDate(e.target.value)
-                                    setPeriod('custom')
-                                }}
-                                style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }}
-                            />
+                        {/* Period Switcher */}
+                        <div className="an-period-switcher">
+                            {[
+                                { id: '1d', label: 'Today' },
+                                { id: '7d', label: '1 Week' },
+                                { id: '30d', label: '1 Month' },
+                                { id: '90d', label: '3 Months' }
+                            ].map(p => (
+                                <button
+                                    key={p.id}
+                                    onClick={() => setPeriod(p.id)}
+                                    className={`an-period-btn ${period === p.id ? 'active' : ''}`}
+                                >
+                                    {p.label}
+                                </button>
+                            ))}
+
+                            <div className="period-btn-calendar">
+                                <button
+                                    onClick={() => document.getElementById('analytics-date-picker').showPicker()}
+                                    className={`an-period-btn calendar-btn ${period === 'custom' ? 'active' : ''}`}
+                                    title="Pick a specific date"
+                                >
+                                    📅 {period === 'custom' ? selectedDate : 'Custom'}
+                                </button>
+                                <input
+                                    type="date"
+                                    id="analytics-date-picker"
+                                    value={selectedDate}
+                                    onChange={(e) => {
+                                        setSelectedDate(e.target.value)
+                                        setPeriod('custom')
+                                    }}
+                                    style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }}
+                                />
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
 
 
             {loading ? (
@@ -1067,10 +1078,11 @@ export default function AnalyticsPage() {
                 </div>
             ) : (
                 <>
+
                     <div className="kpi-grid">
                         {kpis.map((k, i) => (
-                            <div 
-                                key={i} 
+                            <div
+                                key={i}
                                 className="kpi-card"
                                 style={{ borderLeft: `4px solid ${k.borderColor}` }}
                             >
@@ -1078,10 +1090,10 @@ export default function AnalyticsPage() {
                                     <div className="kpi-icon" style={{ background: k.bg }}>
                                         {k.icon}
                                     </div>
-                                    <span 
+                                    <span
                                         className="kpi-trend"
-                                        style={{ 
-                                            color: k.color, 
+                                        style={{
+                                            color: k.color,
                                             background: k.bg,
                                             border: `1px solid ${k.borderColor}`
                                         }}
@@ -1113,29 +1125,29 @@ export default function AnalyticsPage() {
                                         <AreaChart data={data.revenueByDay}>
                                             <defs>
                                                 <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.3}/>
-                                                    <stop offset="95%" stopColor="var(--accent)" stopOpacity={0}/>
+                                                    <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.3} />
+                                                    <stop offset="95%" stopColor="var(--accent)" stopOpacity={0} />
                                                 </linearGradient>
                                                 <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="#00D68F" stopOpacity={0.3}/>
-                                                    <stop offset="95%" stopColor="#00D68F" stopOpacity={0}/>
+                                                    <stop offset="5%" stopColor="#00D68F" stopOpacity={0.3} />
+                                                    <stop offset="95%" stopColor="#00D68F" stopOpacity={0} />
                                                 </linearGradient>
                                             </defs>
                                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-                                            <XAxis 
-                                                dataKey="date" 
+                                            <XAxis
+                                                dataKey="date"
                                                 axisLine={false}
                                                 tickLine={false}
                                                 tick={{ fill: 'var(--text-muted)', fontSize: 10 }}
                                                 tickFormatter={(val) => val.includes('-') ? val.slice(5) : val}
                                             />
-                                            <YAxis 
+                                            <YAxis
                                                 axisLine={false}
                                                 tickLine={false}
                                                 tick={{ fill: 'var(--text-muted)', fontSize: 10 }}
-                                                tickFormatter={(value) => `₹${value >= 1000 ? (value/1000).toFixed(1) + 'k' : value}`}
+                                                tickFormatter={(value) => `₹${value >= 1000 ? (value / 1000).toFixed(1) + 'k' : value}`}
                                             />
-                                            <Tooltip 
+                                            <Tooltip
                                                 contentStyle={{ backgroundColor: '#1e1e2d', border: 'none', borderRadius: '8px', color: '#fff' }}
                                                 itemStyle={{ color: '#fff' }}
                                             />
@@ -1158,7 +1170,7 @@ export default function AnalyticsPage() {
                                 <ResponsiveContainer width="100%" height={300}>
                                     <PieChart>
                                         <Pie
-                                            data={data?.expenseBreakdown?.length > 0 ? data.expenseBreakdown : [{name: 'No Data', value: 1}]}
+                                            data={data?.expenseBreakdown?.length > 0 ? data.expenseBreakdown : [{ name: 'No Data', value: 1 }]}
                                             cx="50%"
                                             cy="50%"
                                             innerRadius={60}
@@ -1233,7 +1245,7 @@ export default function AnalyticsPage() {
                                                 {(() => {
                                                     const maxQty = Math.max(...(data.topItems.map(i => i.totalQuantity || 0)));
                                                     const totalQty = data.topItems.reduce((s, i) => s + (i.totalQuantity || 0), 0);
-                                                    const RANK_COLORS = ['#FFD700','#C0C0C0','#CD7F32','#C6F53D','#60a5fa','#a78bfa','#f472b6','#34d399','#fb923c','#e879f9'];
+                                                    const RANK_COLORS = ['#FFD700', '#C0C0C0', '#CD7F32', '#C6F53D', '#60a5fa', '#a78bfa', '#f472b6', '#34d399', '#fb923c', '#e879f9'];
                                                     return data.topItems.map((item, idx) => {
                                                         const pct = maxQty > 0 ? (item.totalQuantity / maxQty) * 100 : 0;
                                                         const sharePct = totalQty > 0 ? ((item.totalQuantity / totalQty) * 100).toFixed(1) : '0.0';
@@ -1300,7 +1312,7 @@ export default function AnalyticsPage() {
                                                     type="number"
                                                     axisLine={false} tickLine={false}
                                                     tick={{ fill: 'var(--text-muted)', fontSize: 10 }}
-                                                    tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v}
+                                                    tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}
                                                 />
                                                 <YAxis
                                                     type="category" dataKey="name"
@@ -1314,7 +1326,7 @@ export default function AnalyticsPage() {
                                                 />
                                                 <Bar dataKey="qty" name="Units Sold" radius={[0, 4, 4, 0]}>
                                                     {data.topItems.slice(0, 10).map((_, idx) => {
-                                                        const COLORS = ['#FFD700','#C0C0C0','#CD7F32','#C6F53D','#60a5fa','#a78bfa','#f472b6','#34d399','#fb923c','#e879f9'];
+                                                        const COLORS = ['#FFD700', '#C0C0C0', '#CD7F32', '#C6F53D', '#60a5fa', '#a78bfa', '#f472b6', '#34d399', '#fb923c', '#e879f9'];
                                                         return <Cell key={idx} fill={COLORS[idx % COLORS.length]} />;
                                                     })}
                                                 </Bar>

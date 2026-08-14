@@ -4,6 +4,7 @@ import { useTheme } from '../context/ThemeContext.jsx';
 import { usePOSMode } from '../context/POSModeContext.jsx';
 import { useLanguage } from '../context/LanguageContext.jsx';
 import api from '../api/client.js';
+import PrinterSettingsModal from '../components/PrinterSettingsModal.jsx';
 import './Profile.css';
 import './WaitlistMonitor.css';  // TV Monitor modal styles
 
@@ -18,6 +19,7 @@ export default function ProfilePage() {
     const { setSupermarketMode } = usePOSMode();
     const [loading, setLoading] = useState(false);
     const [toast, setToast] = useState({ show: false, type: '', text: '' });
+    const [showPrinterModal, setShowPrinterModal] = useState(false);
 
     const canEdit = ['owner', 'manager', 'stakeholder'].includes(user?.role?.toLowerCase());
 
@@ -172,6 +174,9 @@ export default function ProfilePage() {
             const tableMetaParsed = (typeof user.tableMetadata === 'string') ? JSON.parse(user.tableMetadata) : (user.tableMetadata || {});
             setInitialTableMeta(tableMetaParsed);
 
+            const localGst = localStorage.getItem('defaultPrintWithGst');
+            const localKot = localStorage.getItem('requireKotBeforeBilling');
+
             setFormData({
                 name: user.name || '',
                 restaurantName: user.restaurantName || '',
@@ -179,6 +184,10 @@ export default function ProfilePage() {
                 address: user.address || '',
                 currency: user.currency || 'INR',
                 gstNumber: user.gstNumber || '',
+                mobile: user.mobile || '',
+                email: user.email || '',
+                defaultPrintWithGst: localGst !== null ? localGst === 'true' : (user.defaultPrintWithGst !== false),
+                requireKotBeforeBilling: localKot !== null ? localKot === 'true' : (user.requireKotBeforeBilling !== false),
                 dlNumber: user.dlNumber || '',
                 tinNumber: user.tinNumber || '',
                 cinNumber: user.cinNumber || '',
@@ -313,7 +322,15 @@ export default function ProfilePage() {
 
             const res = await api.put('/auth/profile', payload);
             if (res.data.success) {
-                const updatedUser = res.data.data.user;
+                // OVERRIDE: Force local javascript state to persist the KOT bypass instantly 
+                // without relying on the backend Java API to reflect it properly.
+                const updatedUser = {
+                    ...res.data.data.user,
+                    requireKotBeforeBilling: formData.requireKotBeforeBilling,
+                    defaultPrintWithGst: formData.defaultPrintWithGst
+                };
+                localStorage.setItem('requireKotBeforeBilling', formData.requireKotBeforeBilling);
+                localStorage.setItem('defaultPrintWithGst', formData.defaultPrintWithGst);
                 updateUser(updatedUser);
                 setSupermarketMode(updatedUser.preferredPosMode === 'supermarket');
                 showToast('success', 'Profile and settings updated successfully!');
@@ -807,6 +824,16 @@ export default function ProfilePage() {
                 </div>
             )}
 
+            {/* ── Printer Settings Modal ── */}
+            <PrinterSettingsModal
+                isOpen={showPrinterModal}
+                onClose={() => setShowPrinterModal(false)}
+                onSaved={(updatedUser) => {
+                    updateUser(updatedUser);
+                    showToast('success', 'Printer settings saved!');
+                }}
+            />
+
             <div className="profile-container">
 
 
@@ -913,9 +940,15 @@ export default function ProfilePage() {
                                                     <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px', display: 'block' }}>Email Address</label>
                                                     <input name="email" type="email" className="form-input" value={formData.email || ''} onChange={handleInputChange} style={{ width: '100%', background: '#e2e8f0', border: 'none', padding: '14px 16px', borderRadius: '10px' }} />
                                                 </div>
-                                                <div className="form-field full-width" style={{ gridColumn: 'span 2' }}>
+                                                <div className="form-field">
                                                     <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px', display: 'block' }}>Phone Number</label>
-                                                    <input name="phone" className="form-input" value={formData.phone || ''} onChange={handleInputChange} style={{ width: '100%', maxWidth: '300px', background: '#e2e8f0', border: 'none', padding: '14px 16px', borderRadius: '10px' }} />
+                                                    <input name="phone" className="form-input" value={formData.phone || ''} onChange={handleInputChange} style={{ width: '100%', background: '#e2e8f0', border: 'none', padding: '14px 16px', borderRadius: '10px' }} />
+                                                </div>
+                                                <div className="form-field" style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '4px' }}>
+                                                    <button type="button" onClick={handleUpdateLocation} disabled={loading} style={{ background: '#10b981', color: '#fff', padding: '12px 18px', borderRadius: '10px', fontWeight: '700', fontSize: '12px', outline: 'none', border: 'none', cursor: loading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '8px', width: 'fit-content', boxShadow: '0 4px 6px rgba(16, 185, 129, 0.2)' }}>
+                                                        <span style={{ fontSize: '16px' }}>📍</span>
+                                                        {loading ? 'GETTING SIGNAL...' : 'SYNC LOCATION'}
+                                                    </button>
                                                 </div>
                                                 <div className="form-field full-width" style={{ gridColumn: 'span 2' }}>
                                                     <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px', display: 'block' }}>Full Address</label>
@@ -1026,6 +1059,76 @@ export default function ProfilePage() {
                                             {passwordLoading ? 'Updating...' : '🔒 Update Password'}
                                         </button>
                                     </form>
+                                </div>
+                            </div>
+
+                            {/* SECTION: BILLING SETTINGS */}
+                            <div className="profile-card" style={{ display: activeTab === 'security' ? 'block' : 'none', marginTop: '20px' }}>
+                                <h2 className="card-title">🧾 Billing Preferences</h2>
+                                <div className="profile-card-content">
+                                    <div className="form-group-grid">
+                                        <div className="form-field toggle-field" style={{ gridColumn: '1 / -1' }}>
+                                            <label style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', cursor: 'pointer', padding: '15px', background: 'var(--bg-hover)', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={formData.requireKotBeforeBilling !== false}
+                                                    onChange={e => setFormData(prev => ({ ...prev, requireKotBeforeBilling: e.target.checked }))}
+                                                    style={{ display: 'none' }}
+                                                />
+                                                <div style={{
+                                                    width: '44px', minWidth: '44px', height: '24px',
+                                                    background: formData.requireKotBeforeBilling !== false ? 'var(--primary, #0f172a)' : '#cbd5e1',
+                                                    borderRadius: '24px', display: 'flex', alignItems: 'center',
+                                                    padding: '2px', cursor: 'pointer', transition: 'background 0.3s ease',
+                                                    marginTop: '2px'
+                                                }}>
+                                                    <div style={{
+                                                        width: '20px', height: '20px', background: 'white', borderRadius: '50%',
+                                                        transform: formData.requireKotBeforeBilling !== false ? 'translateX(20px)' : 'translateX(0)',
+                                                        transition: 'transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1)',
+                                                        boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                                                    }} />
+                                                </div>
+                                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                    <span style={{ fontWeight: '600', color: 'var(--text-primary)', fontSize: '15px' }}>Enable KOT Before Billing</span>
+                                                    <span style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px', lineHeight: '1.4' }}>
+                                                        If turned OFF, the POS will skip the "Review / Send KOT" confirmation step entirely. Orders will not print kitchen slips or notify KDS displays. The cart action will jump directly to completing the settlement (Fast Retail / Direct Billing).
+                                                    </span>
+                                                </div>
+                                            </label>
+                                        </div>
+
+                                        <div className="form-field toggle-field" style={{ gridColumn: '1 / -1' }}>
+                                            <label style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', cursor: 'pointer', padding: '15px', background: 'var(--bg-hover)', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={formData.defaultPrintWithGst !== false}
+                                                    onChange={e => setFormData(prev => ({ ...prev, defaultPrintWithGst: e.target.checked }))}
+                                                    style={{ display: 'none' }}
+                                                />
+                                                <div style={{
+                                                    width: '44px', minWidth: '44px', height: '24px',
+                                                    background: formData.defaultPrintWithGst !== false ? 'var(--primary, #0f172a)' : '#cbd5e1',
+                                                    borderRadius: '24px', display: 'flex', alignItems: 'center',
+                                                    padding: '2px', cursor: 'pointer', transition: 'background 0.3s ease',
+                                                    marginTop: '2px'
+                                                }}>
+                                                    <div style={{
+                                                        width: '20px', height: '20px', background: 'white', borderRadius: '50%',
+                                                        transform: formData.defaultPrintWithGst !== false ? 'translateX(20px)' : 'translateX(0)',
+                                                        transition: 'transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1)',
+                                                        boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                                                    }} />
+                                                </div>
+                                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                    <span style={{ fontWeight: '600', color: 'var(--text-primary)', fontSize: '15px' }}>Default POS Billing to GST</span>
+                                                    <span style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px', lineHeight: '1.4' }}>
+                                                        Automatically print GST taxes when fast-settling the cart on the POS checkout screen. Turn OFF to default to non-taxed billing for rapid takeaway cash transactions.
+                                                    </span>
+                                                </div>
+                                            </label>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -1189,7 +1292,31 @@ export default function ProfilePage() {
 
                             {/* SECTION: PRINTER CONFIGURATION */}
                             <div className="profile-card" style={{ display: activeTab === 'printer' ? 'block' : 'none' }}>
-                                <h2 className="card-title">🖨️ Printer Settings</h2>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+                                    <h2 className="card-title" style={{ margin: 0 }}>🖨️ Printer Settings</h2>
+                                    <button
+                                        onClick={() => setShowPrinterModal(true)}
+                                        style={{
+                                            background: 'linear-gradient(135deg, #c6f53d, #a8e63a)',
+                                            border: 'none',
+                                            color: '#0a0a0a',
+                                            borderRadius: '10px',
+                                            padding: '10px 20px',
+                                            fontWeight: '700',
+                                            fontSize: '13px',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                            boxShadow: '0 4px 14px rgba(198,245,61,0.3)',
+                                        }}
+                                    >
+                                        🔌 Configure Printer Connection
+                                    </button>
+                                </div>
+                                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '16px', padding: '10px 14px', background: 'rgba(198,245,61,0.05)', borderRadius: '8px', border: '1px solid rgba(198,245,61,0.15)' }}>
+                                    💡 <strong>iMin D1 users:</strong> Click "Configure Printer Connection" above → select <strong>Built-in (iMin)</strong> to use the tablet's built-in thermal printer. Also supports Network IP, USB, Bluetooth, and Default OS printer.
+                                </p>
                                 {activeTab === 'printer' && (
                                     <div className="profile-card-content">
                                         <div className="settings-list">
@@ -1272,6 +1399,7 @@ export default function ProfilePage() {
                                                         onChange={handleInputChange}
                                                     >
                                                         <option value="standard">Standard 3 inch bill</option>
+                                                        <option value="2inch">2-Inch thermal bill</option>
                                                         <option value="pharmacy">Pharmacy</option>
                                                         <option value="gst">GST bill</option>
                                                     </select>
@@ -1360,6 +1488,7 @@ export default function ProfilePage() {
                                                         <option value="restaurant">Restaurant POS</option>
                                                         <option value="supermarket">Supermarket POS</option>
                                                         <option value="clothing">Clothing POS</option>
+                                                        <option value="poultry">Poultry Shop POS</option>
                                                     </select>
                                                 </div>
                                                 <div className="form-field">

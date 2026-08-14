@@ -78,8 +78,8 @@ apiClient.interceptors.response.use(
             config &&
             !NON_RETRYABLE_METHODS.has(method) &&
             !NON_RETRYABLE_URLS.some(u => url.includes(u)) &&
-            config._retryCount < 3 &&
-            (!error.response || status >= 500);
+            config._retryCount < 2 &&
+            (!error.response || status === 502 || status === 503 || status === 504);
 
         if (isRetryable) {
             config._retryCount += 1;
@@ -91,16 +91,19 @@ apiClient.interceptors.response.use(
         }
 
         // ── Network / server errors: mark as offline ──
-        if (!error.response) {
-            if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-                setOffline('timeout', null);
-            } else {
-                setOffline('no_internet', null);
+        // Do not trigger global offline overlay for missing V15 poultry tables
+        if (!url.includes('/poultry/')) {
+            if (!error.response) {
+                if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+                    setOffline('timeout', null);
+                } else {
+                    setOffline('no_internet', null);
+                }
+            } else if (status === 502 || status === 503 || status === 504) {
+                setOffline('server_down', status);
+            } else if (status >= 500) {
+                setOffline('server_error', status);
             }
-        } else if (status === 502 || status === 503 || status === 504) {
-            setOffline('server_down', status);
-        } else if (status >= 500) {
-            setOffline('server_error', status);
         }
 
         return Promise.reject(error);

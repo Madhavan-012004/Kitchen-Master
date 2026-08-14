@@ -40,7 +40,7 @@ export default function BillingQueue() {
                     if (prev.find(o => o._id === data.order._id)) return prev
                     return [data.order, ...prev]
                 })
-                
+
                 // Auto-print immediately (no hesitation)
                 printBill(data.order)
 
@@ -68,12 +68,12 @@ export default function BillingQueue() {
 
     const printBill = (order) => {
         const newJobs = [];
-        
+
         // If no Counter IP is set, browser needs to print the Customer Copy
         if (!user?.counterPrinterIp) {
             newJobs.push({ order, type: 'CUSTOMER COPY', isKot: false });
         }
-        
+
         // If no Kitchen IP is set, browser needs to print the Kitchen Copy
         if (!user?.kitchenPrinterIp) {
             newJobs.push({ order, type: 'KITCHEN COPY', isKot: true });
@@ -90,9 +90,9 @@ export default function BillingQueue() {
 
     const processQueue = async () => {
         if (isPrintingRef.current || queueRef.current.length === 0) return;
-        
+
         isPrintingRef.current = true;
-        
+
         const printIframe = document.getElementById('print-iframe');
         if (!printIframe) {
             console.error('Print iframe not found');
@@ -117,7 +117,7 @@ export default function BillingQueue() {
                 const cgstPct = taxRate / 2;
                 const effectiveTaxType = order.taxType || user?.taxType || 'Inclusive';
                 const isPrintWithGst = order.taxAmount !== undefined ? order.taxAmount > 0 : true;
-                
+
                 const originalSubtotal = items.reduce((s, item) => {
                     const price = parseFloat(item.price || 0);
                     const qty = parseFloat(item.quantity || 0);
@@ -134,11 +134,11 @@ export default function BillingQueue() {
                     }
                     return s + (basePrice * qty);
                 }, 0);
-                
-                const discountRate = order.discountPct !== undefined 
-                    ? (parseFloat(order.discountPct) || 0) 
+
+                const discountRate = order.discountPct !== undefined
+                    ? (parseFloat(order.discountPct) || 0)
                     : (originalSubtotal > 0 ? (parseFloat(order.discountAmount || 0) / originalSubtotal) * 100 : 0);
-                
+
                 const discountAmount = originalSubtotal * (discountRate / 100);
                 const netSubtotal = originalSubtotal - discountAmount;
                 const taxableSubtotal = netSubtotal;
@@ -150,7 +150,7 @@ export default function BillingQueue() {
                         const qty = parseFloat(item.quantity || 0);
                         const itemTaxRate = typeof item.taxRate === 'number' ? item.taxRate : taxRate;
                         const finalItemPrice = price * (1 - discountRate / 100);
-                        
+
                         if (effectiveTaxType === 'Inclusive') {
                             const itemBaseRate = finalItemPrice / (1 + itemTaxRate / 100);
                             totalGstAmount += (finalItemPrice - itemBaseRate) * qty;
@@ -162,8 +162,8 @@ export default function BillingQueue() {
 
                 const sgstAmount = totalGstAmount / 2;
                 const cgstAmount = totalGstAmount / 2;
-                
-                const extraChargesTotal = order.extraCharges ? order.extraCharges.reduce((s,c) => s + Number(c.amount || 0), 0) : 0;
+
+                const extraChargesTotal = order.extraCharges ? order.extraCharges.reduce((s, c) => s + Number(c.amount || 0), 0) : 0;
                 const grandTotal = (netSubtotal + totalGstAmount + extraChargesTotal).toFixed(2);
 
                 return `
@@ -193,23 +193,23 @@ export default function BillingQueue() {
                         </thead>
                         <tbody>
                             ${items.map((c, index) => {
-                                let itemBaseRate, rowTotal;
-                                if (isPrintWithGst) {
-                                    const finalItemPrice = parseFloat(c.price || 0) * (1 - discountRate / 100);
-                                    const itemTaxRate = typeof c.taxRate === 'number' ? c.taxRate : taxRate;
-                                    if (effectiveTaxType === 'Exclusive') {
-                                        itemBaseRate = finalItemPrice;
-                                    } else {
-                                        itemBaseRate = finalItemPrice / (1 + itemTaxRate / 100);
-                                    }
-                                    rowTotal = itemBaseRate * c.quantity;
-                                } else {
-                                    const finalItemPrice = parseFloat(c.price || 0) * (1 - discountRate / 100);
-                                    itemBaseRate = finalItemPrice;
-                                    rowTotal = itemBaseRate * c.quantity;
-                                }
+                    let itemBaseRate, rowTotal;
+                    if (isPrintWithGst) {
+                        const finalItemPrice = parseFloat(c.price || 0) * (1 - discountRate / 100);
+                        const itemTaxRate = typeof c.taxRate === 'number' ? c.taxRate : taxRate;
+                        if (effectiveTaxType === 'Exclusive') {
+                            itemBaseRate = finalItemPrice;
+                        } else {
+                            itemBaseRate = finalItemPrice / (1 + itemTaxRate / 100);
+                        }
+                        rowTotal = itemBaseRate * c.quantity;
+                    } else {
+                        const finalItemPrice = parseFloat(c.price || 0) * (1 - discountRate / 100);
+                        itemBaseRate = finalItemPrice;
+                        rowTotal = itemBaseRate * c.quantity;
+                    }
 
-                                return `
+                    return `
                                 <tr>
                                     <td style="padding: 2px 0; font-size: 16px; font-weight: bold;">${c.name}</td>
                                     <td style="padding: 2px 0; text-align: center; font-size: 15px; font-weight: normal;">${c.quantity}</td>
@@ -217,7 +217,7 @@ export default function BillingQueue() {
                                     ${!isKot ? `<td style="padding: 2px 0; text-align: right; font-size: 15px; font-weight: normal;">${rowTotal.toFixed(2)}</td>` : ''}
                                 </tr>
                                 `;
-                            }).join('')}
+                }).join('')}
                         </tbody>
                     </table>
                     ${!isKot ? `
@@ -315,7 +315,7 @@ export default function BillingQueue() {
             printWindow.document.open();
             printWindow.document.write(billHTML);
             printWindow.document.close();
-            
+
             // Wait for resources to load if any, then print
             await new Promise(resolve => {
                 const img = printWindow.document.querySelector('img');
@@ -414,7 +414,7 @@ export default function BillingQueue() {
                             <div className="bill-card-info">
                                 <div className="info-row">
                                     <span className="info-label">Order #</span>
-                                    <span className="info-value">{order.orderNumber}</span>
+                                    <span className="info-value">{order.orderNumber || order.billNumber}</span>
                                 </div>
                                 <div className="info-row">
                                     <span className="info-label">CAPTAIN</span>
@@ -450,12 +450,12 @@ export default function BillingQueue() {
             <iframe
                 id="print-iframe"
                 title="print-iframe"
-                style={{ 
-                    position: 'absolute', 
-                    top: '-10000px', 
-                    left: '-10000px', 
-                    width: '0px', 
-                    height: '0px', 
+                style={{
+                    position: 'absolute',
+                    top: '-10000px',
+                    left: '-10000px',
+                    width: '0px',
+                    height: '0px',
                     border: 'none',
                     visibility: 'hidden'
                 }}

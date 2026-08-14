@@ -1,5 +1,7 @@
 import { jsPDF } from 'jspdf';
 import JsBarcode from 'jsbarcode';
+import { Capacitor } from '@capacitor/core';
+import { saveFileAndroid } from './capacitorDownload.js';
 
 // ── Unique code generator ─────────────────────────────────────────────────────
 const usedCodes = new Set();
@@ -108,7 +110,14 @@ export function generateAndDownloadA4Labels(items, shopName = 'ProBloom') {
     });
 
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    doc.save(`stock_labels_${dateStr}.pdf`);
+    const filename = `stock_labels_${dateStr}.pdf`;
+
+    if (Capacitor.isNativePlatform()) {
+        const base64 = doc.output('datauristring').split(',')[1];
+        saveFileAndroid(base64, filename);
+    } else {
+        doc.save(filename);
+    }
 }
 
 // ── Draw single label ─────────────────────────────────────────────────────────

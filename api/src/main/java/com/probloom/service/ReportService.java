@@ -34,7 +34,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
-@SuppressWarnings("null")
+
 public class ReportService {
 
     private final OrdersRepository orderRepository;

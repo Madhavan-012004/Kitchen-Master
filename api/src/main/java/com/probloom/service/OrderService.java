@@ -202,7 +202,10 @@ public class OrderService {
                             : (data.containsKey("orderNumber") && data.get("orderNumber") != null
                                     && !data.get("orderNumber").toString().trim().isEmpty()
                                             ? data.get("orderNumber").toString().trim()
-                                            : null);
+                                            : (data.containsKey("billNumber") && data.get("billNumber") != null
+                                                    && !data.get("billNumber").toString().trim().isEmpty()
+                                                            ? data.get("billNumber").toString().trim()
+                                                            : null));
 
             // Regenerate if it is null or already taken (fixes duplicate key issues for
             // multiple tabs)
@@ -245,8 +248,23 @@ public class OrderService {
                             data.get("printWithGst") != null ? Boolean.valueOf(data.get("printWithGst").toString())
                                     : true)
                     .build();
-            // Default status for new order
-            order.setStatus(Orders.OrderStatus.PENDING);
+            // Apply frontend status if specified (especially for POS override)
+            if (data.containsKey("status") && data.get("status") != null) {
+                try {
+                    order.setStatus(Orders.OrderStatus.valueOf(data.get("status").toString().toUpperCase()));
+                } catch (Exception e) {
+                    order.setStatus(Orders.OrderStatus.PENDING);
+                }
+            } else {
+                order.setStatus(Orders.OrderStatus.PENDING);
+            }
+            if (data.containsKey("paymentStatus") && data.get("paymentStatus") != null) {
+                try {
+                    order.setPaymentStatus(
+                            Orders.PaymentStatus.valueOf(data.get("paymentStatus").toString().toUpperCase()));
+                } catch (Exception e) {
+                }
+            }
         } else {
             // Update the existing order for new items
             if (data.containsKey("notes")) {
@@ -339,11 +357,10 @@ public class OrderService {
 
         Orders saved = orderRepository.save(order);
 
-        // If instantly paid, deduct stock and print bill
-        if (createdBy == null && Orders.PaymentStatus.PAID.equals(saved.getPaymentStatus())) {
+        if (Orders.PaymentStatus.PAID.equals(saved.getPaymentStatus())) {
             deductStockFromOrder(saved);
 
-            if (!"pharmacy".equalsIgnoreCase(saved.getBillTemplate())
+            if (createdBy == null && !"pharmacy".equalsIgnoreCase(saved.getBillTemplate())
                     && Boolean.TRUE.equals(restaurant.getBillPrinterEnabled())
                     && restaurant.getCounterPrinterIp() != null && !restaurant.getCounterPrinterIp().trim().isEmpty()) {
                 final Orders finalSaved = saved;
@@ -1474,7 +1491,6 @@ public class OrderService {
         orderRepository.deleteAll(java.util.Objects.requireNonNull(all));
     }
 
-    @SuppressWarnings("null")
     private void saveCustomerProfile(User restaurant, Orders order) {
         if (restaurant != null && restaurant.getId() != null && order.getCustomerPhone() != null
                 && !order.getCustomerPhone().trim().isEmpty() && !order.getCustomerPhone().equalsIgnoreCase("null")) {
@@ -1484,6 +1500,7 @@ public class OrderService {
                         order.getCustomerPhone().trim(),
                         order.getCustomerName() != null ? order.getCustomerName().trim() : "Walk-in Customer",
                         null);
+
             } catch (Exception e) {
                 System.err.println("⚠️ Failed to auto-save customer profile: " + e.getMessage());
             }

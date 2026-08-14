@@ -81,7 +81,9 @@ interface AuthState {
     token: string | null;
     isLoading: boolean;
     isAuthenticated: boolean;
+    isUnlocked: boolean; // Controls MPIN layer
     error: string | null;
+    setUnlocked: (status: boolean) => void;
     login: (email: string, password: string, latitude?: number, longitude?: number) => Promise<void>;
     stakeholderLogin: (phone: string, password: string, latitude?: number, longitude?: number) => Promise<void>;
     register: (data: any) => Promise<void>;
@@ -97,7 +99,10 @@ export const useAuthStore = create<AuthState>((set) => ({
     token: null,
     isLoading: false,
     isAuthenticated: false,
+    isUnlocked: false,
     error: null,
+
+    setUnlocked: (status) => set({ isUnlocked: status }),
 
     login: async (email, password, latitude, longitude) => {
         set({ isLoading: true, error: null });
@@ -108,7 +113,7 @@ export const useAuthStore = create<AuthState>((set) => ({
                 ['km_token', token],
                 ['km_user', JSON.stringify(user)],
             ]);
-            set({ token, user, isAuthenticated: true, isLoading: false });
+            set({ token, user, isAuthenticated: true, isUnlocked: true, isLoading: false });
         } catch (error: any) {
             let errorMsg = error.response?.data?.message || error.message || 'Login failed';
             if (errorMsg === 'Network Error') {
@@ -131,7 +136,7 @@ export const useAuthStore = create<AuthState>((set) => ({
                 ['km_token', token],
                 ['km_user', JSON.stringify(user)],
             ]);
-            set({ token, user, isAuthenticated: true, isLoading: false });
+            set({ token, user, isAuthenticated: true, isUnlocked: true, isLoading: false });
 
             // Fetch accessible restaurants and populate store
             try {
@@ -165,7 +170,7 @@ export const useAuthStore = create<AuthState>((set) => ({
                 ['km_token', token],
                 ['km_user', JSON.stringify(user)],
             ]);
-            set({ token, user, isAuthenticated: true, isLoading: false });
+            set({ token, user, isAuthenticated: true, isUnlocked: true, isLoading: false });
         } catch (error: any) {
             let errorMsg = error.response?.data?.message || error.message || 'Registration failed';
             if (errorMsg === 'Network Error') {
@@ -184,23 +189,27 @@ export const useAuthStore = create<AuthState>((set) => ({
             // Attempt to checkout from attendance system if active
             await attendanceAPI.checkOut();
         } catch (err) {
-            // Silent error - we still want to log out locally
-            console.log('Attendance checkout error:', err);
+            // Silent error - user successfully logs out locally
         }
+        try {
+            const SecureStore = require('expo-secure-store');
+            await SecureStore.deleteItemAsync('km_mpin');
+        } catch (_) { }
+
         await AsyncStorage.multiRemove(['km_token', 'km_user']);
-        set({ user: null, token: null, isAuthenticated: false });
+        set({ user: null, token: null, isAuthenticated: false, isUnlocked: false });
     },
 
     loadStoredAuth: async () => {
         try {
-            // Keep the token for API requests if needed, but DO NOT auto-authenticate.
-            // This ensures the user is forced to the AuthStack (login screen) every time the app opens.
             const [token, userStr] = await AsyncStorage.multiGet(['km_token', 'km_user']);
             if (token[1] && userStr[1]) {
+                const userObj = JSON.parse(userStr[1]);
                 set({
-                    token: token[1], // We restore token so user's email might be prefillable, but they must login
-                    // Intentionally NOT setting user or isAuthenticated: true
-                    isAuthenticated: false,
+                    token: token[1],
+                    user: userObj,
+                    isAuthenticated: true,
+                    isUnlocked: false // Forces the user to the Lock Screen immediately
                 });
             }
         } catch (_) { }
@@ -213,7 +222,7 @@ export const useAuthStore = create<AuthState>((set) => ({
             const res = await authAPI.updateProfile(data);
             // Handle both nested { user: ... } and direct user object responses
             const user = res.data.data.user || res.data.data;
-            
+
             if (user) {
                 await AsyncStorage.setItem('km_user', JSON.stringify(user));
                 set({ user, isLoading: false });

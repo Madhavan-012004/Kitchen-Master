@@ -16,7 +16,7 @@ import com.corundumstudio.socketio.SocketIOServer;
 import org.springframework.boot.test.mock.mockito.MockBean;
 
 @SpringBootTest
-@SuppressWarnings("null")
+
 public class SeederTest {
 
     @MockBean
@@ -34,7 +34,7 @@ public class SeederTest {
     @Test
     public void seedStakeholders() {
         System.out.println("====== STARTING STAKEHOLDER SEED ======");
-        
+
         // 1. Ensure the accounts exist with correct passwords and roles
         User stakeholder1 = ensureUser("9710082916", "Madhavan Global Investor", "Madhavan001@");
         User stakeholder2 = ensureUser("7401813016", "Madhavan Regional Investor", "Madhavan001@");
@@ -45,13 +45,15 @@ public class SeederTest {
                 .collect(Collectors.toList());
 
         System.out.println("Found " + owners.size() + " Owner Restaurants in system.");
-        for(User o : owners) System.out.println(" - " + o.getRestaurantName() + " (ID: " + o.getId() + ")");
+        for (User o : owners)
+            System.out.println(" - " + o.getRestaurantName() + " (ID: " + o.getId() + ")");
 
-        // 2. Clear previous mappings to avoid duplicates or stale data for these specific users
+        // 2. Clear previous mappings to avoid duplicates or stale data for these
+        // specific users
         stakeholderMappingRepository.findAll().stream()
-            .filter(sm -> sm.getStakeholder().getId().equals(stakeholder1.getId()) || 
-                          sm.getStakeholder().getId().equals(stakeholder2.getId()))
-            .forEach(sm -> stakeholderMappingRepository.delete(sm));
+                .filter(sm -> sm.getStakeholder().getId().equals(stakeholder1.getId()) ||
+                        sm.getStakeholder().getId().equals(stakeholder2.getId()))
+                .forEach(sm -> stakeholderMappingRepository.delete(sm));
 
         // 3. Assign Stakeholder 1 to ALL owners
         for (User owner : owners) {
@@ -65,7 +67,7 @@ public class SeederTest {
                 assign(stakeholder2, owner, 30.0);
             }
         }
-        
+
         System.out.println("====== SEEDING COMPLETED SUCCESSFULLY ======");
     }
 
@@ -73,15 +75,15 @@ public class SeederTest {
         User user = userRepository.findFirstByPhone(phone).orElse(null);
         if (user == null) {
             user = User.builder()
-                .name(name)
-                .email(phone + "@stakeholder.km")
-                .phone(phone)
-                .password(passwordEncoder.encode(password))
-                .role(User.Role.STAKEHOLDER)
-                .restaurantName("Investor Account")
-                .isActive(true)
-                .onboardingCompleted(true)
-                .build();
+                    .name(name)
+                    .email(phone + "@stakeholder.km")
+                    .phone(phone)
+                    .password(passwordEncoder.encode(password))
+                    .role(User.Role.STAKEHOLDER)
+                    .restaurantName("Investor Account")
+                    .isActive(true)
+                    .onboardingCompleted(true)
+                    .build();
             System.out.println("Created new account for: " + phone);
         } else {
             user.setPassword(passwordEncoder.encode(password));

@@ -174,8 +174,14 @@ public class AnalyticsService {
                 Map<String, Double> dailyRev = new TreeMap<>();
                 Map<String, Integer> dailyCount = new TreeMap<>();
                 orders.stream().filter(o -> o.getStatus() != Orders.OrderStatus.CANCELLED).forEach(o -> {
-                    String date = o.getCreatedAt().toLocalDate().toString();
-                    dailyRev.put(date, dailyRev.getOrDefault(date, 0.0) + o.getTotal());
+                    String date;
+                    try {
+                        date = o.getCreatedAt().toLocalDate().toString();
+                    } catch (Exception e) {
+                        date = "Unknown Date";
+                    }
+                    double total = o.getTotal() != null ? o.getTotal() : 0.0;
+                    dailyRev.put(date, dailyRev.getOrDefault(date, 0.0) + total);
                     dailyCount.put(date, dailyCount.getOrDefault(date, 0) + 1);
                 });
                 List<Map<String, Object>> dailySales = new ArrayList<>();
@@ -589,28 +595,42 @@ public class AnalyticsService {
             if (o.getStatus() == Orders.OrderStatus.CANCELLED)
                 continue;
 
-            totalRevenue += o.getTotal();
+            double orderTotal = o.getTotal() != null ? o.getTotal() : 0.0;
+            totalRevenue += orderTotal;
             totalOrders++;
 
             boolean isSingleDay = "1d".equals(effectivePeriod) || "custom".equals(effectivePeriod);
-            String dateKey = isSingleDay
-                    ? String.format("%02d:00", o.getCreatedAt().getHour())
-                    : o.getCreatedAt().toLocalDate().toString();
-            dailyRevenue.merge(dateKey, o.getTotal(), (a, b) -> a + b);
+            String dateKey;
+            try {
+                dateKey = isSingleDay
+                        ? String.format("%02d:00", o.getCreatedAt().getHour())
+                        : o.getCreatedAt().toLocalDate().toString();
+            } catch (Exception e) {
+                dateKey = "Unknown Date";
+            }
+            dailyRevenue.merge(dateKey, orderTotal, (a, b) -> a + b);
 
-            for (OrderItem item : o.getItems()) {
-                if (item.getStatus() == OrderItem.ItemStatus.CANCELLED)
-                    continue;
+            if (o.getItems() != null) {
+                for (OrderItem item : o.getItems()) {
+                    if (item.getStatus() == OrderItem.ItemStatus.CANCELLED)
+                        continue;
 
-                itemSales.merge(item.getName(), item.getQuantity(), (a, b) -> a + b);
-                itemRevenue.merge(item.getName(), item.getPrice() * item.getQuantity(), (a, b) -> a + b);
+                    String itemName = item.getName() != null && !item.getName().trim().isEmpty() ? item.getName()
+                            : "Unknown Item";
+                    double itemQty = item.getQuantity() != null ? item.getQuantity() : 0.0;
+                    double itemPrice = item.getPrice() != null ? item.getPrice() : 0.0;
 
-                double unitCost = 0.0;
-                if (item.getInventoryItemId() != null) {
-                    unitCost = inventoryCostCache.computeIfAbsent(item.getInventoryItemId(),
-                            id -> inventoryItemRepository.findById(id).map(InventoryItem::getCostPerUnit).orElse(0.0));
+                    itemSales.merge(itemName, itemQty, (a, b) -> a + b);
+                    itemRevenue.merge(itemName, itemPrice * itemQty, (a, b) -> a + b);
+
+                    double unitCost = 0.0;
+                    if (item.getInventoryItemId() != null) {
+                        unitCost = inventoryCostCache.computeIfAbsent(item.getInventoryItemId(),
+                                id -> inventoryItemRepository.findById(id).map(InventoryItem::getCostPerUnit)
+                                        .orElse(0.0));
+                    }
+                    totalCogs += unitCost * itemQty;
                 }
-                totalCogs += unitCost * item.getQuantity();
             }
         }
 
@@ -618,13 +638,21 @@ public class AnalyticsService {
         double totalExpense = 0.0;
         for (Transaction t : transactions) {
             if (t.getType() == Transaction.TransactionType.EXPENSE) {
-                totalExpense += t.getAmount();
+                double amount = t.getAmount() != null ? t.getAmount() : 0.0;
+                totalExpense += amount;
                 boolean isSingleDay = "1d".equals(effectivePeriod) || "custom".equals(effectivePeriod);
-                String dateKey = isSingleDay
-                        ? String.format("%02d:00", t.getDate().getHour())
-                        : t.getDate().toLocalDate().toString();
-                dailyExpense.merge(dateKey, t.getAmount(), (a, b) -> a + b);
-                categoryExpenses.merge(t.getCategory(), t.getAmount(), (a, b) -> a + b);
+                String dateKey;
+                try {
+                    dateKey = isSingleDay
+                            ? String.format("%02d:00", t.getDate().getHour())
+                            : t.getDate().toLocalDate().toString();
+                } catch (Exception e) {
+                    dateKey = "Unknown Date";
+                }
+                dailyExpense.merge(dateKey, amount, (a, b) -> a + b);
+
+                String cat = t.getCategory() != null ? t.getCategory() : "Uncategorized";
+                categoryExpenses.merge(cat, amount, (a, b) -> a + b);
             }
         }
 

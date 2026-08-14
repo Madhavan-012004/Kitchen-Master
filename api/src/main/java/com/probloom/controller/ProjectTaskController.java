@@ -12,7 +12,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/project-tasks")
 @RequiredArgsConstructor
-@SuppressWarnings("null")
+
 public class ProjectTaskController {
 
     private final ProjectTaskRepository projectTaskRepository;

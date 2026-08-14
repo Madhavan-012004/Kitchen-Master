@@ -41,8 +41,28 @@ export const useMenuStore = create<MenuState>((set, get) => ({
         try {
             const res = await menuAPI.getAll();
             const data = res.data.data;
-            const menuItems = data.items || data.menuItems || [];
-            
+            let menuItems = data.items || data.menuItems || [];
+
+            // Unpack poultry metadata from description workaround
+            menuItems = menuItems.map((i: any) => {
+                if (i.description && typeof i.description === 'string' && i.description.includes('||META:')) {
+                    const [desc, metaStr] = i.description.split('||META:');
+                    try {
+                        const meta = JSON.parse(metaStr);
+                        return {
+                            ...i,
+                            description: desc,
+                            buyingPrice: meta.buy !== undefined ? meta.buy : i.buyingPrice,
+                            sellingPrice: meta.sell !== undefined ? meta.sell : i.sellingPrice,
+                            quantityType: meta.qty || i.quantityType,
+                            wastage: meta.wastage || 0,
+                            profit: meta.profit || 0
+                        };
+                    } catch (err) { /* ignore parse error */ }
+                }
+                return i;
+            });
+
             // Calculate grouped and categories if not provided by backend
             const categories = data.categories || Array.from(new Set(menuItems.map((i: any) => i.category)));
             const grouped = data.grouped || menuItems.reduce((acc: any, item: any) => {

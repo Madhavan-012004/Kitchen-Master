@@ -10,6 +10,10 @@ export default function CustomersPage() {
     const [newCustomer, setNewCustomer] = useState({ name: '', phone: '' })
     const [adding, setAdding] = useState(false)
 
+    // Pagination
+    const [currentPage, setCurrentPage] = useState(1)
+    const ITEMS_PER_PAGE = 20
+
     // History Modal State
     const [historyCustomer, setHistoryCustomer] = useState(null)
     const [historyOrders, setHistoryOrders] = useState([])
@@ -96,12 +100,12 @@ export default function CustomersPage() {
     // --- Filtering & Sorting ---
     const displayedCustomers = useMemo(() => {
         let result = [...customers]
-        
+
         // Apply text search
         if (searchQuery) {
             const q = searchQuery.toLowerCase()
-            result = result.filter(c => 
-                (c.name && c.name.toLowerCase().includes(q)) || 
+            result = result.filter(c =>
+                (c.name && c.name.toLowerCase().includes(q)) ||
                 (c.phone && c.phone.includes(q))
             )
         }
@@ -111,6 +115,14 @@ export default function CustomersPage() {
 
         return result
     }, [customers, searchQuery])
+
+    // Reset pagination when search changes
+    useEffect(() => {
+        setCurrentPage(1)
+    }, [searchQuery])
+
+    const totalPages = Math.ceil(displayedCustomers.length / ITEMS_PER_PAGE)
+    const paginatedCustomers = displayedCustomers.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
 
     // Utility for Avatar colors
     const getAvatarColor = (name) => {
@@ -141,9 +153,9 @@ export default function CustomersPage() {
                     <div className="directory-actions">
                         <div className="search-bar">
                             <span className="search-icon">🔍</span>
-                            <input 
-                                type="text" 
-                                placeholder="Search by Name or Phone..." 
+                            <input
+                                type="text"
+                                placeholder="Search by Name or Phone..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
@@ -182,13 +194,13 @@ export default function CustomersPage() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {displayedCustomers.map((customer, index) => {
+                                    {paginatedCustomers.map((customer, index) => {
                                         const initials = (customer.name || 'U').substring(0, 2).toUpperCase()
                                         return (
-                                            <tr key={customer.id || customer._id} className="table-row-animate" style={{animationDelay: `${index * 0.05}s`}}>
+                                            <tr key={customer.id || customer._id} className="table-row-animate">
                                                 <td>
                                                     <div className="customer-cell">
-                                                        <div className="customer-avatar" style={{background: getAvatarColor(customer.name)}}>
+                                                        <div className="customer-avatar" style={{ background: getAvatarColor(customer.name) }}>
                                                             {initials}
                                                         </div>
                                                         <div className="customer-name-group">
@@ -215,16 +227,16 @@ export default function CustomersPage() {
                                                 </td>
                                                 <td style={{ textAlign: 'right' }}>
                                                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
-                                                        <button 
-                                                            className="hq-act-btn hq-btn-history" 
+                                                        <button
+                                                            className="hq-act-btn hq-btn-history"
                                                             onClick={() => handleViewHistory(customer)}
                                                             title="Purchase History"
                                                             style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '16px', padding: '4px' }}
                                                         >
                                                             📄
                                                         </button>
-                                                        <button 
-                                                            className="hq-act-btn hq-btn-delete" 
+                                                        <button
+                                                            className="hq-act-btn hq-btn-delete"
                                                             onClick={() => handleDeleteCustomer(customer.id || customer._id, customer.name)}
                                                             title="Delete Customer"
                                                             style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '16px', padding: '4px' }}
@@ -238,6 +250,25 @@ export default function CustomersPage() {
                                     })}
                                 </tbody>
                             </table>
+                            {totalPages > 1 && (
+                                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', padding: '15px', borderTop: '1px solid var(--border)' }}>
+                                    <button
+                                        className="tj-btn tj-btn--ghost"
+                                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                        disabled={currentPage === 1}
+                                    >
+                                        Prev
+                                    </button>
+                                    <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Page {currentPage} of {totalPages}</span>
+                                    <button
+                                        className="tj-btn tj-btn--ghost"
+                                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                                        disabled={currentPage === totalPages}
+                                    >
+                                        Next
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -257,32 +288,32 @@ export default function CustomersPage() {
                         <div className="modal-body-elegant">
                             <form onSubmit={handleAddCustomer} className="elegant-form">
                                 <div className="floating-input-group">
-                                    <input 
-                                        type="text" 
+                                    <input
+                                        type="text"
                                         id="customerName"
-                                        className="floating-input" 
+                                        className="floating-input"
                                         placeholder=" "
                                         value={newCustomer.name}
-                                        onChange={e => setNewCustomer({...newCustomer, name: e.target.value})}
-                                        required 
+                                        onChange={e => setNewCustomer({ ...newCustomer, name: e.target.value })}
+                                        required
                                         autoComplete="off"
                                     />
                                     <label htmlFor="customerName" className="floating-label">Full Name</label>
                                 </div>
                                 <div className="floating-input-group">
-                                    <input 
-                                        type="tel" 
+                                    <input
+                                        type="tel"
                                         id="customerPhone"
-                                        className="floating-input" 
+                                        className="floating-input"
                                         placeholder=" "
                                         value={newCustomer.phone}
-                                        onChange={e => setNewCustomer({...newCustomer, phone: e.target.value})}
-                                        required 
+                                        onChange={e => setNewCustomer({ ...newCustomer, phone: e.target.value })}
+                                        required
                                         autoComplete="off"
                                     />
                                     <label htmlFor="customerPhone" className="floating-label">Phone Number</label>
                                 </div>
-                                
+
                                 <div className="modal-actions-glass">
                                     <button type="button" className="btn-glass-cancel" onClick={() => setShowAddModal(false)}>Cancel</button>
                                     <button type="submit" className="btn-glass-submit" disabled={adding}>
@@ -322,12 +353,12 @@ export default function CustomersPage() {
                                     {/* Left Pane: Orders List */}
                                     <div style={{ width: '35%', borderRight: '1px solid var(--border)', overflowY: 'auto', background: 'var(--bg-secondary)' }}>
                                         {historyOrders.map((order, i) => (
-                                            <div 
+                                            <div
                                                 key={order.id || i}
                                                 onClick={() => setSelectedOrder(order)}
-                                                style={{ 
-                                                    padding: '16px', 
-                                                    borderBottom: '1px solid var(--border)', 
+                                                style={{
+                                                    padding: '16px',
+                                                    borderBottom: '1px solid var(--border)',
                                                     cursor: 'pointer',
                                                     background: selectedOrder?.id === order.id ? 'var(--bg-hover)' : 'transparent',
                                                     borderLeft: selectedOrder?.id === order.id ? '4px solid var(--accent)' : '4px solid transparent',
@@ -342,7 +373,7 @@ export default function CustomersPage() {
                                                 </div>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                     <span style={{ fontWeight: 'bold', color: '#22c55e' }}>₹{(order.total || 0).toFixed(2)}</span>
-                                                    <span style={{ 
+                                                    <span style={{
                                                         padding: '2px 8px', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 'bold',
                                                         background: order.paymentStatus === 'PAID' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
                                                         color: order.paymentStatus === 'PAID' ? '#22c55e' : '#ef4444'
@@ -401,7 +432,7 @@ export default function CustomersPage() {
                                                         </tbody>
                                                     </table>
                                                 </div>
-                                                
+
                                                 <div style={{ marginTop: '20px', background: 'var(--bg-secondary)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border)' }}>
                                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: 'var(--text-secondary)' }}>
                                                         <span>Subtotal</span>

@@ -10,6 +10,7 @@ import { NetworkProvider, useNetwork, setGlobalTriggerOffline } from './context/
 import NetworkErrorOverlay from './components/NetworkErrorOverlay.jsx'
 import Layout from './components/Layout.jsx'
 import POSPage from './pages/POS.jsx'
+import PoultryMobilePOS from './pages/PoultryMobilePOS.jsx'
 import OrdersPage from './pages/Orders.jsx'
 import MenuPage from './pages/Menu.jsx'
 import EmployeesPage from './pages/Employees.jsx'
@@ -24,6 +25,8 @@ import InventoryPage from './pages/Inventory.jsx'
 import TailoringJobsPage from './pages/TailoringJobs.jsx'
 import ExpendituresPage from './pages/Expenditures.jsx'
 import CustomersPage from './pages/Customers.jsx'
+import PoultryClients from './pages/PoultryClients.jsx'
+import PoultryHistory from './pages/PoultryHistory.jsx'
 import ProjectTracker from './pages/ProjectTracker.jsx'
 import MasterBackoffice from './pages/MasterBackoffice.jsx'
 import WhatsAppDashboard from './pages/WhatsAppDashboard.jsx'
@@ -31,7 +34,10 @@ import ProBloomProvisionClient from './pages/ProBloomProvisionClient.jsx'
 import WaitlistRegistration from './pages/WaitlistRegistration.jsx'
 import WaitlistMonitor from './pages/WaitlistMonitor.jsx'
 import LicenseManagement from './pages/LicenseManagement.jsx'
+import MaintenanceBanners from './pages/MaintenanceBanners.jsx'
+import MaintenancePage from './pages/MaintenancePage.jsx'
 import api from './api/client.js'
+import { initBluetoothPrinters } from './api/printerUtils.js'
 
 // ─── cous_web: Customer Ordering App (merged) ────────────────────────────────
 import { NetworkProvider as CousNetworkProvider, useNetwork as useCousNetwork, setGlobalTriggerOffline as setCousGlobalTriggerOffline } from './cous/context/NetworkContext.jsx'
@@ -133,6 +139,23 @@ function NetworkGlobalBridge() {
   return null;
 }
 
+// ─── POS Dispatcher for Mobile ──────────────────────────────────────────────────
+function POSDispatcher() {
+  const { isPoultry } = usePOSMode();
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  if (isPoultry && isMobile) {
+    return <PoultryMobilePOS />;
+  }
+  return <POSPage />;
+}
+
 // ─── License Warning Banner ──────────────────────────────────────────────────────
 // Shown across all authenticated pages when the license is expiring soon or missing
 function LicenseWarningBanner() {
@@ -154,9 +177,7 @@ function LicenseWarningBanner() {
     api.get('license/status').then(res => {
       if (cancelled) return;
       const s = res.data;
-      if (!s.valid) {
-        setLicenseWarn({ type: 'error', message: s.message || 'License invalid. Go to License Management to fix.', status: s.status });
-      } else if (s.daysLeft != null && s.daysLeft <= 30) {
+      if (s.valid && s.daysLeft != null && s.daysLeft <= 15) {
         setLicenseWarn({ type: 'warning', message: `Your license expires in ${s.daysLeft} day${s.daysLeft !== 1 ? 's' : ''}. Please renew soon.` });
       } else {
         setLicenseWarn(null);
@@ -204,6 +225,10 @@ function LicenseWarningBanner() {
 }
 
 export default function App() {
+  useEffect(() => {
+    initBluetoothPrinters();
+  }, []);
+
   return (
     <NetworkProvider>
       <ThemeProvider>
@@ -217,6 +242,7 @@ export default function App() {
                   <LicenseWarningBanner />
                   <Routes>
                     <Route path="/login" element={<LoginPage />} />
+                    <Route path="/maintenance" element={<MaintenancePage />} />
                     <Route path="/license" element={<LicenseManagement />} />
                     <Route path="/join-waitlist/:restaurantId" element={<WaitlistRegistration />} />
                     <Route path="/waitlist-monitor/:restaurantId" element={<WaitlistMonitor />} />
@@ -264,11 +290,19 @@ export default function App() {
                         </ProBloomAdminRoute>
                       }
                     />
+                    <Route
+                      path="/probloom-hq/maintenance"
+                      element={
+                        <ProBloomAdminRoute>
+                          <MaintenanceBanners />
+                        </ProBloomAdminRoute>
+                      }
+                    />
 
                     {/* ── ProBloom App (for restaurant clients) ── */}
                     <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
                       <Route index element={<Navigate to="/pos" replace />} />
-                      <Route path="pos" element={<ProtectedRoute section="pos"><POSPage /></ProtectedRoute>} />
+                      <Route path="pos" element={<ProtectedRoute section="pos"><POSDispatcher /></ProtectedRoute>} />
                       <Route path="orders" element={<ProtectedRoute section="orders"><OrdersPage /></ProtectedRoute>} />
                       <Route path="menu" element={<ProtectedRoute section="menu"><MenuPage /></ProtectedRoute>} />
                       <Route path="employees" element={<ProtectedRoute section="employees"><EmployeesPage /></ProtectedRoute>} />
@@ -282,6 +316,8 @@ export default function App() {
                       <Route path="tailoring-jobs" element={<ProtectedRoute section="tailoring"><TailoringJobsPage /></ProtectedRoute>} />
                       <Route path="expenditures" element={<ProtectedRoute section="expenditures"><ExpendituresPage /></ProtectedRoute>} />
                       <Route path="customers" element={<ProtectedRoute><CustomersPage /></ProtectedRoute>} />
+                      <Route path="poultry-clients" element={<ProtectedRoute section="pos"><PoultryClients /></ProtectedRoute>} />
+                      <Route path="poultry-history" element={<ProtectedRoute section="pos"><PoultryHistory /></ProtectedRoute>} />
                       <Route path="kanban" element={<ProtectedRoute><ProjectTracker /></ProtectedRoute>} />
                       <Route path="whatsapp" element={<ProtectedRoute><WhatsAppDashboard /></ProtectedRoute>} />
                       <Route path="profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />

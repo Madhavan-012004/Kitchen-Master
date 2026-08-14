@@ -7,10 +7,10 @@ import ta from './locales/ta.json';
 const LANGUAGE_KEY = 'appLanguage';
 
 const languageDetectorPlugin = {
-  type: 'languageDetector',
+  type: 'languageDetector' as const,
   async: true,
-  init: () => {},
-  detect: async function (callback) {
+  init: () => { },
+  detect: async function (callback: any) {
     try {
       const language = await AsyncStorage.getItem(LANGUAGE_KEY);
       if (language) {
@@ -25,18 +25,18 @@ const languageDetectorPlugin = {
       return 'en';
     }
   },
-  cacheUserLanguage: async function (language) {
+  cacheUserLanguage: async function (language: any) {
     try {
       await AsyncStorage.setItem(LANGUAGE_KEY, language);
-    } catch (error) {}
+    } catch (error) { }
   }
 };
 
 i18n
   .use(initReactI18next)
-  .use(languageDetectorPlugin)
+  .use(languageDetectorPlugin as any)
   .init({
-    compatibilityJSON: 'v3',
+    compatibilityJSON: 'v3' as any,
     resources: {
       en: { translation: en },
       ta: { translation: ta }

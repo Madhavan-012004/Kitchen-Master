@@ -1140,8 +1140,8 @@
 
 .inventory-modal {
     background: var(--bg-card);
-    width: 90%;
-    max-width: 580px;
+    width: 95%;
+    max-width: 1050px;
     max-height: 92vh;
     overflow-y: auto;
     border-radius: 20px;

@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useMenuStore } from '../../store/useMenuStore';
+import { useAuthStore } from '../../store/useAuthStore';
 import { useAppTheme, Typography, Spacing, Radius, Shadows } from '../../theme';
 
 const CATEGORIES = ['Starters', 'Mains', 'Breads', 'Beverages', 'Desserts', 'Others'];
@@ -16,14 +17,20 @@ export default function EditMenuItemScreen({ navigation, route }: any) {
     const themedStyles = React.useMemo(() => createStyles(colors, gradients, isDark), [colors, gradients, isDark]);
     const existingItem = route.params?.item;
     const { addItem, updateItem } = useMenuStore();
+    const { user } = useAuthStore();
+    const isPoultry = user?.preferredPosMode === 'poultry';
 
     const [form, setForm] = useState({
         name: existingItem?.name || '',
         category: existingItem?.category || '',
         price: existingItem?.price?.toString() || '',
-        description: existingItem?.description || '',
+        description: (existingItem?.description || '').split('||META:')[0],
         isVeg: existingItem?.isVeg ?? true,
         taxRate: existingItem?.taxRate?.toString() || '5',
+        buyingPrice: existingItem?.buyingPrice?.toString() || '',
+        quantityType: existingItem?.quantityType || 'kg',
+        wastage: existingItem?.wastage?.toString() || '0',
+        profit: existingItem?.profit?.toString() || '0',
     });
     const [saving, setSaving] = useState(false);
     const [nameFocused, setNameFocused] = useState(false);
@@ -37,7 +44,19 @@ export default function EditMenuItemScreen({ navigation, route }: any) {
             return;
         }
         setSaving(true);
-        const payload = { ...form, price: parseFloat(form.price), taxRate: parseFloat(form.taxRate) };
+        const payload: any = { ...form, price: parseFloat(form.price), taxRate: parseFloat(form.taxRate) };
+        if (isPoultry) {
+            payload.buyingPrice = parseFloat(form.buyingPrice) || 0;
+            payload.quantityType = form.quantityType;
+            const wastage = parseFloat(form.wastage) || 0;
+            const profit = parseFloat(form.profit) || 0;
+            payload.sellingPrice = +(payload.buyingPrice + (payload.buyingPrice * wastage / 100) + profit).toFixed(2);
+            payload.price = payload.sellingPrice;
+
+            // Backend ignores these fields, so we embed them as JSON in the description
+            const meta = { buy: payload.buyingPrice, sell: payload.sellingPrice, qty: form.quantityType, wastage, profit };
+            payload.description = (form.description || '').split('||META:')[0] + '||META:' + JSON.stringify(meta);
+        }
         try {
             if (existingItem) await updateItem(existingItem._id, payload);
             else await addItem(payload);
@@ -86,7 +105,7 @@ export default function EditMenuItemScreen({ navigation, route }: any) {
                             {/* Price & Tax Row */}
                             <View style={themedStyles.row}>
                                 <View style={{ flex: 1 }}>
-                                    <Text style={themedStyles.label}>Price (₹) *</Text>
+                                    <Text style={themedStyles.label}>{isPoultry ? 'Selling Price (₹) *' : 'Price (₹) *'}</Text>
                                     <View style={themedStyles.inputWrapper}>
                                         <Text style={themedStyles.currencySymbol}>₹</Text>
                                         <TextInput
@@ -114,6 +133,86 @@ export default function EditMenuItemScreen({ navigation, route }: any) {
                                     </View>
                                 </View>
                             </View>
+
+                            {isPoultry && (
+                                <View style={[themedStyles.row, { marginTop: Spacing.md }]}>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={themedStyles.label}>Buying Price (₹)</Text>
+                                        <View style={themedStyles.inputWrapper}>
+                                            <Text style={themedStyles.currencySymbol}>₹</Text>
+                                            <TextInput
+                                                style={themedStyles.input}
+                                                value={form.buyingPrice}
+                                                onChangeText={v => set('buyingPrice', v)}
+                                                keyboardType="numeric"
+                                                placeholder="0.00"
+                                                placeholderTextColor={colors.textMuted}
+                                            />
+                                        </View>
+                                    </View>
+                                    <View style={{ width: 12 }} />
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={themedStyles.label}>Unit Type</Text>
+                                        <View style={[themedStyles.row, { marginTop: 4 }]}>
+                                            <TouchableOpacity
+                                                style={[themedStyles.catChip, { flex: 1, paddingHorizontal: 0, paddingVertical: 12, justifyContent: 'center' }, form.quantityType === 'kg' && themedStyles.catChipActive]}
+                                                onPress={() => set('quantityType', 'kg')}
+                                            >
+                                                <Text style={[themedStyles.catChipText, form.quantityType === 'kg' && themedStyles.catChipTextActive, { textAlign: 'center' }]}>kg</Text>
+                                            </TouchableOpacity>
+                                            <View style={{ width: 8 }} />
+                                            <TouchableOpacity
+                                                style={[themedStyles.catChip, { flex: 1, paddingHorizontal: 0, paddingVertical: 12, justifyContent: 'center' }, form.quantityType === 'pcs' && themedStyles.catChipActive]}
+                                                onPress={() => set('quantityType', 'pcs')}
+                                            >
+                                                <Text style={[themedStyles.catChipText, form.quantityType === 'pcs' && themedStyles.catChipTextActive, { textAlign: 'center' }]}>pcs</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
+                                </View>
+                            )}
+
+                            {isPoultry && (
+                                <View style={[themedStyles.row, { marginTop: Spacing.md }]}>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={themedStyles.label}>Wastage (%)</Text>
+                                        <View style={themedStyles.inputWrapper}>
+                                            <TextInput
+                                                style={themedStyles.input}
+                                                value={form.wastage}
+                                                onChangeText={v => set('wastage', v)}
+                                                keyboardType="numeric"
+                                                placeholder="20"
+                                                placeholderTextColor={colors.textMuted}
+                                            />
+                                        </View>
+                                    </View>
+                                    <View style={{ width: 12 }} />
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={themedStyles.label}>Profit (₹)</Text>
+                                        <View style={themedStyles.inputWrapper}>
+                                            <TextInput
+                                                style={themedStyles.input}
+                                                value={form.profit}
+                                                onChangeText={v => set('profit', v)}
+                                                keyboardType="numeric"
+                                                placeholder="60"
+                                                placeholderTextColor={colors.textMuted}
+                                            />
+                                        </View>
+                                    </View>
+                                </View>
+                            )}
+
+                            {isPoultry && (
+                                <View style={{ marginTop: Spacing.sm, backgroundColor: 'rgba(0,0,0,0.1)', padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1, borderColor: colors.border }}>
+                                    <Text style={{ ...Typography.overline, color: colors.textSecondary }}>💰 Calculated Retail Price</Text>
+                                    <Text style={{ ...Typography.h3, color: colors.primary, marginTop: 4 }}>
+                                        ₹{((parseFloat(form.buyingPrice) || 0) + ((parseFloat(form.buyingPrice) || 0) * (parseFloat(form.wastage) || 0) / 100) + (parseFloat(form.profit) || 0)).toFixed(2)}
+                                    </Text>
+                                    <Text style={{ ...Typography.caption, color: colors.textMuted }}>Formula: Base + (Base × Wastage%) + Profit</Text>
+                                </View>
+                            )}
                         </View>
 
                         {/* Category Selector */}

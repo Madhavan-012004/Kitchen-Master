@@ -7,9 +7,15 @@ import { usePOSMode } from '../context/POSModeContext.jsx'
 import { useLanguage } from '../context/LanguageContext.jsx'
 import { useTranslation } from 'react-i18next'
 import SupermarketPOS from './SupermarketPOS.jsx'
+import PoultryPOS from './PoultryPOS.jsx'
 import QueueManagementModal from '../components/QueueManagementModal.jsx'
 import './POS.css'
 import logo from '../assets/LOGO.jpeg'
+import {
+    printBill as thermalPrintBill,
+    printKOT as thermalPrintKOT,
+    getPrinterSettings,
+} from '../api/printerUtils.js'
 
 // Total tables is now dynamic based on owner profile
 const CATEGORIES_ALL = 'All'
@@ -19,7 +25,7 @@ export default function POSPage() {
     const { t, i18n } = useTranslation()
     const { showTamilName } = useLanguage()
     const [tables, setTables] = useState([])
-    const [selectedTable, setSelectedTable] = useState(null)
+    const [selectedTable, setSelectedTable] = useState('Takeaway')
     const [menuItems, setMenuItems] = useState([])
     // Print language modal state
     const [showPrintLangModal, setShowPrintLangModal] = useState(false)
@@ -61,7 +67,6 @@ export default function POSPage() {
     const barcodeBufferRef = React.useRef('') // useRef instead of useState to avoid keydown listener accumulation
     const [lastScannedItem, setLastScannedItem] = useState(null)
     const [scanning, setScanning] = useState(false)
-    const [settleWithGst, setSettleWithGst] = useState(true)
     const [scaleWeight, setScaleWeight] = useState(0)
     const [scalePort, setScalePort] = useState(null)
 
@@ -83,7 +88,7 @@ export default function POSPage() {
     const [redeemPoints, setRedeemPoints] = useState(false)
 
     // Supermarket Mode — clothing mode uses the same market POS layout
-    const { supermarketMode: rawSupermarketMode, isClothing } = usePOSMode()
+    const { supermarketMode: rawSupermarketMode, isClothing, isPoultry } = usePOSMode()
     const supermarketMode = rawSupermarketMode || isClothing
 
     // Local Tracking for newly created sets (families/groups) before they have orders
@@ -167,6 +172,11 @@ export default function POSPage() {
     const role = user?.role?.toLowerCase()
     const restaurantId = role === 'owner' ? user?._id : user?.parentOwnerId
 
+    const localKot = localStorage.getItem('requireKotBeforeBilling');
+    const requireKotBeforeBilling = localKot !== null ? localKot === 'true' : (user?.requireKotBeforeBilling !== false);
+
+    const localGst = localStorage.getItem('defaultPrintWithGst');
+    const [settleWithGst, setSettleWithGst] = useState(localGst !== null ? localGst === 'true' : (user?.defaultPrintWithGst !== false));
     const fetchWaitlistCount = () => {
         if (!restaurantId) return;
         api.get('/queue/active').then(res => {
@@ -391,6 +401,7 @@ export default function POSPage() {
                 _id: i._id,
                 menuItemId: i.menuItemId?._id || i.menuItemId,
                 name: i.name,
+                tamilName: i.tamilName,
                 price: i.price,
                 quantity: i.quantity,
                 notes: i.notes || '',
@@ -410,12 +421,88 @@ export default function POSPage() {
         }
     }
 
+    useEffect(() => {
+        const saved = JSON.parse(localStorage.getItem('km_user') || '{}');
+        if (saved.usbScaleDeviceName) {
+            setTimeout(() => connectScale(), 800);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     const connectScale = async () => {
+        const isAndroidApp = /android/i.test(navigator.userAgent) && (window.location.hostname === 'localhost' || !!window.UsbScaleBridge);
+
+        if (isAndroidApp || (window.Capacitor && window.Capacitor.isNative)) {
+            if (!window.UsbScaleBridge) {
+                alert('Native Scale bridge missing. Rebuild APK.');
+                return;
+            }
+            const capSer = window.serial || (window.cordova && window.cordova.plugins && window.cordova.plugins.serial);
+            if (capSer) {
+                try {
+                    await new Promise((resolve) => {
+                        capSer.requestPermission({ baudRate }, resolve, resolve);
+                    });
+                } catch (e) { }
+            }
+            try {
+                let addressToConnect = "";
+                try {
+                    const saved = JSON.parse(localStorage.getItem('km_user') || '{}');
+                    const targetName = saved.usbScaleDeviceName || '';
+                    if (targetName && window.UsbScaleBridge.getConnectedDevices) {
+                        const listObj = JSON.parse(window.UsbScaleBridge.getConnectedDevices());
+                        const target = listObj.find(d => d.name === targetName);
+                        if (target) addressToConnect = target.address;
+                    }
+                } catch (e) { }
+
+                const connected = window.UsbScaleBridge.getConnectedDevices
+                    ? window.UsbScaleBridge.connect(baudRate, addressToConnect)
+                    : window.UsbScaleBridge.connect(baudRate);
+
+                if (typeof connected === 'string' && connected.startsWith('error:')) {
+                    alert(connected.substring(6));
+                } else if (connected === 'ok' || connected === true) {
+                    try { setIsScaleConnected(true); } catch (e) { }
+                    keepReadingRef.current = true;
+                    if (!window.__scaleBuffer) window.__scaleBuffer = '';
+
+                    window.onScaleData = (data) => {
+                        if (!keepReadingRef.current) return;
+                        window.__scaleBuffer += String(data);
+                        if (window.__scaleBuffer.includes('\n') || window.__scaleBuffer.includes('\r')) {
+                            const lines = window.__scaleBuffer.split(/[\r\n]+/);
+                            window.__scaleBuffer = lines.pop(); // keep partial block
+                            for (const line of lines) {
+                                if (!line.trim()) continue;
+                                const match = line.match(/[-+]?\d*\.?\d+/);
+                                if (match) {
+                                    const val = parseFloat(match[0]);
+                                    if (!isNaN(val)) {
+                                        try { setScaleWeight(Math.abs(val)); } catch (e) { }
+                                        try { setScaleData(Math.abs(val)); } catch (e) { }
+                                    }
+                                }
+                            }
+                        }
+                    };
+                } else {
+                    alert('Scale connection failed! Ensure scale is connected and no other apps are using it.');
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+            return;
+        }
+
+        // Desktop browser fallback: Web Serial API (Chrome/Edge)
         if (!("serial" in navigator)) {
             alert("Scale requires Chrome/Edge with Web Serial support.");
             return;
         }
         try {
+            if (scalePort) { try { await scalePort.close(); } catch (e) { } }
             const port = await navigator.serial.requestPort();
             await port.open({ baudRate: 9600 });
             setScalePort(port);
@@ -429,8 +516,8 @@ export default function POSPage() {
                 if (done) break;
 
                 buffer += decoder.decode(value);
-                const lines = buffer.split('\n');
-                buffer = lines.pop(); // Keep partial line
+                const lines = buffer.split(/[\r\n]+/);
+                buffer = lines.pop();
 
                 for (const line of lines) {
                     const match = line.match(/[-+]?\d*\.?\d+/);
@@ -614,16 +701,38 @@ export default function POSPage() {
     }
 
     const saveOrder = async () => {
+        if (window._isSavingOrder) return;
         if (!selectedTable || cart.length === 0) return
+        window._isSavingOrder = true;
         setSavingOrder(true)
         try {
             const existing = orders[selectedTable]
+
+            // Calculate diff for KOT
+            const existingItems = existing?.items || [];
+            const diffItems = [];
+            cart.forEach(c => {
+                const exItem = existingItems.find(e =>
+                    (c._id && e._id === c._id) ||
+                    (e.menuItemId?._id || e.menuItemId) === c.menuItemId
+                );
+                const prevQty = exItem ? exItem.quantity : 0;
+                const newQty = parseFloat(c.quantity) || 1;
+                if (newQty > prevQty) {
+                    diffItems.push({
+                        ...c,
+                        quantity: newQty - prevQty
+                    });
+                }
+            });
+
             const payload = {
                 tableNumber: (selectedTable && selectedTable.startsWith('Takeaway')) ? null : selectedTable,
                 items: cart.map(c => ({
                     _id: c._id,
                     menuItemId: c.menuItemId,
                     name: c.name,
+                    tamilName: c.tamilName,
                     price: c.price,
                     quantity: parseFloat(c.quantity) || 1,
                     notes: c.notes,
@@ -677,6 +786,7 @@ export default function POSPage() {
                     _id: i._id,
                     menuItemId: i.menuItemId?._id || i.menuItemId,
                     name: i.name,
+                    tamilName: i.tamilName,
                     price: i.price,
                     quantity: i.quantity,
                     notes: i.notes || '',
@@ -688,16 +798,32 @@ export default function POSPage() {
             }
 
             // Print KOT Automatically
-            if (updatedExisting && updatedExisting.items && updatedExisting.items.length > 0) {
-                printBill(updatedExisting, false, true, 'en');
+            if (requireKotBeforeBilling !== false && updatedExisting && diffItems.length > 0) {
+                const printerSettings = getPrinterSettings();
+                const connectionType = printerSettings.connectionType;
+
+                if (connectionType === 'network' || !connectionType) {
+                    // Use browser print queue for network IP printing
+                    printBill(updatedExisting, false, true, 'en', diffItems);
+                } else {
+                    // iMin / USB / Bluetooth / Default — silent thermal KOT
+                    thermalPrintKOT(updatedExisting._id, { connectionType, itemsToPrint: diffItems });
+                }
             }
 
             // KOT Popup Message
-            notify('✅ KOT Sent to Kitchen Successfully!');
+            if (requireKotBeforeBilling === false) {
+                notify('✅ Order saved for Billing!');
+                // Instantly settle instead of popping modal
+                setTimeout(() => settleOrder(paymentMethod), 100);
+            } else {
+                notify('✅ KOT Sent to Kitchen Successfully!');
+            }
         } catch (err) {
             notify('Failed: ' + (err.response?.data?.message || 'Error'))
         } finally {
             setSavingOrder(false)
+            window._isSavingOrder = false;
         }
     }
 
@@ -792,7 +918,7 @@ export default function POSPage() {
                 } else if (updatedActiveOrders[`Table ${tableToUnmerge}`]) {
                     setSelectedTable(`Table ${tableToUnmerge}`);
                 } else {
-                    setSelectedTable(null);
+                    setSelectedTable('Takeaway');
                 }
 
                 if (typeof notify === 'function') notify(`Table ${tableToUnmerge} unmerged successfully`);
@@ -816,8 +942,17 @@ export default function POSPage() {
     }
 
     const settleOrder = async (method = 'cash') => {
-        const existing = orders[selectedTable]
-        if (!existing) return
+        let existing = orders[selectedTable]
+
+        if (!existing) {
+            // Rapid-payment collision fallback: the user paid before the UI reacted to the new Takeaway cart rename.
+            const updatedMap = await fetchActiveOrders();
+            // We search explicitly for their un-settled transaction if selectedTable is still holding the raw string
+            const foundKey = Object.keys(updatedMap).find(k => k.startsWith('Takeaway-T') || k === selectedTable);
+            existing = updatedMap[foundKey || selectedTable];
+            if (!existing) return;
+        }
+
         try {
             await api.patch(`/orders/${existing._id}/status`, {
                 status: 'paid',
@@ -826,13 +961,29 @@ export default function POSPage() {
                 printWithGst: settleWithGst
             })
 
-            // Automatically print the bill after payment using settings language
+            // ── Browser / thermal print bill ──
             const lang = user?.printLanguage || 'en';
-            printBill({ ...existing, paymentMethod: method, printWithGst: settleWithGst }, true, false, lang);
+            const printerSettings = getPrinterSettings();
+            const connectionType = printerSettings.connectionType;
 
-            const newOrders = { ...orders }
-            delete newOrders[selectedTable]
-            setOrders(newOrders)
+            // Always run the browser print queue (for network IP or fallback)
+            if (connectionType === 'network' || !connectionType) {
+                printBill({ ...existing, paymentMethod: method, printWithGst: settleWithGst }, true, false, lang);
+            } else {
+                // For iMin, USB, Default, Bluetooth — skip browser dialog, use thermal
+                thermalPrintBill(existing._id, { connectionType });
+            }
+
+            // Cleanly remove from UI by filtering out the patched _id (immune to key mapping closures)
+            setOrders(prev => {
+                const refreshed = { ...prev };
+                Object.keys(refreshed).forEach(k => {
+                    if (refreshed[k]?._id === existing._id) {
+                        delete refreshed[k];
+                    }
+                });
+                return refreshed;
+            });
 
             // Auto-remove additional sets on payment
             if (selectedTable.includes(' - Set ')) {
@@ -844,7 +995,7 @@ export default function POSPage() {
             }
 
             setCart([])
-            setSelectedTable(null)
+            setSelectedTable('Takeaway')
             setShowPaymentModal(false)
             notify(`Payment received via ${method.toUpperCase()} ✓`)
         } catch (e) {
@@ -852,7 +1003,8 @@ export default function POSPage() {
         }
     }
 
-    const printBill = (order, printCustomerCopy = true, printKitchenCopy = true, printLang = 'en') => {
+    const printBill = (order, printCustomerCopy = true, printKitchenCopy = true, passedPrintLang = 'en', diffItems = null) => {
+        const printLang = passedPrintLang !== 'en' ? passedPrintLang : (localStorage.getItem('printLanguage') || order.printLang || user?.printLanguage || 'en');
         if (!order || !order._id) return;
 
         const restaurantName = user?.restaurantName || 'RESTAURANT';
@@ -913,7 +1065,7 @@ export default function POSPage() {
                 isKot: true,
                 printLang,
                 orderData: {
-                    items: order.items,
+                    items: diffItems || order.items,
                     orderNumber: order.orderNumber || (order._id ? String(order._id).slice(-8).toUpperCase() : 'NEW'),
                     table: order.tableNumber || (order.tokenNumber ? `Token ${order.tokenNumber}` : 'Takeaway'),
                     subtotal: order.total || order.subtotal || 0,
@@ -1652,6 +1804,8 @@ export default function POSPage() {
 
             {supermarketMode ? (
                 <SupermarketPOS printBill={printBill} />
+            ) : isPoultry ? (
+                <PoultryPOS printBill={printBill} />
             ) : (
                 <>
                     {/* COLUMN 1: TABLES */}
@@ -1763,20 +1917,24 @@ export default function POSPage() {
                                 </div>
                             )}
 
-                            <div className="takeaway-section">
-                                <div className="takeaway-header-row">
-                                    <span className="section-subtitle">Takeaway Line</span>
-                                    <button className={`new-takeaway-btn ${selectedTable === 'Takeaway' ? 'active' : ''}`} onClick={() => selectTable('Takeaway')}>+ New</button>
+                            <details open={localStorage.getItem('cat_Takeaway') !== 'false'} onToggle={(e) => localStorage.setItem('cat_Takeaway', e.target.open)} className="table-category-group takeaway-section" style={{ marginBottom: '15px' }}>
+                                <summary className="section-subtitle takeaway-header-row" style={{ padding: '12px 16px', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 'bold' }}>
+                                    <span>Takeaway Line</span>
+                                </summary>
+                                <div style={{ padding: '16px 16px 0 16px' }}>
+                                    <button className={`table-btn new-takeaway-btn ${selectedTable === 'Takeaway' ? 'active' : ''}`} style={{ width: '100%', minHeight: '46px', aspectRatio: 'auto', border: '2px dashed var(--accent)', color: 'var(--accent)', background: 'transparent', fontWeight: 'bold', fontSize: '13px' }} onClick={() => selectTable('Takeaway')}>+ New</button>
                                 </div>
-                                <div className="takeaway-line">
-                                    {Object.keys(orders).filter(k => k.startsWith('Takeaway-T')).map(k => (
-                                        <button key={k} className={`takeaway-token-btn ${selectedTable === k ? 'selected' : ''}`} onClick={() => selectTable(k)}>
-                                            <span className="token-label">T</span>
-                                            <span className="token-val">{orders[k].tokenNumber || '...'}</span>
-                                        </button>
-                                    ))}
+                                <div className="table-grid" style={{ padding: '16px', gridTemplateColumns: 'repeat(3, 1fr)' }}>
+                                    {Object.keys(orders).filter(k => k.startsWith('Takeaway-T')).map(k => {
+                                        const displayId = String(orders[k].tokenNumber || k.replace('Takeaway-T', '')).slice(-3);
+                                        return (
+                                            <button key={k} className={`table-btn takeaway-token-btn ${selectedTable === k ? 'selected' : ''}`} style={{ minHeight: '66px', position: 'relative' }} onClick={() => selectTable(k)}>
+                                                <span className="table-num">{displayId}</span>
+                                            </button>
+                                        )
+                                    })}
                                 </div>
-                            </div>
+                            </details>
 
                             <div className="table-categories-list" style={{ flex: 1, overflowY: 'auto', paddingBottom: '20px' }}>
                                 {(() => {
@@ -1803,13 +1961,11 @@ export default function POSPage() {
                                         if (tablesInCat.length === 0) return null;
 
                                         return (
-                                            <div key={cat} className="table-category-group" style={{ marginBottom: '15px' }}>
-                                                {tableCats.length > 0 && (
-                                                    <div className="section-subtitle" style={{ padding: '8px 16px', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', sticky: 'top', zIndex: 1 }}>
-                                                        {cat}
-                                                    </div>
-                                                )}
-                                                <div className="table-grid">
+                                            <details open={localStorage.getItem(`cat_${cat}`) !== 'false'} onToggle={(e) => localStorage.setItem(`cat_${cat}`, e.target.open)} key={cat} className="table-category-group" style={{ marginBottom: '15px' }}>
+                                                <summary className="section-subtitle" style={{ padding: '8px 16px', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center' }}>
+                                                    {cat}
+                                                </summary>
+                                                <div className="table-grid" style={{ padding: '16px' }}>
                                                     {tablesInCat.map(num => {
                                                         const status = getTableStatus(num);
                                                         const key = `Table ${num}`;
@@ -1851,7 +2007,7 @@ export default function POSPage() {
                                                         );
                                                     })}
                                                 </div>
-                                            </div>
+                                            </details>
                                         );
                                     });
                                 })()}
@@ -2145,18 +2301,20 @@ export default function POSPage() {
                                         </div>
 
                                         <div className="compact-actions-grid single-action">
-                                            <button
-                                                className="compact-btn unified"
-                                                onClick={saveOrder}
-                                                disabled={cart.length === 0 || savingOrder}
-                                            >
-                                                👨‍🍳 {savingOrder ? '...' : 'KOT'}
-                                            </button>
+                                            {requireKotBeforeBilling !== false && (
+                                                <button
+                                                    className="compact-btn unified"
+                                                    onClick={saveOrder}
+                                                    disabled={cart.length === 0 || savingOrder}
+                                                >
+                                                    {'👨‍🍳 ' + (savingOrder ? '...' : 'KOT')}
+                                                </button>
+                                            )}
                                             <button
                                                 className="compact-btn unified"
                                                 onClick={(e) => { e.stopPropagation(); closeOrder(); }}
                                                 disabled={savingOrder}
-                                                style={{ margin: 0, height: '100%', position: 'relative', zIndex: 50, pointerEvents: 'auto' }}
+                                                style={{ margin: 0, height: '100%', position: 'relative', zIndex: 50, pointerEvents: 'auto', gridColumn: requireKotBeforeBilling === false ? '1 / -1' : 'auto' }}
                                             >
                                                 ✕ {t('common.cancel', 'Cancel')}
                                             </button>
@@ -2177,13 +2335,40 @@ export default function POSPage() {
                                                 💬 WhatsApp
                                             </button>
                                         </div>
+
+                                        {requireKotBeforeBilling === false && (
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '5px', marginTop: '5px', width: '100%' }}>
+                                                <button
+                                                    className="compact-btn unified"
+                                                    onClick={() => setPaymentMethod('cash')}
+                                                    style={{ height: '45px', fontWeight: 'bold', padding: 0, fontSize: '13px', background: paymentMethod === 'cash' ? '#22c55e' : 'var(--bg-secondary)', color: paymentMethod === 'cash' ? 'white' : 'inherit', border: paymentMethod === 'cash' ? 'none' : '1px solid var(--border)' }}
+                                                >
+                                                    💵 CASH
+                                                </button>
+                                                <button
+                                                    className="compact-btn unified"
+                                                    onClick={() => setPaymentMethod('upi')}
+                                                    style={{ height: '45px', fontWeight: 'bold', padding: 0, fontSize: '13px', background: paymentMethod === 'upi' ? '#3b82f6' : 'var(--bg-secondary)', color: paymentMethod === 'upi' ? 'white' : 'inherit', border: paymentMethod === 'upi' ? 'none' : '1px solid var(--border)' }}
+                                                >
+                                                    📱 UPI
+                                                </button>
+                                                <button
+                                                    className="compact-btn unified"
+                                                    onClick={() => setPaymentMethod('card')}
+                                                    style={{ height: '45px', fontWeight: 'bold', padding: 0, fontSize: '13px', background: paymentMethod === 'card' ? '#f59e0b' : 'var(--bg-secondary)', color: paymentMethod === 'card' ? 'white' : 'inherit', border: paymentMethod === 'card' ? 'none' : '1px solid var(--border)' }}
+                                                >
+                                                    💳 CARD
+                                                </button>
+                                            </div>
+                                        )}
+
                                         <button
                                             className="compact-btn unified"
-                                            onClick={handlePrintAndClose}
-                                            disabled={!orders[selectedTable] || savingOrder}
-                                            style={{ width: '100%', marginTop: '5px', height: '45px' }}
+                                            onClick={requireKotBeforeBilling === false ? saveOrder : handlePrintAndClose}
+                                            disabled={(requireKotBeforeBilling === false ? cart.length === 0 : !orders[selectedTable]) || savingOrder}
+                                            style={{ width: '100%', marginTop: '5px', height: '45px', background: requireKotBeforeBilling === false ? 'var(--primary)' : 'var(--bg-secondary)', color: requireKotBeforeBilling === false ? 'white' : 'inherit' }}
                                         >
-                                            🧾 {t('bill.close_bill', 'Close bill')}
+                                            {requireKotBeforeBilling === false ? `🧾 ${t('pos.print_bill', 'Print Bill')}` : `🧾 ${t('bill.close_bill', 'Close bill')}`}
                                         </button>
 
                                         {scalePort ? (
@@ -2358,7 +2543,8 @@ export default function POSPage() {
                                 <div className="payment-options-grid-premium">
                                     <button
                                         className={`payment-option-premium ${paymentMethod === 'cash' ? 'active' : ''}`}
-                                        onClick={() => setPaymentMethod('cash')}
+                                        onClick={() => { setPaymentMethod('cash'); settleOrder('cash'); }}
+                                        disabled={savingOrder}
                                     >
                                         <div className="option-icon-wrapper cash-icon">💵</div>
                                         <span className="option-name">{t('pos.cash', 'Cash')}</span>
@@ -2366,7 +2552,8 @@ export default function POSPage() {
                                     </button>
                                     <button
                                         className={`payment-option-premium ${paymentMethod === 'upi' ? 'active' : ''}`}
-                                        onClick={() => setPaymentMethod('upi')}
+                                        onClick={() => { setPaymentMethod('upi'); settleOrder('upi'); }}
+                                        disabled={savingOrder}
                                     >
                                         <div className="option-icon-wrapper upi-icon">📱</div>
                                         <span className="option-name">{t('pos.upi_scan', 'UPI / Scan')}</span>
@@ -2374,22 +2561,12 @@ export default function POSPage() {
                                     </button>
                                     <button
                                         className={`payment-option-premium ${paymentMethod === 'card' ? 'active' : ''}`}
-                                        onClick={() => setPaymentMethod('card')}
+                                        onClick={() => { setPaymentMethod('card'); settleOrder('card'); }}
+                                        disabled={savingOrder}
                                     >
                                         <div className="option-icon-wrapper card-icon">💳</div>
                                         <span className="option-name">{t('pos.card_chip', 'Card / Chip')}</span>
                                         {paymentMethod === 'card' && <div className="active-indicator"></div>}
-                                    </button>
-                                </div>
-
-                                <div className="modal-footer-premium">
-                                    <button className="secondary-btn-premium" onClick={() => setShowPaymentModal(false)}>Back</button>
-                                    <button
-                                        className="confirm-settle-btn-premium"
-                                        onClick={() => settleOrder(paymentMethod)}
-                                    >
-                                        Complete Settlement
-                                        <span className="btn-arrow">→</span>
                                     </button>
                                 </div>
                             </div>
@@ -2581,7 +2758,7 @@ export default function POSPage() {
                                         setShowReviewModal(false);
                                         saveOrder();
                                     }} disabled={savingOrder || cart.length === 0}>
-                                        {savingOrder ? t('pos.processing') : t('pos.confirm_send_kot')}
+                                        {savingOrder ? t('pos.processing') : (requireKotBeforeBilling === false ? t('pos.generate_bill', 'Generate Bill') : t('pos.confirm_send_kot'))}
                                     </button>
                                 </div>
                             </div>

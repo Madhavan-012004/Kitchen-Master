@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
     View, Text, StyleSheet, ScrollView,
-    Dimensions, ActivityIndicator, TouchableOpacity, StatusBar, Alert, Modal
+    Dimensions, ActivityIndicator, TouchableOpacity, StatusBar, Alert, Modal, TextInput
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system';
@@ -54,7 +54,14 @@ export default function AnalyticsScreen() {
     const { accessibleRestaurants, selectedRestaurantId, setSelectedRestaurantId } = useStakeholderStore();
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
-    const [period, setPeriod] = useState<Period>('Today');
+    const [period, setPeriod] = useState<string>('Today');
+
+    // Custom Range
+    const todayStr = new Date().toISOString().split('T')[0];
+    const sevenAgoStr = new Date(Date.now() - 7 * 86400 * 1000).toISOString().split('T')[0];
+    const [customFrom, setCustomFrom] = useState(sevenAgoStr);
+    const [customTo, setCustomTo] = useState(todayStr);
+
     const [isDownloading, setIsDownloading] = useState(false);
     const [isReportModalVisible, setIsReportModalVisible] = useState(false);
     const [selectedReportType, setSelectedReportType] = useState('sales-summary');
@@ -71,12 +78,12 @@ export default function AnalyticsScreen() {
             if (baseUrl.endsWith('/api')) {
                 baseUrl = baseUrl.slice(0, -4);
             }
-            
+
             let url = `${baseUrl}/api/analytics/download-report?type=${selectedReportType}&format=${selectedReportFormat}`;
-            
+
             const ext = selectedReportFormat === 'word' ? 'docx' : selectedReportFormat === 'excel' ? 'xlsx' : selectedReportFormat;
             const fileUri = FileSystem.documentDirectory + `${selectedReportType}-${new Date().toISOString().split('T')[0]}.${ext}`;
-            
+
             const headers: any = { Authorization: `Bearer ${token}` };
             if (selectedRestaurantId) {
                 headers['X-Restaurant-Id'] = String(selectedRestaurantId);
@@ -85,7 +92,7 @@ export default function AnalyticsScreen() {
             }
 
             const { uri, status } = await FileSystem.downloadAsync(url, fileUri, { headers });
-            
+
             if (status === 200) {
                 if (await Sharing.isAvailableAsync()) {
                     await Sharing.shareAsync(uri, { UTI: `.${ext}` });
@@ -95,7 +102,7 @@ export default function AnalyticsScreen() {
             } else {
                 Alert.alert('Error', 'Failed to generate report. Status: ' + status);
             }
-        } catch(err) {
+        } catch (err) {
             console.error(err);
             Alert.alert('Error', 'An error occurred while downloading the report.');
         } finally {
@@ -107,18 +114,23 @@ export default function AnalyticsScreen() {
         const fetch = async () => {
             setLoading(true);
             try {
-                const periodMap: Record<Period, '1d' | '7d' | '30d'> = {
-                    'Today': '1d',
-                    'Week': '7d',
-                    'Month': '30d'
-                };
-                const res = await analyticsAPI.getSales(periodMap[period]);
+                let res;
+                if (period === 'Custom') {
+                    res = await api.get(`/analytics/sales?from=${customFrom}T00:00:00&to=${customTo}T23:59:59${selectedRestaurantId ? `&restaurantId=${selectedRestaurantId}` : ''}`);
+                } else {
+                    const periodMap: Record<string, '1d' | '7d' | '30d'> = {
+                        'Today': '1d',
+                        'Week': '7d',
+                        'Month': '30d'
+                    };
+                    res = await analyticsAPI.getSales(periodMap[period]);
+                }
                 setData(res.data.data);
             } catch (e) { console.error(e); }
             finally { setLoading(false); }
         };
         fetch();
-    }, [period, selectedRestaurantId]); // Refetch if restaurant scope changes
+    }, [period, selectedRestaurantId, customFrom, customTo]);
 
     useEffect(() => {
         const fetchReport = async () => {
@@ -152,6 +164,10 @@ export default function AnalyticsScreen() {
         { label: 'Expenses', value: `₹${Math.round(summary.totalExpense || 0)}`, icon: 'receipt-outline', grad: ['#C6F53D', '#E74C3C'], shadow: Shadows.md },
     ];
 
+    if (summary.pendingAmount !== undefined) {
+        kpis.splice(3, 0, { label: 'Pending', value: `₹${Math.round(summary.pendingAmount || 0)}`, icon: 'hourglass-outline', grad: ['#fbbf24', '#f59e0b'], shadow: Shadows.md });
+    }
+
     return (
         <LinearGradient colors={gradients.background} style={themedStyles.container}>
             <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor="transparent" translucent />
@@ -175,8 +191,8 @@ export default function AnalyticsScreen() {
                     {/* Detailed Report Viewer UI */}
                     <View style={themedStyles.reportSelectorRow}>
                         <Text style={themedStyles.sectionTitle}>Detailed Reports</Text>
-                        <TouchableOpacity 
-                            style={themedStyles.selectorBtn} 
+                        <TouchableOpacity
+                            style={themedStyles.selectorBtn}
                             onPress={() => setIsReportModalVisible(true)}
                         >
                             <Text style={themedStyles.selectorBtnText}>
@@ -185,17 +201,17 @@ export default function AnalyticsScreen() {
                             <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
-                    <ReportViewer 
-                        reportId={selectedReportType} 
-                        reportData={reportData} 
-                        loading={reportLoading} 
+                    <ReportViewer
+                        reportId={selectedReportType}
+                        reportData={reportData}
+                        loading={reportLoading}
                     />
 
                     {/* Stakeholder Restaurant Switcher */}
                     {user?.role === 'stakeholder' && accessibleRestaurants?.length > 0 && (
                         <View style={{ marginBottom: Spacing.xl }}>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                     style={[themedStyles.periodTab, selectedRestaurantId === null && themedStyles.periodActive, { paddingHorizontal: 16 }]}
                                     onPress={() => setSelectedRestaurantId(null)}
                                 >
@@ -203,7 +219,7 @@ export default function AnalyticsScreen() {
                                     <Text style={[themedStyles.periodText, selectedRestaurantId === null && themedStyles.periodTextActive]}>All Restaurants</Text>
                                 </TouchableOpacity>
                                 {accessibleRestaurants.map(r => (
-                                    <TouchableOpacity 
+                                    <TouchableOpacity
                                         key={r.restaurantId}
                                         style={[themedStyles.periodTab, selectedRestaurantId === r.restaurantId && themedStyles.periodActive, { paddingHorizontal: 16 }]}
                                         onPress={() => setSelectedRestaurantId(r.restaurantId)}
@@ -217,20 +233,42 @@ export default function AnalyticsScreen() {
                     )}
 
                     {/* Period Selector */}
-                    <View style={themedStyles.periodRow}>
-                        {PERIODS.map(p => (
-                            <TouchableOpacity
-                                key={p}
-                                style={[themedStyles.periodTab, period === p && themedStyles.periodActive]}
-                                onPress={() => setPeriod(p)}
-                            >
-                                {period === p && (
-                                    <LinearGradient colors={gradients.primary} style={[StyleSheet.absoluteFill, { borderRadius: Radius.round }]} />
-                                )}
-                                <Text style={[themedStyles.periodText, period === p && themedStyles.periodTextActive]}>{p}</Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: Spacing.xl }}>
+                        <View style={[themedStyles.periodRow, { marginBottom: 0 }]}>
+                            {['Today', 'Week', 'Month', 'Custom'].map(p => (
+                                <TouchableOpacity
+                                    key={p}
+                                    style={[themedStyles.periodTab, period === p && themedStyles.periodActive, { paddingHorizontal: 16 }]}
+                                    onPress={() => setPeriod(p)}
+                                >
+                                    {period === p && (
+                                        <LinearGradient colors={gradients.primary} style={[StyleSheet.absoluteFill, { borderRadius: Radius.round }]} />
+                                    )}
+                                    <Text style={[themedStyles.periodText, period === p && themedStyles.periodTextActive]}>{p}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </ScrollView>
+
+                    {period === 'Custom' && (
+                        <View style={{ flexDirection: 'row', gap: 10, marginBottom: Spacing.xl, alignItems: 'center' }}>
+                            <TextInput
+                                style={[themedStyles.chartCard, { flex: 1, padding: 10, marginBottom: 0, textAlign: 'center', color: colors.textPrimary }]}
+                                value={customFrom}
+                                onChangeText={setCustomFrom}
+                                placeholder="YYYY-MM-DD"
+                                placeholderTextColor={colors.textMuted}
+                            />
+                            <Text style={{ color: colors.textSecondary }}>to</Text>
+                            <TextInput
+                                style={[themedStyles.chartCard, { flex: 1, padding: 10, marginBottom: 0, textAlign: 'center', color: colors.textPrimary }]}
+                                value={customTo}
+                                onChangeText={setCustomTo}
+                                placeholder="YYYY-MM-DD"
+                                placeholderTextColor={colors.textMuted}
+                            />
+                        </View>
+                    )}
 
                     {/* KPI Cards */}
                     <View style={[themedStyles.kpiRow, { flexWrap: 'wrap' }]}>
@@ -264,15 +302,15 @@ export default function AnalyticsScreen() {
                                         return String(d?._id || 'N/A');
                                     }),
                                     datasets: [
-                                        { 
-                                            data: data.revenueByDay.map((d: any) => d.revenue), 
-                                            color: () => colors.primary, 
-                                            strokeWidth: 3 
+                                        {
+                                            data: data.revenueByDay.map((d: any) => d.revenue),
+                                            color: () => colors.primary,
+                                            strokeWidth: 3
                                         },
-                                        { 
-                                            data: data.revenueByDay.map((d: any) => d.profit || 0), 
-                                            color: () => '#00D68F', 
-                                            strokeWidth: 2 
+                                        {
+                                            data: data.revenueByDay.map((d: any) => d.profit || 0),
+                                            color: () => '#00D68F',
+                                            strokeWidth: 2
                                         }
                                     ],
                                     legend: ["Revenue", "Net Profit"]
@@ -355,6 +393,11 @@ export default function AnalyticsScreen() {
                             <View style={themedStyles.soldChip}>
                                 <Text style={themedStyles.soldText}>{item.totalQuantity} sold</Text>
                             </View>
+                            {item.profit !== undefined && (
+                                <View style={[themedStyles.soldChip, { backgroundColor: 'rgba(0,214,143,0.1)', borderColor: 'rgba(0,214,143,0.2)' }]}>
+                                    <Text style={[themedStyles.soldText, { color: '#00D68F' }]}>₹{item.profit}</Text>
+                                </View>
+                            )}
                         </View>
                     )) : (
                         <View style={themedStyles.noData}>
@@ -379,8 +422,8 @@ export default function AnalyticsScreen() {
                                 <ScrollView showsVerticalScrollIndicator={true} nestedScrollEnabled={true}>
                                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
                                         {REPORTS.map((type) => (
-                                            <TouchableOpacity 
-                                                key={type.id} 
+                                            <TouchableOpacity
+                                                key={type.id}
                                                 style={[themedStyles.optionCard, selectedReportType === type.id && themedStyles.optionCardActive, { minWidth: '45%' }]}
                                                 onPress={() => setSelectedReportType(type.id)}
                                             >
@@ -400,8 +443,8 @@ export default function AnalyticsScreen() {
                                     { id: 'excel', label: 'Excel (.xlsx)', icon: 'grid-outline' },
                                     { id: 'json', label: 'JSON Data', icon: 'code-slash-outline' }
                                 ].map((format) => (
-                                    <TouchableOpacity 
-                                        key={format.id} 
+                                    <TouchableOpacity
+                                        key={format.id}
                                         style={[themedStyles.optionCard, selectedReportFormat === format.id && themedStyles.optionCardActive]}
                                         onPress={() => setSelectedReportFormat(format.id)}
                                     >
@@ -490,7 +533,7 @@ const createStyles = (colors: any, gradients: any, isDark: boolean) => StyleShee
     profitValueRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
     bigProfit: { ...Typography.h2, color: colors.textPrimary, fontWeight: '900' },
     profitIndicator: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: Radius.round },
-    
+
     // Modal Styles
     modalOverlay: {
         flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: Spacing.lg
