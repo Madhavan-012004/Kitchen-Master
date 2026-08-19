@@ -1,16 +1,23 @@
 import React, { useState, useEffect } from 'react'
 import { HashRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext.jsx'
+import { MaintenanceProvider } from './context/MaintenanceContext.jsx'
+import { useMaintenance } from './context/MaintenanceContext.jsx'
+import MaintenanceGate from './components/MaintenanceGate.jsx'
 import { StakeholderProvider } from './context/StakeholderContext.jsx'
 import LoginPage from './pages/Login.jsx'
 import { ThemeProvider, useTheme } from './context/ThemeContext.jsx'
 import { POSModeProvider, usePOSMode } from './context/POSModeContext.jsx'
 import { LanguageProvider } from './context/LanguageContext.jsx'
 import { NetworkProvider, useNetwork, setGlobalTriggerOffline } from './context/NetworkContext.jsx'
+import { MobileViewProvider, useMobileView } from './context/MobileViewContext.jsx'
+import './styles/global-mobile.css'
 import NetworkErrorOverlay from './components/NetworkErrorOverlay.jsx'
 import Layout from './components/Layout.jsx'
 import POSPage from './pages/POS.jsx'
 import PoultryMobilePOS from './pages/PoultryMobilePOS.jsx'
+import LinePOS from './pages/LinePOS.jsx'
+import LineMobilePOS from './pages/LineMobilePOS.jsx'
 import OrdersPage from './pages/Orders.jsx'
 import MenuPage from './pages/Menu.jsx'
 import EmployeesPage from './pages/Employees.jsx'
@@ -53,7 +60,12 @@ import './cous/i18n.js'
 // ─── Guards ───────────────────────────────────────────────────────────────────
 
 function ProtectedRoute({ children, section }) {
+  const { isMaintenance } = useMaintenance()
   const { isAuthenticated, canAccess, user, attendance } = useAuth()
+
+  // Maintenance has highest priority — let MaintenanceGate handle display
+  if (isMaintenance) return null
+
   if (!isAuthenticated) return <Navigate to="/login" replace />
   if (user?.isProBloomAdmin) return <Navigate to="/probloom-hq" replace />
   // Stakeholders go to analytics as their home
@@ -95,7 +107,12 @@ function CousNetworkBridge() {
 
 // Guard: only the ProBloom Super Admin can access /probloom-hq
 function ProBloomAdminRoute({ children }) {
+  const { isMaintenance } = useMaintenance()
   const { isAuthenticated, user } = useAuth()
+
+  // Maintenance has highest priority — HQ admin route is also gated
+  if (isMaintenance) return null
+
   if (!isAuthenticated) return <Navigate to="/login" replace />
   if (!user?.isProBloomAdmin) return <Navigate to="/pos" replace />
   return children
@@ -141,7 +158,7 @@ function NetworkGlobalBridge() {
 
 // ─── POS Dispatcher for Mobile ──────────────────────────────────────────────────
 function POSDispatcher() {
-  const { isPoultry } = usePOSMode();
+  const { isPoultry, isLine } = usePOSMode();
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
   useEffect(() => {
@@ -152,6 +169,13 @@ function POSDispatcher() {
 
   if (isPoultry && isMobile) {
     return <PoultryMobilePOS />;
+  }
+  if (isLine) {
+    const linePosView = localStorage.getItem('linePosView') || 'web';
+    if (isMobile || linePosView === 'mobile') {
+      return <LineMobilePOS />;
+    }
+    return <LinePOS />;
   }
   return <POSPage />;
 }
@@ -173,6 +197,8 @@ function LicenseWarningBanner() {
 
   useEffect(() => {
     if (!isAuthenticated || isPublicPage || user?.isProBloomAdmin) return;
+    // Do not run license checks while the system is under maintenance
+    if (localStorage.getItem('km_maintenance_active') === 'true') return;
     let cancelled = false;
     api.get('license/status').then(res => {
       if (cancelled) return;
@@ -232,104 +258,111 @@ export default function App() {
   return (
     <NetworkProvider>
       <ThemeProvider>
-        <LanguageProvider>
-          <POSModeProvider>
-            <AuthProvider>
-              <StakeholderProvider>
-                <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-                  <ThemeSync />
-                  <POSModeSync />
-                  <LicenseWarningBanner />
-                  <Routes>
-                    <Route path="/login" element={<LoginPage />} />
-                    <Route path="/maintenance" element={<MaintenancePage />} />
-                    <Route path="/license" element={<LicenseManagement />} />
-                    <Route path="/join-waitlist/:restaurantId" element={<WaitlistRegistration />} />
-                    <Route path="/waitlist-monitor/:restaurantId" element={<WaitlistMonitor />} />
-                    <Route path="/waitlist-monitor/:restaurantId/" element={<WaitlistMonitor />} />
+        <MobileViewProvider>
+          <LanguageProvider>
+            <POSModeProvider>
+              <AuthProvider>
+                <MaintenanceProvider>
+                  <StakeholderProvider>
+                    <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+                      <ThemeSync />
+                      <POSModeSync />
+                      <LicenseWarningBanner />
+                      {/* MaintenanceGate wraps ALL routes — maintenance has highest priority */}
+                      <MaintenanceGate>
+                        <Routes>
+                          <Route path="/login" element={<LoginPage />} />
+                          <Route path="/maintenance" element={<MaintenancePage />} />
+                          <Route path="/license" element={<LicenseManagement />} />
+                          <Route path="/join-waitlist/:restaurantId" element={<WaitlistRegistration />} />
+                          <Route path="/waitlist-monitor/:restaurantId" element={<WaitlistMonitor />} />
+                          <Route path="/waitlist-monitor/:restaurantId/" element={<WaitlistMonitor />} />
 
-                    {/* ── cous_web: Customer Ordering App (replaces old CustomerMenu) ── */}
-                    <Route path="/order/:restaurantId/:tableNumber" element={
-                      <CousNetworkProvider>
-                        <CousThemeProvider>
-                          <CousNetworkBridge />
-                          <CousWelcome />
-                        </CousThemeProvider>
-                      </CousNetworkProvider>
-                    } />
-                    <Route path="/menu/:restaurantId/:tableNumber" element={
-                      <CousNetworkProvider>
-                        <CousThemeProvider>
-                          <CousNetworkBridge />
-                          <CousProtectedMenu element={<CousHome />} />
-                        </CousThemeProvider>
-                      </CousNetworkProvider>
-                    } />
-                    <Route path="/otp-logs" element={
-                      <CousNetworkProvider>
-                        <CousThemeProvider>
-                          <CousOtpLogs />
-                        </CousThemeProvider>
-                      </CousNetworkProvider>
-                    } />
+                          {/* ── cous_web: Customer Ordering App (replaces old CustomerMenu) ── */}
+                          <Route path="/order/:restaurantId/:tableNumber" element={
+                            <CousNetworkProvider>
+                              <CousThemeProvider>
+                                <CousNetworkBridge />
+                                <CousWelcome />
+                              </CousThemeProvider>
+                            </CousNetworkProvider>
+                          } />
+                          <Route path="/menu/:restaurantId/:tableNumber" element={
+                            <CousNetworkProvider>
+                              <CousThemeProvider>
+                                <CousNetworkBridge />
+                                <CousProtectedMenu element={<CousHome />} />
+                              </CousThemeProvider>
+                            </CousNetworkProvider>
+                          } />
+                          <Route path="/otp-logs" element={
+                            <CousNetworkProvider>
+                              <CousThemeProvider>
+                                <CousOtpLogs />
+                              </CousThemeProvider>
+                            </CousNetworkProvider>
+                          } />
 
-                    {/* ── ProBloom HQ — Secret Master Admin Dashboard ── */}
-                    <Route
-                      path="/probloom-hq"
-                      element={
-                        <ProBloomAdminRoute>
-                          <MasterBackoffice />
-                        </ProBloomAdminRoute>
-                      }
-                    />
-                    <Route
-                      path="/probloom-hq/provision"
-                      element={
-                        <ProBloomAdminRoute>
-                          <ProBloomProvisionClient />
-                        </ProBloomAdminRoute>
-                      }
-                    />
-                    <Route
-                      path="/probloom-hq/maintenance"
-                      element={
-                        <ProBloomAdminRoute>
-                          <MaintenanceBanners />
-                        </ProBloomAdminRoute>
-                      }
-                    />
+                          {/* ── ProBloom HQ — Secret Master Admin Dashboard ── */}
+                          <Route
+                            path="/probloom-hq"
+                            element={
+                              <ProBloomAdminRoute>
+                                <MasterBackoffice />
+                              </ProBloomAdminRoute>
+                            }
+                          />
+                          <Route
+                            path="/probloom-hq/provision"
+                            element={
+                              <ProBloomAdminRoute>
+                                <ProBloomProvisionClient />
+                              </ProBloomAdminRoute>
+                            }
+                          />
+                          <Route
+                            path="/probloom-hq/maintenance"
+                            element={
+                              <ProBloomAdminRoute>
+                                <MaintenanceBanners />
+                              </ProBloomAdminRoute>
+                            }
+                          />
 
-                    {/* ── ProBloom App (for restaurant clients) ── */}
-                    <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-                      <Route index element={<Navigate to="/pos" replace />} />
-                      <Route path="pos" element={<ProtectedRoute section="pos"><POSDispatcher /></ProtectedRoute>} />
-                      <Route path="orders" element={<ProtectedRoute section="orders"><OrdersPage /></ProtectedRoute>} />
-                      <Route path="menu" element={<ProtectedRoute section="menu"><MenuPage /></ProtectedRoute>} />
-                      <Route path="employees" element={<ProtectedRoute section="employees"><EmployeesPage /></ProtectedRoute>} />
-                      <Route path="kitchen" element={<ProtectedRoute section="kitchen"><KitchenPage /></ProtectedRoute>} />
-                      <Route path="billing-queue" element={<ProtectedRoute section="billing"><BillingQueue /></ProtectedRoute>} />
-                      <Route path="analytics" element={<ProtectedRoute section="analytics"><AnalyticsPage /></ProtectedRoute>} />
-                      <Route path="attendance" element={<ProtectedRoute section="attendance"><AttendancePage /></ProtectedRoute>} />
-                      <Route path="ai-assistant" element={<ProtectedRoute><AIAssistant /></ProtectedRoute>} />
-                      <Route path="inventory" element={<ProtectedRoute section="inventory"><InventoryPage /></ProtectedRoute>} />
-                      <Route path="clothing-stock" element={<Navigate to="/inventory" replace />} />
-                      <Route path="tailoring-jobs" element={<ProtectedRoute section="tailoring"><TailoringJobsPage /></ProtectedRoute>} />
-                      <Route path="expenditures" element={<ProtectedRoute section="expenditures"><ExpendituresPage /></ProtectedRoute>} />
-                      <Route path="customers" element={<ProtectedRoute><CustomersPage /></ProtectedRoute>} />
-                      <Route path="poultry-clients" element={<ProtectedRoute section="pos"><PoultryClients /></ProtectedRoute>} />
-                      <Route path="poultry-history" element={<ProtectedRoute section="pos"><PoultryHistory /></ProtectedRoute>} />
-                      <Route path="kanban" element={<ProtectedRoute><ProjectTracker /></ProtectedRoute>} />
-                      <Route path="whatsapp" element={<ProtectedRoute><WhatsAppDashboard /></ProtectedRoute>} />
-                      <Route path="profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-                    </Route>
+                          {/* ── ProBloom App (for restaurant clients) ── */}
+                          <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+                            <Route index element={<Navigate to="/pos" replace />} />
+                            <Route path="pos" element={<ProtectedRoute section="pos"><POSDispatcher /></ProtectedRoute>} />
+                            <Route path="orders" element={<ProtectedRoute section="orders"><OrdersPage /></ProtectedRoute>} />
+                            <Route path="menu" element={<ProtectedRoute section="menu"><MenuPage /></ProtectedRoute>} />
+                            <Route path="employees" element={<ProtectedRoute section="employees"><EmployeesPage /></ProtectedRoute>} />
+                            <Route path="kitchen" element={<ProtectedRoute section="kitchen"><KitchenPage /></ProtectedRoute>} />
+                            <Route path="billing-queue" element={<ProtectedRoute section="billing"><BillingQueue /></ProtectedRoute>} />
+                            <Route path="analytics" element={<ProtectedRoute section="analytics"><AnalyticsPage /></ProtectedRoute>} />
+                            <Route path="attendance" element={<ProtectedRoute section="attendance"><AttendancePage /></ProtectedRoute>} />
+                            <Route path="ai-assistant" element={<ProtectedRoute><AIAssistant /></ProtectedRoute>} />
+                            <Route path="inventory" element={<ProtectedRoute section="inventory"><InventoryPage /></ProtectedRoute>} />
+                            <Route path="clothing-stock" element={<Navigate to="/inventory" replace />} />
+                            <Route path="tailoring-jobs" element={<ProtectedRoute section="tailoring"><TailoringJobsPage /></ProtectedRoute>} />
+                            <Route path="expenditures" element={<ProtectedRoute section="expenditures"><ExpendituresPage /></ProtectedRoute>} />
+                            <Route path="customers" element={<ProtectedRoute><CustomersPage /></ProtectedRoute>} />
+                            <Route path="poultry-clients" element={<ProtectedRoute section="pos"><PoultryClients /></ProtectedRoute>} />
+                            <Route path="poultry-history" element={<ProtectedRoute section="pos"><PoultryHistory /></ProtectedRoute>} />
+                            <Route path="kanban" element={<ProtectedRoute><ProjectTracker /></ProtectedRoute>} />
+                            <Route path="whatsapp" element={<ProtectedRoute><WhatsAppDashboard /></ProtectedRoute>} />
+                            <Route path="profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+                          </Route>
 
-                    <Route path="*" element={<Navigate to="/pos" replace />} />
-                  </Routes>
-                </HashRouter>
-              </StakeholderProvider>
-            </AuthProvider>
-          </POSModeProvider>
-        </LanguageProvider>
+                          <Route path="*" element={<Navigate to="/pos" replace />} />
+                        </Routes>
+                      </MaintenanceGate>
+                    </HashRouter>
+                  </StakeholderProvider>
+                </MaintenanceProvider>
+              </AuthProvider>
+            </POSModeProvider>
+          </LanguageProvider>
+        </MobileViewProvider>
       </ThemeProvider>
       {/* Network Error Overlay — above all routes, outside Router */}
       <NetworkGlobalBridge />

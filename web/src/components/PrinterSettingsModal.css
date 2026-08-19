@@ -482,3 +482,210 @@
         text-align: center;
     }
 }
+
+/* ── Logo Configuration Styling ── */
+.psm-logo-section {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 16px;
+}
+
+.psm-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.psm-toggle-switch {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.psm-switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+}
+
+.psm-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.psm-slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background-color: var(--border);
+    transition: 0.25s;
+}
+
+.psm-slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: 0.25s;
+}
+
+.psm-slider.round {
+    border-radius: 24px;
+}
+
+.psm-slider.round:before {
+    border-radius: 50%;
+}
+
+input:checked+.psm-slider {
+    background-color: var(--accent);
+}
+
+input:checked+.psm-slider:before {
+    transform: translateX(20px);
+}
+
+.psm-toggle-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.psm-toggle-label.active {
+    color: var(--accent);
+}
+
+.psm-logo-body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-top: 12px;
+}
+
+.psm-logo-input-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.psm-btn-upload {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    padding: 11px 16px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.psm-btn-upload:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent);
+}
+
+.psm-logo-preview-box {
+    background: var(--bg-card);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.psm-preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.psm-width-pills {
+    display: flex;
+    gap: 6px;
+}
+
+.psm-pill {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.psm-pill.active {
+    background: var(--accent-light);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.psm-preview-canvas-container {
+    background: #e2e8f0;
+    border-radius: var(--radius-sm);
+    padding: 16px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 120px;
+}
+
+.psm-thermal-paper-mock {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 320px;
+    position: relative;
+}
+
+.psm-thermal-logo-img {
+    max-height: 90px;
+    width: auto;
+    display: block;
+    object-fit: contain;
+    image-rendering: pixelated;
+}
+
+.psm-thermal-receipt-text {
+    font-size: 11px;
+    font-family: monospace;
+    color: #64748b;
+    margin-top: 8px;
+    text-align: center;
+}
+
+.psm-preview-loading,
+.psm-preview-error {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.psm-preview-badge {
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 600;
+    text-align: center;
+}

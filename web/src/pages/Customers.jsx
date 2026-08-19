@@ -10,6 +10,21 @@ export default function CustomersPage() {
     const [newCustomer, setNewCustomer] = useState({ name: '', phone: '' })
     const [adding, setAdding] = useState(false)
 
+    // User Access Control (Owner / Manager vs Staff)
+    const currentUser = useMemo(() => {
+        try {
+            return JSON.parse(localStorage.getItem('km_user') || '{}')
+        } catch (e) {
+            return {}
+        }
+    }, [])
+
+    const isOwnerOrManager = useMemo(() => {
+        if (!currentUser || !currentUser.role) return true // fallback default
+        const role = String(currentUser.role).toLowerCase()
+        return ['owner', 'manager', 'admin'].includes(role) || Boolean(currentUser.isProBloomAdmin)
+    }, [currentUser])
+
     // Pagination
     const [currentPage, setCurrentPage] = useState(1)
     const ITEMS_PER_PAGE = 20
@@ -19,6 +34,7 @@ export default function CustomersPage() {
     const [historyOrders, setHistoryOrders] = useState([])
     const [loadingHistory, setLoadingHistory] = useState(false)
     const [selectedOrder, setSelectedOrder] = useState(null)
+    const [mobileHistoryTab, setMobileHistoryTab] = useState('list') // 'list' or 'detail'
 
     useEffect(() => {
         loadCustomers()
@@ -65,6 +81,10 @@ export default function CustomersPage() {
     }
 
     const handleDeleteCustomer = async (id, name) => {
+        if (!isOwnerOrManager) {
+            alert("Only Owners or Admins are authorized to delete customers.")
+            return
+        }
         if (!window.confirm(`Are you sure you want to delete ${name}?`)) return
         try {
             await api.delete(`/customers/${id}`)
@@ -80,6 +100,7 @@ export default function CustomersPage() {
         setLoadingHistory(true)
         setHistoryOrders([])
         setSelectedOrder(null)
+        setMobileHistoryTab('list')
         try {
             const res = await api.get(`/orders/history?search=${customer.phone}`)
             if (res.data?.data?.orders) {
@@ -138,14 +159,16 @@ export default function CustomersPage() {
         return colors[charCode % colors.length]
     }
 
+    const cleanPhone = (p) => (p || '').replace(/[^0-9]/g, '')
+
     return (
         <div className="customers-page animate-fade-in">
             {/* DIRECTORY SECTION */}
             <div className="directory-container glass-panel" style={{ marginTop: '10px' }}>
-                <div className="directory-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <h2 className="directory-title" style={{ margin: 0, fontSize: '16px', fontWeight: 'bold', color: 'var(--text-primary)' }}>Customer Directory</h2>
-                        <span style={{ background: 'var(--bg-hover)', color: 'var(--text-secondary)', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 'bold' }}>
+                <div className="directory-header">
+                    <div className="directory-title-wrapper">
+                        <h2 className="directory-title">Customer Directory</h2>
+                        <span className="directory-count-badge">
                             {customers.length} Total
                         </span>
                     </div>
@@ -155,7 +178,7 @@ export default function CustomersPage() {
                             <span className="search-icon">🔍</span>
                             <input
                                 type="text"
-                                placeholder="Search by Name or Phone..."
+                                placeholder="Search Name or Phone..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
@@ -182,74 +205,143 @@ export default function CustomersPage() {
                             <p>Your search returned no results. Try adjusting the filters or adding a new customer.</p>
                         </div>
                     ) : (
-                        <div className="premium-table-wrapper">
-                            <table className="premium-table">
-                                <thead>
-                                    <tr>
-                                        <th>Customer</th>
-                                        <th>Contact</th>
-                                        <th>Loyalty Points</th>
-                                        <th>Last Visit</th>
-                                        <th style={{ textAlign: 'right' }}>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {paginatedCustomers.map((customer, index) => {
-                                        const initials = (customer.name || 'U').substring(0, 2).toUpperCase()
-                                        return (
-                                            <tr key={customer.id || customer._id} className="table-row-animate">
-                                                <td>
-                                                    <div className="customer-cell">
-                                                        <div className="customer-avatar" style={{ background: getAvatarColor(customer.name) }}>
-                                                            {initials}
-                                                        </div>
-                                                        <div className="customer-name-group">
-                                                            <span className="customer-name">{customer.name || 'Unknown'}</span>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td>
+                        <>
+                            {/* MOBILE CARD VIEW (VISIBLE ON SMALL SCREENS) */}
+                            <div className="mobile-customer-cards">
+                                {paginatedCustomers.map((customer) => {
+                                    const initials = (customer.name || 'U').substring(0, 2).toUpperCase()
+                                    const rawPhone = cleanPhone(customer.phone)
+
+                                    return (
+                                        <div key={customer.id || customer._id} className="customer-card-mobile">
+                                            <div className="card-mobile-top">
+                                                <div className="customer-avatar" style={{ background: getAvatarColor(customer.name) }}>
+                                                    {initials}
+                                                </div>
+                                                <div className="card-mobile-info">
+                                                    <div className="customer-name">{customer.name || 'Unknown'}</div>
                                                     <div className="contact-cell">
-                                                        <span className="phone-icon">📞</span>
                                                         <span className="phone-number">{customer.phone}</span>
                                                     </div>
-                                                </td>
-                                                <td>
-                                                    <div className={`loyalty-pill ${customer.loyaltyPoints > 0 ? 'active' : 'inactive'}`}>
-                                                        <span className="star-icon">⭐</span>
-                                                        <span className="points-text">{customer.loyaltyPoints ? customer.loyaltyPoints.toFixed(2) : '0.00'} Pts</span>
-                                                    </div>
-                                                </td>
-                                                <td>
-                                                    <span className="date-cell" style={{ color: 'var(--text-secondary)' }}>
-                                                        {customer.lastVisit ? new Date(customer.lastVisit).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : (customer.createdAt ? new Date(customer.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A')}
-                                                    </span>
-                                                </td>
-                                                <td style={{ textAlign: 'right' }}>
-                                                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
-                                                        <button
-                                                            className="hq-act-btn hq-btn-history"
-                                                            onClick={() => handleViewHistory(customer)}
-                                                            title="Purchase History"
-                                                            style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '16px', padding: '4px' }}
-                                                        >
-                                                            📄
-                                                        </button>
-                                                        <button
-                                                            className="hq-act-btn hq-btn-delete"
-                                                            onClick={() => handleDeleteCustomer(customer.id || customer._id, customer.name)}
-                                                            title="Delete Customer"
-                                                            style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '16px', padding: '4px' }}
-                                                        >
-                                                            🗑️
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        )
-                                    })}
-                                </tbody>
-                            </table>
+                                                </div>
+                                                <div className={`loyalty-pill ${customer.loyaltyPoints > 0 ? 'active' : 'inactive'}`}>
+                                                    <span className="star-icon">⭐</span>
+                                                    <span>{customer.loyaltyPoints ? customer.loyaltyPoints.toFixed(2) : '0.00'}</span>
+                                                </div>
+                                            </div>
+
+                                            <div className="card-mobile-quick-actions">
+                                                {rawPhone && (
+                                                    <>
+                                                        <a href={`tel:${rawPhone}`} className="quick-chip-btn call-chip" title="Call Customer">
+                                                            📞 Call
+                                                        </a>
+                                                        <a href={`https://wa.me/${rawPhone.length === 10 ? '91' + rawPhone : rawPhone}`} target="_blank" rel="noopener noreferrer" className="quick-chip-btn wa-chip" title="Chat on WhatsApp">
+                                                            💬 WhatsApp
+                                                        </a>
+                                                    </>
+                                                )}
+                                                <button
+                                                    className="quick-chip-btn history-chip"
+                                                    onClick={() => handleViewHistory(customer)}
+                                                >
+                                                    📄 History
+                                                </button>
+                                                {isOwnerOrManager && (
+                                                    <button
+                                                        className="quick-chip-btn delete-chip"
+                                                        onClick={() => handleDeleteCustomer(customer.id || customer._id, customer.name)}
+                                                    >
+                                                        🗑️ Delete
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+
+                            {/* DESKTOP TABLE VIEW (HIDDEN ON SMALL SCREENS) */}
+                            <div className="premium-table-wrapper desktop-customer-table">
+                                <table className="premium-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Customer</th>
+                                            <th>Contact &amp; Quick Connect</th>
+                                            <th>Loyalty Points</th>
+                                            <th>Last Visit</th>
+                                            <th style={{ textAlign: 'right' }}>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {paginatedCustomers.map((customer) => {
+                                            const initials = (customer.name || 'U').substring(0, 2).toUpperCase()
+                                            const rawPhone = cleanPhone(customer.phone)
+
+                                            return (
+                                                <tr key={customer.id || customer._id} className="table-row-animate">
+                                                    <td>
+                                                        <div className="customer-cell">
+                                                            <div className="customer-avatar" style={{ background: getAvatarColor(customer.name) }}>
+                                                                {initials}
+                                                            </div>
+                                                            <div className="customer-name-group">
+                                                                <span className="customer-name">{customer.name || 'Unknown'}</span>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        <div className="contact-cell">
+                                                            <span className="phone-number">{customer.phone}</span>
+                                                            {rawPhone && (
+                                                                <div style={{ display: 'inline-flex', gap: '6px', marginLeft: '8px' }}>
+                                                                    <a href={`tel:${rawPhone}`} style={{ textDecoration: 'none', fontSize: '13px' }} title="Call Customer">📞</a>
+                                                                    <a href={`https://wa.me/${rawPhone.length === 10 ? '91' + rawPhone : rawPhone}`} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', fontSize: '13px' }} title="WhatsApp">💬</a>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        <div className={`loyalty-pill ${customer.loyaltyPoints > 0 ? 'active' : 'inactive'}`}>
+                                                            <span className="star-icon">⭐</span>
+                                                            <span className="points-text">{customer.loyaltyPoints ? customer.loyaltyPoints.toFixed(2) : '0.00'} Pts</span>
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        <span className="date-cell" style={{ color: 'var(--text-secondary)' }}>
+                                                            {customer.lastVisit ? new Date(customer.lastVisit).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : (customer.createdAt ? new Date(customer.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A')}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ textAlign: 'right' }}>
+                                                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                                                            <button
+                                                                className="hq-act-btn hq-btn-history"
+                                                                onClick={() => handleViewHistory(customer)}
+                                                                title="Purchase History"
+                                                                style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '16px', padding: '4px' }}
+                                                            >
+                                                                📄
+                                                            </button>
+                                                            {isOwnerOrManager && (
+                                                                <button
+                                                                    className="hq-act-btn hq-btn-delete"
+                                                                    onClick={() => handleDeleteCustomer(customer.id || customer._id, customer.name)}
+                                                                    title="Delete Customer"
+                                                                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '16px', padding: '4px' }}
+                                                                >
+                                                                    🗑️
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            )
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {/* PAGINATION */}
                             {totalPages > 1 && (
                                 <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', padding: '15px', borderTop: '1px solid var(--border)' }}>
                                     <button
@@ -269,7 +361,7 @@ export default function CustomersPage() {
                                     </button>
                                 </div>
                             )}
-                        </div>
+                        </>
                     )}
                 </div>
             </div>
@@ -329,7 +421,7 @@ export default function CustomersPage() {
             {/* PURCHASE HISTORY MODAL */}
             {historyCustomer && (
                 <div className="premium-modal-overlay">
-                    <div className="premium-modal modal-slide-up" style={{ maxWidth: '90vw', height: '85vh', display: 'flex', flexDirection: 'column' }}>
+                    <div className="premium-modal modal-slide-up customer-history-modal">
                         <div className="modal-header-gradient" style={{ flexShrink: 0 }}>
                             <div className="modal-title-group">
                                 <h3>📄 Purchase History</h3>
@@ -337,7 +429,7 @@ export default function CustomersPage() {
                             </div>
                             <button className="modal-close-glass" onClick={() => { setHistoryCustomer(null); setSelectedOrder(null); }}>✕</button>
                         </div>
-                        <div className="modal-body-elegant" style={{ flex: 1, padding: '0', display: 'flex', overflow: 'hidden' }}>
+                        <div className="history-modal-body">
                             {loadingHistory ? (
                                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                                     <div className="premium-spinner" style={{ marginBottom: '10px' }}></div>
@@ -349,21 +441,17 @@ export default function CustomersPage() {
                                     <p>No purchase history found for this customer.</p>
                                 </div>
                             ) : (
-                                <>
+                                <div className="history-modal-panes">
                                     {/* Left Pane: Orders List */}
-                                    <div style={{ width: '35%', borderRight: '1px solid var(--border)', overflowY: 'auto', background: 'var(--bg-secondary)' }}>
+                                    <div className={`history-orders-list ${mobileHistoryTab === 'detail' ? 'hide-on-mobile' : ''}`}>
                                         {historyOrders.map((order, i) => (
                                             <div
                                                 key={order.id || i}
-                                                onClick={() => setSelectedOrder(order)}
-                                                style={{
-                                                    padding: '16px',
-                                                    borderBottom: '1px solid var(--border)',
-                                                    cursor: 'pointer',
-                                                    background: selectedOrder?.id === order.id ? 'var(--bg-hover)' : 'transparent',
-                                                    borderLeft: selectedOrder?.id === order.id ? '4px solid var(--accent)' : '4px solid transparent',
-                                                    transition: 'all 0.2s'
+                                                onClick={() => {
+                                                    setSelectedOrder(order)
+                                                    setMobileHistoryTab('detail')
                                                 }}
+                                                className={`history-order-item ${selectedOrder?.id === order.id ? 'active' : ''}`}
                                             >
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                                                     <strong style={{ color: 'var(--text-primary)' }}>#{order.orderNumber || order.id}</strong>
@@ -386,9 +474,12 @@ export default function CustomersPage() {
                                     </div>
 
                                     {/* Right Pane: Order Details */}
-                                    <div style={{ flex: 1, overflowY: 'auto', padding: '24px', background: 'var(--bg-primary)' }}>
+                                    <div className={`history-order-detail ${mobileHistoryTab === 'list' ? 'hide-on-mobile' : ''}`}>
                                         {selectedOrder ? (
                                             <div>
+                                                <div className="mobile-history-back-btn" onClick={() => setMobileHistoryTab('list')}>
+                                                    ← Back to Orders
+                                                </div>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px', paddingBottom: '16px', borderBottom: '1px solid var(--border)' }}>
                                                     <div>
                                                         <h2 style={{ margin: '0 0 8px', fontSize: '20px', color: 'var(--text-primary)' }}>Order #{selectedOrder.orderNumber || selectedOrder.id}</h2>
@@ -468,7 +559,7 @@ export default function CustomersPage() {
                                             </div>
                                         )}
                                     </div>
-                                </>
+                                </div>
                             )}
                         </div>
                     </div>

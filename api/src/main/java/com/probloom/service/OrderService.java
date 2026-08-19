@@ -231,9 +231,7 @@ public class OrderService {
                     .discountValue(parseOptionalDouble(data, "discountValue", 0.0))
                     .discountAmount(parseOptionalDouble(data, "discountAmount", 0.0))
                     .pointsRedeemed(parseOptionalDouble(data, "pointsRedeemed", 0.0))
-                    .orderType(data.containsKey("orderType")
-                            ? Orders.OrderType.valueOf(data.get("orderType").toString().toUpperCase().replace("-", "_"))
-                            : Orders.OrderType.DINE_IN)
+                    .orderType(parseOrderType(data.get("orderType")))
                     .customerName(data.get("customerName") != null ? data.get("customerName").toString() : null)
                     .customerPhone(data.get("customerPhone") != null ? data.get("customerPhone").toString() : null)
                     .notes(data.get("notes") != null ? data.get("notes").toString() : null)
@@ -461,8 +459,7 @@ public class OrderService {
         order.setTotal(parseOptionalDouble(data, "total", order.getTotal()));
         order.setNotes(data.get("notes") != null ? data.get("notes").toString() : null);
         if (data.containsKey("orderType")) {
-            order.setOrderType(
-                    Orders.OrderType.valueOf(data.get("orderType").toString().toUpperCase().replace("-", "_")));
+            order.setOrderType(parseOrderType(data.get("orderType")));
         }
         if (data.containsKey("billTemplate"))
             order.setBillTemplate(data.get("billTemplate").toString());
@@ -605,6 +602,19 @@ public class OrderService {
             return Double.valueOf(data.get(key).toString());
         } catch (Exception e) {
             return defaultValue;
+        }
+    }
+
+    private Orders.OrderType parseOrderType(Object raw) {
+        if (raw == null)
+            return Orders.OrderType.DINE_IN;
+        String val = raw.toString().trim().toUpperCase().replace("-", "_");
+        if ("LINE".equals(val) || "LINE_POS".equals(val))
+            return Orders.OrderType.LINE_POS;
+        try {
+            return Orders.OrderType.valueOf(val);
+        } catch (Exception e) {
+            return Orders.OrderType.TAKEAWAY;
         }
     }
 

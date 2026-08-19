@@ -13,6 +13,7 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.BridgeWebChromeClient;
 
 public class MainActivity extends BridgeActivity {
 
@@ -27,7 +28,50 @@ public class MainActivity extends BridgeActivity {
         usbPrintBridge = new UsbPrintBridge(this);
         usbScaleBridge = new UsbScaleBridge(this, getBridge().getWebView());
         requestBluetoothPermissions();
+        requestCameraAndStoragePermissions();
         setupWebViewBridge();
+    }
+
+    /**
+     * Request Camera and Media Storage permissions at runtime.
+     * Required for file input / file chooser / camera capture across Android versions.
+     */
+    private void requestCameraAndStoragePermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // Android 13+ (API 33+)
+            String[] perms = {
+                    Manifest.permission.CAMERA,
+                    Manifest.permission.READ_MEDIA_IMAGES,
+                    Manifest.permission.READ_MEDIA_VIDEO
+            };
+            boolean missing = false;
+            for (String p : perms) {
+                if (ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) {
+                    missing = true;
+                    break;
+                }
+            }
+            if (missing) {
+                ActivityCompat.requestPermissions(this, perms, 302);
+            }
+        } else {
+            // Android 12 and below
+            String[] perms = {
+                    Manifest.permission.CAMERA,
+                    Manifest.permission.READ_EXTERNAL_STORAGE,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE
+            };
+            boolean missing = false;
+            for (String p : perms) {
+                if (ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) {
+                    missing = true;
+                    break;
+                }
+            }
+            if (missing) {
+                ActivityCompat.requestPermissions(this, perms, 302);
+            }
+        }
     }
 
     /**
@@ -84,7 +128,7 @@ public class MainActivity extends BridgeActivity {
             webView.addJavascriptInterface(usbPrintBridge, "UsbPrintBridge");
             webView.addJavascriptInterface(usbScaleBridge, "UsbScaleBridge");
 
-            webView.setWebChromeClient(new WebChromeClient() {
+            webView.setWebChromeClient(new BridgeWebChromeClient(getBridge()) {
                 @Override
                 public void onPermissionRequest(PermissionRequest request) {
                     // Auto-grant all WebView permission requests (Bluetooth, camera, mic, etc.)

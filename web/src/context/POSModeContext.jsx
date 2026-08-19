@@ -25,6 +25,7 @@ export function POSModeProvider({ children }) {
     const isMarket = storeMode === 'supermarket'
     const isClothing = storeMode === 'clothing'
     const isPoultry = storeMode === 'poultry'
+    const isLine = storeMode === 'line'
 
     const setSupermarketMode = (val) => {
         setStoreMode(val ? 'supermarket' : 'restaurant')
@@ -37,6 +38,7 @@ export function POSModeProvider({ children }) {
             if (prev === 'restaurant') return 'supermarket'
             if (prev === 'supermarket') return 'clothing'
             if (prev === 'clothing') return 'poultry'
+            if (prev === 'poultry') return 'line'
             return 'restaurant'
         })
     }
@@ -45,7 +47,7 @@ export function POSModeProvider({ children }) {
         <POSModeContext.Provider value={{
             storeMode, setStoreMode, cycleMode,
             supermarketMode, setSupermarketMode, toggleSupermarketMode,
-            isRestaurant, isMarket, isClothing, isPoultry
+            isRestaurant, isMarket, isClothing, isPoultry, isLine
         }}>
             {children}
         </POSModeContext.Provider>

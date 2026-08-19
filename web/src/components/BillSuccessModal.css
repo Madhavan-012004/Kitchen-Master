@@ -1,0 +1,189 @@
+.bsm-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(15, 23, 42, 0.75);
+    backdrop-filter: blur(4px);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+
+.bsm-card {
+    background: var(--bg-card, #1e293b);
+    color: var(--text-main, #f8fafc);
+    border: 1px solid var(--border-color, #334155);
+    border-radius: 20px;
+    width: 100%;
+    max-width: 440px;
+    padding: 24px;
+    position: relative;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+.bsm-close-icon {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 50%;
+}
+
+.bsm-close-icon:hover {
+    color: #f8fafc;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.bsm-header {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.bsm-icon-ring {
+    font-size: 40px;
+    margin-bottom: 8px;
+}
+
+.bsm-header h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.bsm-offline-chip {
+    display: inline-block;
+    margin-top: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.15);
+    padding: 3px 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.bsm-receipt-preview {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px dashed var(--border-color, #475569);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 18px;
+}
+
+.bsm-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    margin-bottom: 6px;
+    color: #cbd5e1;
+}
+
+.bsm-row.grand-total {
+    border-top: 1px solid var(--border-color, #475569);
+    padding-top: 8px;
+    margin-top: 8px;
+    margin-bottom: 0;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.bsm-phone-input-wrap {
+    margin-bottom: 20px;
+}
+
+.bsm-phone-input-wrap label {
+    display: block;
+    font-size: 12px;
+    color: #94a3b8;
+    margin-bottom: 6px;
+    font-weight: 600;
+}
+
+.bsm-phone-input {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color, #475569);
+    background: var(--bg-primary, #0f172a);
+    color: var(--text-main, #f8fafc);
+    font-size: 14px;
+    outline: none;
+    box-sizing: border-box;
+}
+
+.bsm-phone-input:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.bsm-actions-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.bsm-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.bsm-btn:hover {
+    transform: translateY(-1px);
+}
+
+.whatsapp-btn {
+    background: #25D366;
+    color: #ffffff;
+}
+
+.whatsapp-btn:hover {
+    background: #20ba5a;
+    box-shadow: 0 4px 12px rgba(37, 211, 102, 0.3);
+}
+
+.sms-btn {
+    background: #3b82f6;
+    color: #ffffff;
+}
+
+.sms-btn:hover {
+    background: #2563eb;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.print-btn {
+    background: #64748b;
+    color: #ffffff;
+}
+
+.print-btn:hover {
+    background: #475569;
+}
+
+.done-btn {
+    background: #22c55e;
+    color: #ffffff;
+    grid-column: 1 / -1;
+}
+
+.done-btn:hover {
+    background: #16a34a;
+}

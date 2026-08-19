@@ -4,6 +4,7 @@ import './PoultryPOS.css';
 import api from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { getPrinterSettings, printBill as thermalPrintBill } from '../api/printerUtils.js';
+import { getAssignedVehicle, deductVehicleStock } from '../services/vehicleLocationService.js';
 
 export default function PoultryPOS({ printBill }) {
     const navigate = useNavigate();
@@ -453,16 +454,28 @@ export default function PoultryPOS({ printBill }) {
         let savedBillId = null;
         let savedBillNumber = null;
 
-        // Failsafe IDs since the dedicated server route doesn't exist
-        if (!savedBillId) savedBillId = `OFFLINE-${Date.now()}`;
+        // Fetch reliable server order sequence, fallback to offline collision-safe ID
+        try {
+            const numRes = await api.get('/orders/next-invoice');
+            if (numRes.data && numRes.data.data) {
+                savedBillNumber = String(numRes.data.data);
+                savedBillId = savedBillNumber;
+            }
+        } catch (err) {
+            console.warn('Backend next-invoice fetch failed, using offline fallback');
+        }
+
         if (!savedBillNumber) {
-            let seq = parseInt(localStorage.getItem('poultry_bill_sequence') || '1', 10);
-            const zeroPad = String(seq).padStart(5, '0');
-            savedBillNumber = `PLT-${zeroPad}`;
-            localStorage.setItem('poultry_bill_sequence', seq + 1);
+            const shortRandom = Math.floor(1000 + Math.random() * 9000);
+            savedBillNumber = `PLT-OFF-${Date.now().toString().slice(-6)}-${shortRandom}`;
+            savedBillId = savedBillNumber;
         }
 
         customNotes += `||BILLNO:${savedBillNumber}||`;
+
+        // Deduct location-specific stock for assigned employee storage location
+        const assignedLoc = getAssignedVehicle(user);
+        deductVehicleStock(billItems, assignedLoc);
 
         const billData = {
             // BACKEND CRASH WORKAROUND: If we send clientId, Java tries to hit the non-existent poultry_clients table.
@@ -512,12 +525,13 @@ export default function PoultryPOS({ printBill }) {
                         (inv.category || '').trim().toLowerCase() === matchedCat ||
                         (inv.name || '').trim().toLowerCase() === matchedCat
                     );
+                    const itemRate = parseFloat(i.rate || i.price || (parseFloat(i.qty) ? (parseFloat(i.amount) / parseFloat(i.qty)) : 0)) || 0;
                     return {
                         menuItemId: i.menuItemId,
                         name: i.name,
-                        price: i.rate,
+                        price: itemRate,
                         quantity: parseFloat(i.qty) || 0,
-                        notes: `Weight: ${i.qty}${i.type} @ ${i.rate}`,
+                        notes: `Weight: ${i.qty}${i.type} @ ${itemRate}`,
                         category: i.category,
                         inventoryItemId: invItem ? invItem._id || invItem.id : undefined,
                         taxRate: 0

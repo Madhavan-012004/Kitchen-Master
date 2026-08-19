@@ -946,3 +946,318 @@
         transform: rotate(360deg);
     }
 }
+
+/* =====================================================
+   MOBILE & RESPONSIVE MEDIA QUERIES
+   ===================================================== */
+
+/* ── PRODUCT SALES BOARD GRID ─────────────────────── */
+.product-sales-card {
+    grid-column: span 2;
+}
+
+.product-sales-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+}
+
+@media (max-width: 900px) {
+    .product-sales-card {
+        grid-column: span 1;
+    }
+
+    .product-sales-grid {
+        grid-template-columns: 1fr;
+        gap: 1.25rem;
+    }
+}
+
+/* ── RESPONSIVE MEDIA QUERIES ────────────────────── */
+@media (max-width: 768px) {
+    .analytics-container {
+        padding: 0.75rem;
+        gap: 1rem;
+    }
+
+    .an-page-header {
+        padding: 1rem;
+        border-radius: 16px;
+    }
+
+    .an-header-top {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.85rem;
+    }
+
+    .an-header-right {
+        flex-direction: column;
+        align-items: stretch;
+        width: 100%;
+        gap: 0.6rem;
+    }
+
+    .report-selector-wrapper {
+        width: 100%;
+    }
+
+    .report-selector-btn {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .an-period-switcher {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding: 0.25rem;
+        justify-content: flex-start;
+    }
+
+    .an-period-btn {
+        padding: 0.4rem 0.7rem;
+        font-size: 0.78rem;
+        flex-shrink: 0;
+    }
+
+    .period-btn-calendar {
+        flex-shrink: 0;
+    }
+
+    .kpi-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.75rem;
+    }
+
+    .kpi-card {
+        padding: 0.85rem 0.9rem;
+        border-radius: 14px;
+        gap: 0.6rem;
+    }
+
+    .kpi-icon {
+        width: 36px;
+        height: 36px;
+        font-size: 1.1rem;
+        border-radius: 10px;
+    }
+
+    .kpi-trend {
+        font-size: 0.65rem;
+        padding: 0.2rem 0.45rem;
+    }
+
+    .kpi-label {
+        font-size: 0.7rem;
+        letter-spacing: 0.3px;
+    }
+
+    .kpi-value {
+        font-size: 1.25rem;
+    }
+
+    .dashboard-card {
+        padding: 1rem;
+        border-radius: 14px;
+        gap: 0.85rem;
+    }
+
+    .card-custom-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+
+    .chart-wrapper {
+        min-height: 240px;
+    }
+
+    .profit-analysis {
+        gap: 0.75rem;
+    }
+
+    .profit-value-row {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        align-items: flex-start;
+    }
+
+    .profit-desc {
+        font-size: 0.75rem;
+        line-height: 1.4;
+        word-break: break-word;
+    }
+
+    .report-overlay {
+        padding: 0.5rem;
+    }
+
+    .report-modal {
+        border-radius: 16px;
+        max-height: 92vh;
+    }
+
+    .modal-header {
+        padding: 1rem;
+    }
+
+    .modal-body {
+        padding: 1rem;
+    }
+
+    .report-summary-grid,
+    .report-summary-grid.mini {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+    }
+
+    .export-format-bar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.5rem;
+    }
+
+    .export-btn {
+        width: 100%;
+    }
+
+    .report-table-wrapper {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .premium-table {
+        min-width: 500px;
+    }
+
+    .an-report-filter-bar {
+        flex-direction: column;
+        align-items: stretch;
+        padding: 0.85rem;
+    }
+
+    .export-csv-btn {
+        width: 100%;
+        margin-left: 0;
+        justify-content: center;
+    }
+}
+
+@media (max-width: 480px) {
+    .kpi-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .an-title {
+        font-size: 1.15rem;
+    }
+
+    .an-subtitle {
+        font-size: 0.78rem;
+    }
+
+    .big-profit {
+        font-size: 1.4rem;
+    }
+}
+
+/* ── REPORT FILTER BAR ───────────────────────────── */
+.an-report-filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 0.85rem 1.25rem;
+}
+
+.an-filter-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.an-filter-input,
+.an-filter-select {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.45rem 0.75rem;
+    font-size: 0.82rem;
+    color: var(--text-primary);
+    outline: none;
+    font-family: inherit;
+    transition: border-color 0.2s;
+}
+
+.an-filter-input:focus,
+.an-filter-select:focus {
+    border-color: var(--accent, #C6F53D);
+}
+
+.clear-filter-btn {
+    background: transparent;
+    border: 1px dashed var(--border);
+    border-radius: 10px;
+    padding: 0.45rem 0.8rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.clear-filter-btn:hover {
+    border-color: #ef4444;
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.08);
+}
+
+.export-csv-btn {
+    margin-left: auto;
+    background: linear-gradient(135deg, #1a3d1c, #2d6a30);
+    color: #C6F53D;
+    border: 1px solid rgba(198, 245, 61, 0.3);
+    border-radius: 10px;
+    padding: 0.5rem 1rem;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.2s;
+}
+
+.export-csv-btn:hover {
+    background: linear-gradient(135deg, #22502a, #3a8040);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(198, 245, 61, 0.15);
+}
+
+.status-pill.success {
+    background: rgba(0, 214, 143, 0.12);
+    color: #00D68F;
+}
+
+.status-pill.warning {
+    background: rgba(255, 184, 0, 0.12);
+    color: #FFB800;
+}
+
+.status-pill.error {
+    background: rgba(255, 76, 76, 0.12);
+    color: #FF4C4C;
+}
+
+.status-pill.muted {
+    background: var(--bg-hover);
+    color: var(--text-muted);
+}

@@ -11,13 +11,15 @@ export function AuthProvider({ children }) {
     const [attendance, setAttendance] = useState({ isActive: false, checkInTime: null })
 
     const fetchAttendanceStatus = async () => {
+        // Skip all API calls while the system is under maintenance
+        if (localStorage.getItem('km_maintenance_active') === 'true') return
         if (!token || user?.role === 'owner' || user?.role === 'stakeholder') return
         try {
             const res = await api.get('/attendance/status')
             if (res.data.success && res.data.data.isActive) {
-                setAttendance({ 
-                    isActive: true, 
-                    checkInTime: res.data.data.checkInTime 
+                setAttendance({
+                    isActive: true,
+                    checkInTime: res.data.data.checkInTime
                 })
             } else {
                 setAttendance({ isActive: false, checkInTime: null })
@@ -33,15 +35,18 @@ export function AuthProvider({ children }) {
 
     React.useEffect(() => {
         let interval
+        // Do not start geolocation ping during maintenance
+        if (localStorage.getItem('km_maintenance_active') === 'true') return
         if (attendance.isActive && navigator.geolocation) {
             interval = setInterval(() => {
+                // Re-check maintenance flag on each tick too
+                if (localStorage.getItem('km_maintenance_active') === 'true') return
                 navigator.geolocation.getCurrentPosition(async (pos) => {
                     try {
                         const res = await api.post('/attendance/ping', {
                             latitude: pos.coords.latitude,
                             longitude: pos.coords.longitude
                         })
-                        // If auto-disconnected by backend
                         if (!res.data.success) {
                             setAttendance({ isActive: false, checkInTime: null })
                         }
@@ -51,7 +56,7 @@ export function AuthProvider({ children }) {
                         }
                     }
                 })
-            }, 120000) // Ping every 2 mins
+            }, 120000)
         }
         return () => clearInterval(interval)
     }, [attendance.isActive])
@@ -92,29 +97,32 @@ export function AuthProvider({ children }) {
     const canAccess = (section) => {
         if (!user) return false;
         const role = user.role || 'owner';
-        
-        // Always allow attendance (so they can check in/out)
-        if (section === 'attendance') return true;
+
+        // Allow attendance for non-billers (so they can check in/out if required)
+        if (section === 'attendance' && role !== 'biller') return true;
 
         if (role === 'owner' || role === 'manager') return true;
-        
+
         if (role === 'stakeholder') {
             return ['analytics', 'inventory', 'menu', 'orders', 'employees'].includes(section);
         }
 
-        // Lock everything except attendance if shift is not active
-        if (!attendance.isActive && section !== 'attendance') {
+        // Lock everything except attendance if shift is not active (Enforced ONLY for Restaurant POS employees)
+        const currentStoreMode = localStorage.getItem('storeMode') || 'restaurant';
+        const isRestaurant = currentStoreMode === 'restaurant';
+        if (isRestaurant && !attendance.isActive && section !== 'attendance') {
             return false;
         }
 
         if (role === 'waiter') return ['waiter-dashboard', 'pos', 'orders', 'menu'].includes(section);
         if (role === 'kot' || role === 'kitchen') return ['orders', 'kitchen', 'menu'].includes(section);
-        if (role === 'biller') return ['pos', 'billing', 'orders'].includes(section);
+        if (role === 'biller') return ['pos', 'billing', 'billing-queue', 'inventory', 'customers', 'poultry-clients', 'poultry-history', 'profile'].includes(section);
         if (role === 'inventory') return ['inventory', 'expenditures', 'orders', 'menu'].includes(section);
         if (role === 'tailor') return ['tailoring'].includes(section);
-        
+
         return false;
     }
+
 
     const checkIn = async (latitude, longitude) => {
         try {
@@ -141,9 +149,9 @@ export function AuthProvider({ children }) {
     }
 
     return (
-        <AuthContext.Provider value={{ 
-            user, token, isAuthenticated, attendance, 
-            login, logout, canAccess, updateUser, checkIn, checkOut 
+        <AuthContext.Provider value={{
+            user, token, isAuthenticated, attendance,
+            login, logout, canAccess, updateUser, checkIn, checkOut
         }}>
             {children}
         </AuthContext.Provider>

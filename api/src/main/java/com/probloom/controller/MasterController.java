@@ -27,12 +27,14 @@ public class MasterController {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("success", true);
         body.put("message", message);
-        if (data != null) body.put("data", data);
+        if (data != null)
+            body.put("data", data);
         return ResponseEntity.ok(body);
     }
 
     @GetMapping
-    public ResponseEntity<?> getClients(Authentication auth, @RequestParam(required = false) String search, @RequestParam(required = false) String status, @RequestParam(required = false) String licenseType) {
+    public ResponseEntity<?> getClients(Authentication auth, @RequestParam(required = false) String search,
+            @RequestParam(required = false) String status, @RequestParam(required = false) String licenseType) {
         return ok("Fetched clients", masterService.getClientsAndStats(getAdminId(auth), search, status, licenseType));
     }
 
@@ -61,12 +63,19 @@ public class MasterController {
             Authentication auth,
             @RequestParam("file") @NonNull org.springframework.web.multipart.MultipartFile file,
             @RequestParam("expiryDate") String expiryDate) {
-        return ok("License generated successfully", masterService.generateAndEmailLicense(getAdminId(auth), file, expiryDate));
+        return ok("License generated successfully",
+                masterService.generateAndEmailLicense(getAdminId(auth), file, expiryDate));
     }
 
     @PutMapping("/{id}/toggle-status")
     public ResponseEntity<?> toggleStatus(Authentication auth, @PathVariable @NonNull Long id) {
         return ok("Status toggled", masterService.toggleStatus(getAdminId(auth), id));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<?> updateClient(Authentication auth, @PathVariable @NonNull Long id,
+            @RequestBody @NonNull Map<String, Object> req) {
+        return ok("Client updated", masterService.updateClient(getAdminId(auth), id, req));
     }
 
     @DeleteMapping("/{id}")
@@ -75,4 +84,3 @@ public class MasterController {
         return ok("Client deleted permanently", null);
     }
 }
-

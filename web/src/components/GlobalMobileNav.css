@@ -1,0 +1,73 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   GlobalMobileNav.css – Fixed Bottom Mobile Navigation Bar
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.gmobile-bottom-nav {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 56px;
+    background: var(--bg-card, #ffffff);
+    border-top: 1px solid var(--border, rgba(0, 0, 0, 0.1));
+    z-index: 9990;
+    justify-content: space-around;
+    align-items: center;
+    box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.08);
+    padding: 0 4px;
+}
+
+.global-mobile-mode .gmobile-bottom-nav {
+    display: flex;
+}
+
+.gmobile-nav-tab {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 4px 2px;
+    background: transparent;
+    border: none;
+    color: var(--text-muted, #6b7280);
+    font-family: var(--font);
+    text-decoration: none;
+    transition: all 0.15s ease;
+    cursor: pointer;
+    user-select: none;
+}
+
+.gmobile-nav-icon {
+    font-size: 17px;
+    line-height: 1;
+    margin-bottom: 2px;
+    transition: transform 0.15s ease;
+}
+
+.gmobile-nav-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: -0.1px;
+    white-space: nowrap;
+}
+
+.gmobile-nav-tab:hover,
+.gmobile-nav-tab.active {
+    color: var(--accent, #f59e0b);
+}
+
+.gmobile-nav-tab.active .gmobile-nav-icon {
+    transform: scale(1.15);
+}
+
+.gmobile-nav-tab:active {
+    transform: scale(0.95);
+}
+
+/* Ensure main content padding in mobile mode */
+.global-mobile-mode .main-content {
+    padding-bottom: 64px !important;
+}

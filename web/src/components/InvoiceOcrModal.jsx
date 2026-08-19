@@ -8,19 +8,19 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 // ─── Colour tokens ────────────────────────────────────────────────────────────
 const C = {
-    bg:         'rgba(15, 23, 42, 0.98)',
-    surface:    'rgba(30, 41, 59, 0.90)',
+    bg: 'rgba(15, 23, 42, 0.98)',
+    surface: 'rgba(30, 41, 59, 0.90)',
     surfaceAlt: 'rgba(255, 255, 255, 0.03)',
-    border:     'rgba(255, 255, 255, 0.08)',
-    accent:     '#C6F53D',
+    border: 'rgba(255, 255, 255, 0.08)',
+    accent: '#C6F53D',
     accentDark: '#a8d92e',
-    text:       '#f1f5f9',
-    textMuted:  'rgba(255,255,255,0.55)',
-    green:      '#10b981',
-    red:        '#ef4444',
-    blue:       '#60a5fa',
-    amber:      '#fbbf24',
-    headBg:     'rgba(198,245,61,0.08)',
+    text: '#f1f5f9',
+    textMuted: 'rgba(255,255,255,0.55)',
+    green: '#10b981',
+    red: '#ef4444',
+    blue: '#60a5fa',
+    amber: '#fbbf24',
+    headBg: 'rgba(198,245,61,0.08)',
 };
 const inputStyle = {
     width: '100%', padding: '4px 8px',
@@ -39,22 +39,22 @@ const num = (v) => parseFloat(v) || 0;
 
 // ─── Unit-of-Measure tokens to skip (never numeric values) ───────────────────
 const UOM_TOKENS = new Set([
-    'crt','crts','carton','cartons','pkt','pkts','packet','packets',
-    'kg','kgs','gm','gms','gram','grams','mg','mgs',
-    'l','ltr','ltrs','litre','litres','liter','liters','ml','mls',
-    'n','nos','no','pcs','pc','piece','pieces','unit','units',
-    'box','boxes','bag','bags','roll','rolls','bundle','bundles',
-    'doz','dozen','dozens','pair','pairs','set','sets',
-    'tab','tabs','tablet','tablets','cap','caps','capsule','capsules',
-    'strip','strips','bottle','bottles','tube','tubes','can','cans',
-    'ea','each','nos.','pcs.','un','mtr','mtrs','meter','meters',
-    'sqft','sft','sqm','sqmtr','rft','rmt',
+    'crt', 'crts', 'carton', 'cartons', 'pkt', 'pkts', 'packet', 'packets',
+    'kg', 'kgs', 'gm', 'gms', 'gram', 'grams', 'mg', 'mgs',
+    'l', 'ltr', 'ltrs', 'litre', 'litres', 'liter', 'liters', 'ml', 'mls',
+    'n', 'nos', 'no', 'pcs', 'pc', 'piece', 'pieces', 'unit', 'units',
+    'box', 'boxes', 'bag', 'bags', 'roll', 'rolls', 'bundle', 'bundles',
+    'doz', 'dozen', 'dozens', 'pair', 'pairs', 'set', 'sets',
+    'tab', 'tabs', 'tablet', 'tablets', 'cap', 'caps', 'capsule', 'capsules',
+    'strip', 'strips', 'bottle', 'bottles', 'tube', 'tubes', 'can', 'cans',
+    'ea', 'each', 'nos.', 'pcs.', 'un', 'mtr', 'mtrs', 'meter', 'meters',
+    'sqft', 'sft', 'sqm', 'sqmtr', 'rft', 'rmt',
 ]);
 
 // Remove UoM tokens from a raw text array, returning only numeric-parseable parts
 function filterNumericTokens(tokens) {
     return tokens
-        .filter(t => !UOM_TOKENS.has(t.toLowerCase().replace(/\.$/,'')))
+        .filter(t => !UOM_TOKENS.has(t.toLowerCase().replace(/\.$/, '')))
         .map(t => { const v = parseFloat(t.replace(/[,₹]/g, '')); return isNaN(v) ? null : v; })
         .filter(v => v !== null && v <= 999999);
 }
@@ -261,7 +261,7 @@ function parseImageItems(allItems, flatText) {
     if (invM) invoiceNo = invM[1].replace(/\s/g, '');
 
     const dateM = flatText.match(/(?:Invoice|Bill)\s*Date\s*[:\-]?\s*(\d{2}[.\-\/]\d{2}[.\-\/]\d{4})/i) || flatText.match(/(\d{2}[.\-\/]\d{2}[.\-\/]\d{4})/);
-    if (dateM) { const dp = dateM[1].split(/[.\-\/]/); date = dp[0].length===4 ? `${dp[0]}-${dp[1]}-${dp[2]}` : `${dp[2]}-${dp[1]}-${dp[0]}`; }
+    if (dateM) { const dp = dateM[1].split(/[.\-\/]/); date = dp[0].length === 4 ? `${dp[0]}-${dp[1]}-${dp[2]}` : `${dp[2]}-${dp[1]}-${dp[0]}`; }
 
     // Group by Y
     const Y_TOL = 5, yGroups = new Map();
@@ -334,19 +334,19 @@ async function parsePdfInvoice(file) {
     let supplierGstin = '', buyerGstin = '', state = '', igstTotal = 0, extractedGrandTotal = null;
 
     // ── GSTIN extraction (15-char Indian GST format) ───────────────────────────
-    const GST_STATE_CODES = {'01':'Jammu & Kashmir','02':'Himachal Pradesh','03':'Punjab','04':'Chandigarh','05':'Uttarakhand','06':'Haryana','07':'Delhi','08':'Rajasthan','09':'Uttar Pradesh','10':'Bihar','11':'Sikkim','12':'Arunachal Pradesh','13':'Nagaland','14':'Manipur','15':'Mizoram','16':'Tripura','17':'Meghalaya','18':'Assam','19':'West Bengal','20':'Jharkhand','21':'Odisha','22':'Chhattisgarh','23':'Madhya Pradesh','24':'Gujarat','27':'Maharashtra','29':'Karnataka','30':'Goa','32':'Kerala','33':'Tamil Nadu','34':'Puducherry','36':'Telangana','37':'Andhra Pradesh'};
+    const GST_STATE_CODES = { '01': 'Jammu & Kashmir', '02': 'Himachal Pradesh', '03': 'Punjab', '04': 'Chandigarh', '05': 'Uttarakhand', '06': 'Haryana', '07': 'Delhi', '08': 'Rajasthan', '09': 'Uttar Pradesh', '10': 'Bihar', '11': 'Sikkim', '12': 'Arunachal Pradesh', '13': 'Nagaland', '14': 'Manipur', '15': 'Mizoram', '16': 'Tripura', '17': 'Meghalaya', '18': 'Assam', '19': 'West Bengal', '20': 'Jharkhand', '21': 'Odisha', '22': 'Chhattisgarh', '23': 'Madhya Pradesh', '24': 'Gujarat', '27': 'Maharashtra', '29': 'Karnataka', '30': 'Goa', '32': 'Kerala', '33': 'Tamil Nadu', '34': 'Puducherry', '36': 'Telangana', '37': 'Andhra Pradesh' };
     const gstMatches = [...flatText.matchAll(/\b([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z])\b/gi)];
-    if (gstMatches.length > 0) { supplierGstin = gstMatches[0][1].toUpperCase(); state = GST_STATE_CODES[supplierGstin.substring(0,2)] || ''; }
+    if (gstMatches.length > 0) { supplierGstin = gstMatches[0][1].toUpperCase(); state = GST_STATE_CODES[supplierGstin.substring(0, 2)] || ''; }
     if (gstMatches.length > 1) buyerGstin = gstMatches[1][1].toUpperCase();
     if (!state) { const sm = flatText.match(/State\s*[:\-]?\s*([A-Za-z\s]{3,25})(?=\s*(?:Code|GSTIN|\d))/i); if (sm) state = sm[1].trim(); }
 
     // ── IGST extraction ────────────────────────────────────────────────────────
     const igstM = flatText.match(/IGST\s*(?:Amount|Amt|Tax)?\s*[:\-]?\s*(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{1,2})?)/i);
-    if (igstM) igstTotal = parseFloat(igstM[1].replace(/,/g,''));
+    if (igstM) igstTotal = parseFloat(igstM[1].replace(/,/g, ''));
 
     // ── Grand total extraction (try multiple labels, pick highest) ─────────────
-    const gtPats = [/Grand\s*Total[^\d]*(\d[\d,]*\.?\d{0,2})/i,/Net\s*Payable[^\d]*(\d[\d,]*\.?\d{0,2})/i,/Total\s*Payable[^\d]*(\d[\d,]*\.?\d{0,2})/i,/Invoice\s*(?:Total|Value)[^\d]*(\d[\d,]*\.?\d{0,2})/i,/Bill\s*Amount[^\d]*(\d[\d,]*\.?\d{0,2})/i,/Amount\s*Payable[^\d]*(\d[\d,]*\.?\d{0,2})/i];
-    const gtCandidates = gtPats.map(p=>{ const m=flatText.match(p); return m?parseFloat(m[1].replace(/,/g,'')):null; }).filter(Boolean);
+    const gtPats = [/Grand\s*Total[^\d]*(\d[\d,]*\.?\d{0,2})/i, /Net\s*Payable[^\d]*(\d[\d,]*\.?\d{0,2})/i, /Total\s*Payable[^\d]*(\d[\d,]*\.?\d{0,2})/i, /Invoice\s*(?:Total|Value)[^\d]*(\d[\d,]*\.?\d{0,2})/i, /Bill\s*Amount[^\d]*(\d[\d,]*\.?\d{0,2})/i, /Amount\s*Payable[^\d]*(\d[\d,]*\.?\d{0,2})/i];
+    const gtCandidates = gtPats.map(p => { const m = flatText.match(p); return m ? parseFloat(m[1].replace(/,/g, '')) : null; }).filter(Boolean);
     if (gtCandidates.length) extractedGrandTotal = Math.max(...gtCandidates);
 
     // ── Invoice Number ─────────────────────────────────────────────────────────
@@ -369,8 +369,8 @@ async function parsePdfInvoice(file) {
         // Normalize to YYYY-MM-DD
         const dp = dateMatch[1].trim().split(/[\.\-\/]/);
         if (dp.length === 3) {
-            if (dp[0].length === 4) date = `${dp[0]}-${dp[1].padStart(2,'0')}-${dp[2].padStart(2,'0')}`;
-            else date = `${dp[2]}-${dp[1].padStart(2,'0')}-${dp[0].padStart(2,'0')}`;
+            if (dp[0].length === 4) date = `${dp[0]}-${dp[1].padStart(2, '0')}-${dp[2].padStart(2, '0')}`;
+            else date = `${dp[2]}-${dp[1].padStart(2, '0')}-${dp[0].padStart(2, '0')}`;
         }
     }
 
@@ -525,16 +525,16 @@ async function parsePdfInvoice(file) {
             const name = nameItems[i]?.str || `Product ${i + 1}`;
             if (name.length < 2) continue;
 
-            const cases       = getVal('cases', i);
-            const qty         = getVal('qty', i);
-            const mrp         = getVal('mrp', i);
+            const cases = getVal('cases', i);
+            const qty = getVal('qty', i);
+            const mrp = getVal('mrp', i);
             const costPerUnit = getVal('costPerUnit', i);
-            const free        = getVal('free', i);
-            const discount    = getVal('discount', i);
-            const sgst        = getVal('sgst', i);
-            const cgst        = getVal('cgst', i);
-            let totalAmount   = getVal('totalAmount', i);
-            const hsnCode     = modeBHsnGroup[i]?.str || '';
+            const free = getVal('free', i);
+            const discount = getVal('discount', i);
+            const sgst = getVal('sgst', i);
+            const cgst = getVal('cgst', i);
+            let totalAmount = getVal('totalAmount', i);
+            const hsnCode = modeBHsnGroup[i]?.str || '';
 
             if (totalAmount === 0 && qty > 0 && costPerUnit > 0)
                 totalAmount = parseFloat((qty * costPerUnit + sgst + cgst - discount).toFixed(2));
@@ -661,21 +661,22 @@ async function parsePdfInvoice(file) {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function InvoiceOcrModal({ onClose, onComplete, toast }) {
-    const [file, setFile]             = useState(null);
+    const [file, setFile] = useState(null);
     const [previewUrl, setPreviewUrl] = useState(null);
-    const [scanning, setScanning]     = useState(false);
+    const [scanning, setScanning] = useState(false);
     const [parsedData, setParsedData] = useState(null);
-    const [invoiceNo, setInvoiceNo]   = useState('');
+    const [invoiceNo, setInvoiceNo] = useState('');
     const [supplierName, setSupplierName] = useState('');
     const [supplierGstin, setSupplierGstin] = useState('');
     const [buyerGstin, setBuyerGstin] = useState('');
     const [stateName, setStateName] = useState('');
     const [igstAmount, setIgstAmount] = useState('0.00');
     const [extractedTotal, setExtractedTotal] = useState(null);
-    const [invoiceDate, setInvoiceDate]   = useState('');
+    const [invoiceDate, setInvoiceDate] = useState('');
     const [paymentMethod, setPaymentMethod] = useState('Cash');
-    const [saving, setSaving]         = useState(false);
+    const [saving, setSaving] = useState(false);
     const fileInputRef = useRef(null);
+    const cameraInputRef = useRef(null);
 
     const handleFileChange = (e) => {
         const f = e.target.files[0]; if (!f) return;
@@ -717,15 +718,15 @@ export default function InvoiceOcrModal({ onClose, onComplete, toast }) {
                 // Re-use parsePdfInvoice logic via the shared grouping inside
                 // For images, we build a fake result using the same allItems structure
                 const flatText = allItems.map(i => i.str).join(' ');
-                const GST_STATE_CODES = {'01':'Jammu & Kashmir','02':'Himachal Pradesh','03':'Punjab','04':'Chandigarh','05':'Uttarakhand','06':'Haryana','07':'Delhi','08':'Rajasthan','09':'Uttar Pradesh','10':'Bihar','11':'Sikkim','12':'Arunachal Pradesh','13':'Nagaland','14':'Manipur','15':'Mizoram','16':'Tripura','17':'Meghalaya','18':'Assam','19':'West Bengal','20':'Jharkhand','21':'Odisha','22':'Chhattisgarh','23':'Madhya Pradesh','24':'Gujarat','27':'Maharashtra','29':'Karnataka','30':'Goa','32':'Kerala','33':'Tamil Nadu','34':'Puducherry','36':'Telangana','37':'Andhra Pradesh'};
+                const GST_STATE_CODES = { '01': 'Jammu & Kashmir', '02': 'Himachal Pradesh', '03': 'Punjab', '04': 'Chandigarh', '05': 'Uttarakhand', '06': 'Haryana', '07': 'Delhi', '08': 'Rajasthan', '09': 'Uttar Pradesh', '10': 'Bihar', '11': 'Sikkim', '12': 'Arunachal Pradesh', '13': 'Nagaland', '14': 'Manipur', '15': 'Mizoram', '16': 'Tripura', '17': 'Meghalaya', '18': 'Assam', '19': 'West Bengal', '20': 'Jharkhand', '21': 'Odisha', '22': 'Chhattisgarh', '23': 'Madhya Pradesh', '24': 'Gujarat', '27': 'Maharashtra', '29': 'Karnataka', '30': 'Goa', '32': 'Kerala', '33': 'Tamil Nadu', '34': 'Puducherry', '36': 'Telangana', '37': 'Andhra Pradesh' };
                 const gstMs = [...flatText.matchAll(/\b([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z])\b/gi)];
                 const sGstin = gstMs[0]?.[1]?.toUpperCase() || '';
                 const bGstin = gstMs[1]?.[1]?.toUpperCase() || '';
-                const sState = sGstin ? (GST_STATE_CODES[sGstin.substring(0,2)] || '') : '';
+                const sState = sGstin ? (GST_STATE_CODES[sGstin.substring(0, 2)] || '') : '';
                 const igstMx = flatText.match(/IGST\s*(?:Amount|Amt)?\s*[:\-]?\s*[\d,]+(?:\.\d{1,2})?/i);
-                const igstTx = igstMx ? parseFloat(igstMx[0].match(/[\d,]+(?:\.\d{1,2})?$/)?.[0]?.replace(/,/g,'') || '0') : 0;
-                const gtPx = [/Grand\s*Total[^\d]*([\d,]+\.?\d{0,2})/i,/Net\s*Payable[^\d]*([\d,]+\.?\d{0,2})/i,/Total\s*Payable[^\d]*([\d,]+\.?\d{0,2})/i];
-                const gtCx = gtPx.map(p => { const m=flatText.match(p); return m?parseFloat(m[1].replace(/,/g,'')):null; }).filter(Boolean);
+                const igstTx = igstMx ? parseFloat(igstMx[0].match(/[\d,]+(?:\.\d{1,2})?$/)?.[0]?.replace(/,/g, '') || '0') : 0;
+                const gtPx = [/Grand\s*Total[^\d]*([\d,]+\.?\d{0,2})/i, /Net\s*Payable[^\d]*([\d,]+\.?\d{0,2})/i, /Total\s*Payable[^\d]*([\d,]+\.?\d{0,2})/i];
+                const gtCx = gtPx.map(p => { const m = flatText.match(p); return m ? parseFloat(m[1].replace(/,/g, '')) : null; }).filter(Boolean);
                 result = { ...parseImageItems(allItems, flatText), supplierGstin: sGstin, buyerGstin: bGstin, state: sState, igstTotal: igstTx, extractedGrandTotal: gtCx.length ? Math.max(...gtCx) : null };
             }
 
@@ -830,11 +831,18 @@ export default function InvoiceOcrModal({ onClose, onComplete, toast }) {
                                         Drop file or click · PDF, JPG, PNG, WEBP<br />
                                         <strong style={{ color: C.accent }}>Auto-detects column headers</strong> — works with any invoice format
                                     </div>
-                                    <input type="file" accept="image/*,application/pdf" onChange={handleFileChange} ref={fileInputRef} style={{ display: 'none' }} />
-                                    <button onClick={e => { e.stopPropagation(); fileInputRef.current?.click(); }}
-                                        style={{ background: C.accent, color: '#000', border: 'none', padding: '10px 24px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '14px' }}>
-                                        Select Invoice File
-                                    </button>
+                                    <input type="file" accept="image/*,.pdf,application/pdf" onChange={handleFileChange} ref={fileInputRef} style={{ display: 'none' }} />
+                                    <input type="file" accept="image/*" capture="environment" onChange={handleFileChange} ref={cameraInputRef} style={{ display: 'none' }} />
+                                    <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                                        <button onClick={e => { e.stopPropagation(); fileInputRef.current?.click(); }}
+                                            style={{ background: C.accent, color: '#000', border: 'none', padding: '10px 24px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            📁 Select File / PDF
+                                        </button>
+                                        <button onClick={e => { e.stopPropagation(); cameraInputRef.current?.click(); }}
+                                            style={{ background: 'rgba(99, 102, 241, 0.2)', color: '#a5b4fc', border: '1px solid rgba(99, 102, 241, 0.4)', padding: '10px 24px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            📸 Scan with Camera
+                                        </button>
+                                    </div>
                                 </>
                             ) : (
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>

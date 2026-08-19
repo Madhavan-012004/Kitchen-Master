@@ -64,13 +64,23 @@ api.interceptors.response.use(
 
         if (status === 401 || status === 403) {
             if (isPublicDisplayPage) {
-                console.warn('Skipping auth redirect because user is on a public display page:', path)
+                console.warn('[Auth] Skipping auth redirect — public display page:', path)
                 return Promise.reject(err)
             }
+
+            // ── Maintenance guard: do NOT redirect to login during maintenance ──
+            // The km_maintenance_active flag is set by MaintenanceContext (React-independent).
+            const underMaintenance = localStorage.getItem('km_maintenance_active') === 'true'
+            if (underMaintenance) {
+                console.warn('[Auth] 401/403 suppressed — system is under maintenance. Tokens preserved.')
+                return Promise.reject(err)
+            }
+
             localStorage.removeItem('km_token')
             localStorage.removeItem('km_user')
             localStorage.removeItem('km_selected_restaurant')
-            window.location.href = '/login'
+            // Use /#/login for HashRouter compatibility (was incorrectly /login)
+            window.location.href = '/#/login'
             return Promise.reject(err)
         }
 

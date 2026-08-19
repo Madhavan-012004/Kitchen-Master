@@ -28,39 +28,41 @@ import java.nio.charset.StandardCharsets;
 @Service
 public class MasterService {
 
-    private static final String PRIVATE_KEY_PEM =
-        "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDg2dCPiMkTo55+" +
-        "BzF5j6wXiwLYSe/5IFvEl0NchXWXZLiIuMkZTgjgC8J1wLjbkEQ7J5WfFJDOh+1r" +
-        "zg8olXkB1XDVJXox6j802BIo5ezzqJActL55wx+J/JvoirSg5I7//OnsSYxfcBgy" +
-        "ntscuxqRsuYfXP7V3MarbV1EzJQPUDXS2TRK1aLdk1/yNoLeuTMiW/O/vyj66GRT" +
-        "CfNEgSZEzF2TWqzZwuNdEy8LRmI+JrxHLL6p4N017/sP+br3kCsDue1XQ7knnqHZ" +
-        "TEMde0HpyEzO0qfN870AX3DaSDNvHTxZRB1xn7/z7WPlr/HvZ6aCmEj/uZbdtGy7" +
-        "QMxSI3w/AgMBAAECggEAEcKSmyvCOidj1u+JhGEJRkjIHj5k0ogwR2xtOSsfeShO" +
-        "/RmfZLzJraywHO3ujAUupn9/bXPJ5k5NPgUmJF3+E1uBEIznxHaMrIdek9VpbGuF" +
-        "iobqPqLfZF5MEEeYcdbrxqN69Jtwl386ohDzHKdYt2Zqj9KgHFNWa+b1BYClNzpI" +
-        "OXIE1nsHg2jITk5apJM2cRfzgIr0N58X0HdyMuM73h9cHyBakUykKB4QsBcJahVE" +
-        "QGvtExnfIcpKn2XswbCkgbhd9Up3304D9lRTI51+GVSx4tTdCPYxdfmfdB2JfORy" +
-        "S6iGxDEFkKqJJcyx+KHvfY64j6T3DO9aW5HgDR7lgQKBgQD9HPdF66/n8sOgivQ5" +
-        "JtpPCHsq3hOupRsoELrYuBwwXciVinYseDJO30bTpibRJYcSuSALbZn4k08U8RrV" +
-        "LVFPG6/q2BT1JYIRsFkTDLb9AYtEbYujzO65ymXf7zZ6lAAIc2c0VWCBAMpKFfWL" +
-        "4hgdntF40Q37zBN2dTaSqZdygQKBgQDjalRBYXQdjoo6o5XRmOtgnJ2e/nqnVbZR" +
-        "BuB3Yd32Z2+ts3Yo0JRKkbelMqTlL+6yyyQ9lRl1NPFXMDoPFCKcY6GtWn3CwiXl" +
-        "kzzZ9/V3L6kas5Tpp0xaqZHwLhrds+zAw2Cca7Sv5N1Ufz/Dbh88jrRvYdqtMuQ6" +
-        "5SwYbOIOvwKBgQDAjAtzblK3sU6uT2ZwH6VNIBeKSbxRTBp3hRqOiKgxBvbzA4zY" +
-        "UWt74pBfq3K2AcVaMeg1qV/K4Ez1kmCmML483sQZc92li64BxNROEIsXttf56xei" +
-        "OOCWB2kuTCx2XSYVR60H+7bZC//XEhNkIU/VIJ8bOHVZyio4H/yu30JtgQKBgAqU" +
-        "gtD74LQTUpkBzVGQBLtc7fRcsIYidbX1VPIY6oOxMj/pjoC9m3iQqPOVlJhZD4jf" +
-        "7JK04hdS3DuLMdhLvoR6GiZ/hERQVgUFQZp+b7wYyoxEeJQaRXIeW3zKGFPiMAyT" +
-        "ymXcmO5p/mYU+Xl1IRznIrvf2JWgPYAD83Y7cpTvAoGAR1F4dSd6u7L5lCEiAT2g" +
-        "Efp6FUlGAVI6SFwS5m2AT82TC40JnM41SHU9e0rqE+LG3cJ4lOnrwWk/CFl9LyOJ" +
-        "H5ybkd5XJPH0eleD79uatVV+R5IlXQuuLZ5Me0U9tHZqXTOQEMv34LEa+qP0NHUq" +
-        "qqrD5AdNDj9an/HwKiWHeDM=";
+    private static final String PRIVATE_KEY_PEM = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDg2dCPiMkTo55+" +
+            "BzF5j6wXiwLYSe/5IFvEl0NchXWXZLiIuMkZTgjgC8J1wLjbkEQ7J5WfFJDOh+1r" +
+            "zg8olXkB1XDVJXox6j802BIo5ezzqJActL55wx+J/JvoirSg5I7//OnsSYxfcBgy" +
+            "ntscuxqRsuYfXP7V3MarbV1EzJQPUDXS2TRK1aLdk1/yNoLeuTMiW/O/vyj66GRT" +
+            "CfNEgSZEzF2TWqzZwuNdEy8LRmI+JrxHLL6p4N017/sP+br3kCsDue1XQ7knnqHZ" +
+            "TEMde0HpyEzO0qfN870AX3DaSDNvHTxZRB1xn7/z7WPlr/HvZ6aCmEj/uZbdtGy7" +
+            "QMxSI3w/AgMBAAECggEAEcKSmyvCOidj1u+JhGEJRkjIHj5k0ogwR2xtOSsfeShO" +
+            "/RmfZLzJraywHO3ujAUupn9/bXPJ5k5NPgUmJF3+E1uBEIznxHaMrIdek9VpbGuF" +
+            "iobqPqLfZF5MEEeYcdbrxqN69Jtwl386ohDzHKdYt2Zqj9KgHFNWa+b1BYClNzpI" +
+            "OXIE1nsHg2jITk5apJM2cRfzgIr0N58X0HdyMuM73h9cHyBakUykKB4QsBcJahVE" +
+            "QGvtExnfIcpKn2XswbCkgbhd9Up3304D9lRTI51+GVSx4tTdCPYxdfmfdB2JfORy" +
+            "S6iGxDEFkKqJJcyx+KHvfY64j6T3DO9aW5HgDR7lgQKBgQD9HPdF66/n8sOgivQ5" +
+            "JtpPCHsq3hOupRsoELrYuBwwXciVinYseDJO30bTpibRJYcSuSALbZn4k08U8RrV" +
+            "LVFPG6/q2BT1JYIRsFkTDLb9AYtEbYujzO65ymXf7zZ6lAAIc2c0VWCBAMpKFfWL" +
+            "4hgdntF40Q37zBN2dTaSqZdygQKBgQDjalRBYXQdjoo6o5XRmOtgnJ2e/nqnVbZR" +
+            "BuB3Yd32Z2+ts3Yo0JRKkbelMqTlL+6yyyQ9lRl1NPFXMDoPFCKcY6GtWn3CwiXl" +
+            "kzzZ9/V3L6kas5Tpp0xaqZHwLhrds+zAw2Cca7Sv5N1Ufz/Dbh88jrRvYdqtMuQ6" +
+            "5SwYbOIOvwKBgQDAjAtzblK3sU6uT2ZwH6VNIBeKSbxRTBp3hRqOiKgxBvbzA4zY" +
+            "UWt74pBfq3K2AcVaMeg1qV/K4Ez1kmCmML483sQZc92li64BxNROEIsXttf56xei" +
+            "OOCWB2kuTCx2XSYVR60H+7bZC//XEhNkIU/VIJ8bOHVZyio4H/yu30JtgQKBgAqU" +
+            "gtD74LQTUpkBzVGQBLtc7fRcsIYidbX1VPIY6oOxMj/pjoC9m3iQqPOVlJhZD4jf" +
+            "7JK04hdS3DuLMdhLvoR6GiZ/hERQVgUFQZp+b7wYyoxEeJQaRXIeW3zKGFPiMAyT" +
+            "ymXcmO5p/mYU+Xl1IRznIrvf2JWgPYAD83Y7cpTvAoGAR1F4dSd6u7L5lCEiAT2g" +
+            "Efp6FUlGAVI6SFwS5m2AT82TC40JnM41SHU9e0rqE+LG3cJ4lOnrwWk/CFl9LyOJ" +
+            "H5ybkd5XJPH0eleD79uatVV+R5IlXQuuLZ5Me0U9tHZqXTOQEMv34LEa+qP0NHUq" +
+            "qqrD5AdNDj9an/HwKiWHeDM=";
 
     @Autowired
     private UserRepository userRepository;
 
     @Autowired
     private com.probloom.repository.StakeholderMappingRepository stakeholderMappingRepository;
+
+    @Autowired
+    private com.probloom.repository.MaintenanceBannerRepository bannerRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -77,7 +79,8 @@ public class MasterService {
         return admin;
     }
 
-    public Map<String, Object> getClientsAndStats(@NonNull Long adminId, String search, String status, String licenseType) {
+    public Map<String, Object> getClientsAndStats(@NonNull Long adminId, String search, String status,
+            String licenseType) {
         getAdmin(adminId);
 
         List<User> allClients = userRepository.findAll().stream()
@@ -106,8 +109,10 @@ public class MasterService {
                 }
             }
 
-            if ("prime".equalsIgnoreCase(u.getLicenseType())) prime++;
-            else digital++;
+            if ("prime".equalsIgnoreCase(u.getLicenseType()))
+                prime++;
+            else
+                digital++;
         }
 
         // Apply filters
@@ -115,32 +120,44 @@ public class MasterService {
                 .filter(u -> {
                     if (search != null && !search.isEmpty()) {
                         String s = search.toLowerCase();
-                        boolean match = (u.getRestaurantName() != null && u.getRestaurantName().toLowerCase().contains(s)) ||
-                                        (u.getEmail() != null && u.getEmail().toLowerCase().contains(s)) ||
-                                        (u.getName() != null && u.getName().toLowerCase().contains(s));
-                        if (!match) return false;
+                        boolean match = (u.getRestaurantName() != null
+                                && u.getRestaurantName().toLowerCase().contains(s)) ||
+                                (u.getEmail() != null && u.getEmail().toLowerCase().contains(s)) ||
+                                (u.getName() != null && u.getName().toLowerCase().contains(s));
+                        if (!match)
+                            return false;
                     }
                     if (status != null && !status.equals("all")) {
                         if ("pending".equalsIgnoreCase(status)) {
-                            if (Boolean.TRUE.equals(u.getIsApproved())) return false;
+                            if (Boolean.TRUE.equals(u.getIsApproved()))
+                                return false;
                         } else {
                             // If filtering by anything other than "pending", we only want approved users
-                            if (!Boolean.TRUE.equals(u.getIsApproved())) return false;
-                            
-                            if (!u.getIsActive() && !status.equals("inactive")) return false;
+                            if (!Boolean.TRUE.equals(u.getIsApproved()))
+                                return false;
+
+                            if (!u.getIsActive() && !status.equals("inactive"))
+                                return false;
                             if (u.getSubscriptionExpiresAt() != null) {
-                                if (status.equals("expired") && !now.isAfter(u.getSubscriptionExpiresAt())) return false;
-                                if (status.equals("expiring_soon") && (!now.isBefore(u.getSubscriptionExpiresAt()) || !now.plusDays(30).isAfter(u.getSubscriptionExpiresAt()))) return false;
-                                if (status.equals("active") && (now.isAfter(u.getSubscriptionExpiresAt()) || now.plusDays(30).isAfter(u.getSubscriptionExpiresAt()))) return false;
+                                if (status.equals("expired") && !now.isAfter(u.getSubscriptionExpiresAt()))
+                                    return false;
+                                if (status.equals("expiring_soon") && (!now.isBefore(u.getSubscriptionExpiresAt())
+                                        || !now.plusDays(30).isAfter(u.getSubscriptionExpiresAt())))
+                                    return false;
+                                if (status.equals("active") && (now.isAfter(u.getSubscriptionExpiresAt())
+                                        || now.plusDays(30).isAfter(u.getSubscriptionExpiresAt())))
+                                    return false;
                             }
                         }
                     } else {
-                        // By default (or "all"), we hide pending users unless explicitly asked for "pending" or "all"
+                        // By default (or "all"), we hide pending users unless explicitly asked for
+                        // "pending" or "all"
                         // Or actually, let's show everything in "all".
                     }
                     if (licenseType != null && !licenseType.equals("all")) {
                         String lt = u.getLicenseType() != null ? u.getLicenseType() : "digital";
-                        if (!lt.equalsIgnoreCase(licenseType)) return false;
+                        if (!lt.equalsIgnoreCase(licenseType))
+                            return false;
                     }
                     return true;
                 })
@@ -172,8 +189,10 @@ public class MasterService {
         Map<String, Object> map = authService.sanitizeUser(u);
         String subStatus = "active";
         if (u.getSubscriptionExpiresAt() != null) {
-            if (now.isAfter(u.getSubscriptionExpiresAt())) subStatus = "expired";
-            else if (now.plusDays(30).isAfter(u.getSubscriptionExpiresAt())) subStatus = "expiring_soon";
+            if (now.isAfter(u.getSubscriptionExpiresAt()))
+                subStatus = "expired";
+            else if (now.plusDays(30).isAfter(u.getSubscriptionExpiresAt()))
+                subStatus = "expiring_soon";
         }
         map.put("licenseStatus", subStatus);
         map.put("licenseType", u.getLicenseType() != null ? u.getLicenseType() : "digital");
@@ -186,7 +205,7 @@ public class MasterService {
 
     public Map<String, Object> createClient(@NonNull Long adminId, @NonNull Map<String, Object> req, String type) {
         getAdmin(adminId);
-        
+
         String email = (String) req.get("email");
         if (userRepository.existsByEmail(email)) {
             throw new BadRequestException("Email already exists");
@@ -203,7 +222,7 @@ public class MasterService {
                 .isApproved(true)
                 .onboardingCompleted(true)
                 .build();
-                
+
         user.setLicenseType(type);
         user.setSubscriptionPlan(User.SubscriptionPlan.ENTERPRISE);
         user.setSubscriptionStartedAt(LocalDateTime.now());
@@ -213,7 +232,8 @@ public class MasterService {
 
         String licenseKey = null;
         if ("prime".equalsIgnoreCase(type)) {
-            licenseKey = LicenseUtils.generateLicenseKey(user.getId(), user.getEmail(), user.getSubscriptionExpiresAt().toString());
+            licenseKey = LicenseUtils.generateLicenseKey(user.getId(), user.getEmail(),
+                    user.getSubscriptionExpiresAt().toString());
             user.setLicenseKey(licenseKey);
             user = Objects.requireNonNull(userRepository.save(user));
         }
@@ -228,17 +248,17 @@ public class MasterService {
         getAdmin(adminId);
         User user = userRepository.findById(clientId)
                 .orElseThrow(() -> new ResourceNotFoundException("Client not found"));
-        
+
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime currentExpiry = user.getSubscriptionExpiresAt() != null ? user.getSubscriptionExpiresAt() : now;
-        
+
         LocalDateTime newExpiry;
         if (currentExpiry.isAfter(now)) {
             newExpiry = currentExpiry.plusYears(1);
         } else {
             newExpiry = now.plusYears(1);
         }
-        
+
         user.setSubscriptionExpiresAt(newExpiry);
         user.setSubscriptionActive(true);
 
@@ -260,7 +280,7 @@ public class MasterService {
         getAdmin(adminId);
         User user = userRepository.findById(clientId)
                 .orElseThrow(() -> new ResourceNotFoundException("Client not found"));
-        
+
         if (!"prime".equalsIgnoreCase(user.getLicenseType())) {
             throw new BadRequestException("Can only generate license keys for PRIME clients.");
         }
@@ -269,7 +289,8 @@ public class MasterService {
             user.setSubscriptionExpiresAt(LocalDateTime.now().plusYears(1));
         }
 
-        String licenseKey = LicenseUtils.generateLicenseKey(user.getId(), user.getEmail(), user.getSubscriptionExpiresAt().toString());
+        String licenseKey = LicenseUtils.generateLicenseKey(user.getId(), user.getEmail(),
+                user.getSubscriptionExpiresAt().toString());
         user.setLicenseKey(licenseKey);
         Objects.requireNonNull(userRepository.save(user));
 
@@ -278,27 +299,28 @@ public class MasterService {
         return res;
     }
 
-    public Map<String, Object> generateAndEmailLicense(@NonNull Long adminId, @NonNull org.springframework.web.multipart.MultipartFile file, String expiryDate) {
+    public Map<String, Object> generateAndEmailLicense(@NonNull Long adminId,
+            @NonNull org.springframework.web.multipart.MultipartFile file, String expiryDate) {
         getAdmin(adminId);
-        
+
         try {
             String content = new String(file.getBytes(), java.nio.charset.StandardCharsets.UTF_8);
             com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
             @SuppressWarnings("unchecked")
             Map<String, Object> reqData = mapper.readValue(content, Map.class);
-            
+
             @SuppressWarnings("unchecked")
             Map<String, Object> customer = (Map<String, Object>) reqData.getOrDefault("customer", new HashMap<>());
             String hwId = (String) reqData.getOrDefault("hardwareId", java.util.UUID.randomUUID().toString());
-            
+
             String email = (String) customer.get("email");
             if (email == null || email.trim().isEmpty()) {
                 email = "offline_" + hwId.toLowerCase() + "@local.probloom";
             }
-            
+
             User user = userRepository.findByEmail(email).orElse(null);
             String generatedPassword = null;
-            
+
             if (user == null) {
                 generatedPassword = java.util.UUID.randomUUID().toString().substring(0, 8);
                 user = User.builder()
@@ -313,7 +335,7 @@ public class MasterService {
                         .isApproved(true)
                         .onboardingCompleted(true)
                         .build();
-                        
+
                 user.setLicenseType("prime");
                 user.setSubscriptionPlan(User.SubscriptionPlan.ENTERPRISE);
                 user.setSubscriptionStartedAt(LocalDateTime.now());
@@ -322,12 +344,12 @@ public class MasterService {
             } else {
                 user.setSubscriptionExpiresAt(LocalDateTime.parse(expiryDate + "T23:59:59"));
             }
-            
+
             // Generate RSA signed JSON license for standalone desktop app
             Map<String, Object> payload = new HashMap<>();
             payload.put("hardwareId", hwId);
             payload.put("issuedAt", Instant.now().toString());
-            
+
             // Format expiry as Instant
             String expiresAtStr;
             try {
@@ -345,36 +367,36 @@ public class MasterService {
 
             // Generate Signature
             String payloadJson = mapper.writeValueAsString(payload);
-            
+
             PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(Base64.getDecoder().decode(PRIVATE_KEY_PEM));
             KeyFactory kf = KeyFactory.getInstance("RSA");
             PrivateKey privateKey = kf.generatePrivate(spec);
-            
+
             Signature sig = Signature.getInstance("SHA256withRSA");
             sig.initSign(privateKey);
             sig.update(payloadJson.getBytes(StandardCharsets.UTF_8));
             String rsaSignature = Base64.getEncoder().encodeToString(sig.sign());
-            
+
             // Assemble full license data
             Map<String, Object> fullLicense = new HashMap<>(payload);
             fullLicense.put("signature", rsaSignature);
-            
+
             String rawJson = mapper.writeValueAsString(fullLicense);
             String licenseB64 = Base64.getEncoder().encodeToString(rawJson.getBytes(StandardCharsets.UTF_8));
-            
+
             user.setLicenseKey(licenseB64);
             Objects.requireNonNull(userRepository.save(user));
-            
+
             // Dispatch Email via Backend to bypass EmailJS "non-browser" restriction
             sendEmailViaEmailJS(email, user.getRestaurantName(), generatedPassword, licenseB64, expiryDate);
-            
+
             Map<String, Object> res = new HashMap<>();
             res.put("licenseB64", licenseB64);
             res.put("email", email);
             res.put("generatedPassword", generatedPassword != null ? generatedPassword : "(Existing Account)");
             res.put("customerName", user.getRestaurantName());
             return res;
-            
+
         } catch (Exception e) {
             throw new BadRequestException("Failed to process machine.req: " + e.getMessage());
         }
@@ -384,7 +406,7 @@ public class MasterService {
         getAdmin(adminId);
         User user = userRepository.findById(clientId)
                 .orElseThrow(() -> new ResourceNotFoundException("Client not found"));
-        
+
         // If unapproved, toggleStatus will approve them first
         if (!Boolean.TRUE.equals(user.getIsApproved())) {
             user.setIsApproved(true);
@@ -393,9 +415,9 @@ public class MasterService {
         } else {
             user.setIsActive(!user.getIsActive());
         }
-        
+
         Objects.requireNonNull(userRepository.save(user));
-        
+
         Map<String, Object> res = new HashMap<>();
         res.put("success", true);
         res.put("isApproved", user.getIsApproved());
@@ -407,19 +429,81 @@ public class MasterService {
         getAdmin(adminId);
         User user = userRepository.findById(clientId)
                 .orElseThrow(() -> new ResourceNotFoundException("Client not found"));
-        
+
         // Clean up stakeholder mappings first to avoid foreign key constraints
         stakeholderMappingRepository.deleteByUserId(clientId);
-        
+
         userRepository.delete(Objects.requireNonNull(user));
     }
 
-    private void sendEmailViaEmailJS(String email, String customerName, String generatedPassword, String licenseB64, String expiryDate) {
+    public Map<String, Object> updateClient(@NonNull Long adminId, @NonNull Long clientId,
+            @NonNull Map<String, Object> req) {
+        getAdmin(adminId);
+        User user = userRepository.findById(clientId)
+                .orElseThrow(() -> new ResourceNotFoundException("Client not found"));
+
+        if (req.containsKey("restaurantName"))
+            user.setRestaurantName((String) req.get("restaurantName"));
+        if (req.containsKey("phone"))
+            user.setPhone((String) req.get("phone"));
+        if (req.containsKey("address"))
+            user.setAddress((String) req.get("address"));
+        if (req.containsKey("email"))
+            user.setEmail((String) req.get("email"));
+        if (req.containsKey("appLayout"))
+            user.setAppLayout((String) req.get("appLayout"));
+        if (req.containsKey("advanceAmount"))
+            user.setAdvanceAmount(Double.valueOf(req.get("advanceAmount").toString()));
+        if (req.containsKey("amountPaid"))
+            user.setAmountPaid(Double.valueOf(req.get("amountPaid").toString()));
+        if (req.containsKey("totalAmount"))
+            user.setTotalAmount(Double.valueOf(req.get("totalAmount").toString()));
+
+        return serializeClient(Objects.requireNonNull(userRepository.save(user)), LocalDateTime.now());
+    }
+
+    // --- Maintenance Banner Logic ---
+    public com.probloom.model.entity.MaintenanceBanner createBanner(@NonNull Long adminId,
+            @NonNull Map<String, Object> req) {
+        getAdmin(adminId);
+        com.probloom.model.entity.MaintenanceBanner banner = new com.probloom.model.entity.MaintenanceBanner();
+        banner.setTitle((String) req.getOrDefault("title", "Under Maintenance"));
+        banner.setMessage((String) req.getOrDefault("message", "We will be back shortly"));
+        banner.setFromTime(LocalDateTime.parse((String) req.get("fromTime")));
+        banner.setToTime(LocalDateTime.parse((String) req.get("toTime")));
+        banner.setIsActive((Boolean) req.getOrDefault("isActive", true));
+        return bannerRepository.save(banner);
+    }
+
+    public List<com.probloom.model.entity.MaintenanceBanner> listBanners(@NonNull Long adminId) {
+        getAdmin(adminId);
+        return bannerRepository.findAll();
+    }
+
+    public void deleteBanner(@NonNull Long adminId, @NonNull Long id) {
+        getAdmin(adminId);
+        bannerRepository.deleteById(id);
+    }
+
+    public java.util.Optional<com.probloom.model.entity.MaintenanceBanner> getActiveBanner() {
+        LocalDateTime now = LocalDateTime.now();
+        List<com.probloom.model.entity.MaintenanceBanner> banners = bannerRepository.findAll();
+        for (com.probloom.model.entity.MaintenanceBanner b : banners) {
+            if (Boolean.TRUE.equals(b.getIsActive()) && now.isAfter(b.getFromTime()) && now.isBefore(b.getToTime())) {
+                return java.util.Optional.of(b);
+            }
+        }
+        return java.util.Optional.empty();
+    }
+
+    private void sendEmailViaEmailJS(String email, String customerName, String generatedPassword, String licenseB64,
+            String expiryDate) {
         try {
             Map<String, Object> templateParams = new HashMap<>();
             templateParams.put("to_email", email);
             templateParams.put("customer_name", customerName);
-            templateParams.put("generated_password", generatedPassword != null ? generatedPassword : "(Existing Account)");
+            templateParams.put("generated_password",
+                    generatedPassword != null ? generatedPassword : "(Existing Account)");
             templateParams.put("license_file", licenseB64);
             templateParams.put("expiry_date", expiryDate);
 
@@ -434,8 +518,9 @@ public class MasterService {
             headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
             headers.set("Origin", "http://localhost"); // Bypass EmailJS non-browser restriction
 
-            org.springframework.http.HttpEntity<Map<String, Object>> request = new org.springframework.http.HttpEntity<>(payload, headers);
-            
+            org.springframework.http.HttpEntity<Map<String, Object>> request = new org.springframework.http.HttpEntity<>(
+                    payload, headers);
+
             restTemplate.postForEntity("https://api.emailjs.com/api/v1.0/email/send", request, String.class);
             System.out.println("EmailJS dispatch successful via backend.");
         } catch (Exception e) {

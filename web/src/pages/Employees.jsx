@@ -3,6 +3,7 @@ import api from '../api/client.js'
 import StakeholderRestaurantTabs from '../components/StakeholderRestaurantTabs'
 import { usePOSMode } from '../context/POSModeContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
+import { getVehicleLocations, getAssignedVehicle, getAssignedLocations, setEmployeeVehicle } from '../services/vehicleLocationService.js'
 import './Employees.css'
 
 const ROLE_ICONS = {
@@ -53,7 +54,7 @@ export default function EmployeesPage() {
     const [selectedRevOrder, setSelectedRevOrder] = useState(null) // selected order in reviews modal
     const [showModal, setShowModal] = useState(false)
     const [isEditing, setIsEditing] = useState(false)
-    const [formData, setFormData] = useState({ _id: '', name: '', email: '', password: '', role: 'waiter', assignedTables: [] })
+    const [formData, setFormData] = useState({ _id: '', name: '', email: '', password: '', role: 'waiter', assignedTables: [], assignedVehicle: 'Godown' })
     const [saving, setSaving] = useState(false)
 
     /* ── Fetch Staff ── */
@@ -118,15 +119,31 @@ export default function EmployeesPage() {
         e.role?.toLowerCase().includes(search.toLowerCase())
     )
 
+    /* ── Staff limit calculation ── */
+    const getTenantStaffLimit = () => {
+        try {
+            const limits = JSON.parse(localStorage.getItem('probloom_tenant_staff_limits') || '{}')
+            return limits[user?.email] || limits[user?.id] || user?.maxEmployees || 3
+        } catch {
+            return 3
+        }
+    }
+    const maxStaffLimit = getTenantStaffLimit()
+
     /* ── Modal helpers ── */
     const openAdd = () => {
-        setFormData({ _id: '', name: '', email: '', password: '', role: 'waiter', assignedTables: [] })
+        if (employees.length >= maxStaffLimit) {
+            alert(`⚠️ Staff / Biller Limit Reached!\n\nYour subscription plan currently allows up to ${maxStaffLimit} staff members/billers (${employees.length} / ${maxStaffLimit} in use).\n\nPlease contact ProBloom Backoffice support to upgrade your staff limit.`)
+            return
+        }
+        setFormData({ _id: '', name: '', email: '', password: '', role: 'waiter', assignedTables: [], assignedVehicle: 'Godown', assignedLocations: ['Godown'] })
         setIsEditing(false)
         setShowModal(true)
     }
 
     const openEdit = (emp) => {
-        setFormData({ _id: emp._id, name: emp.name, email: emp.email, password: '', role: emp.role || 'waiter', assignedTables: emp.assignedTables || [] })
+        const locs = getAssignedLocations(emp)
+        setFormData({ _id: emp._id, name: emp.name, email: emp.email, password: '', role: emp.role || 'waiter', assignedTables: emp.assignedTables || [], assignedVehicle: locs[0] || 'Godown', assignedLocations: locs })
         setIsEditing(true)
         setShowModal(true)
     }
@@ -144,15 +161,28 @@ export default function EmployeesPage() {
     const handleSubmit = async (e) => {
         e.preventDefault()
         setSaving(true)
+        if (!isEditing && employees.length >= maxStaffLimit) {
+            alert(`⚠️ Staff / Biller Limit Reached! Your plan allows up to ${maxStaffLimit} staff members. Please contact ProBloom Backoffice to increase your limit.`)
+            setSaving(false)
+            return
+        }
         try {
             const payload = { name: formData.name, email: formData.email, role: formData.role, assignedTables: formData.assignedTables || [] }
             if (formData.password) payload.password = formData.password
+
+            let targetId = formData._id
             if (isEditing) {
                 await api.put(`/auth/users/${formData._id}`, payload)
             } else {
                 if (!payload.password) throw new Error('Password is required for new staff')
-                await api.post('/auth/employee/register', payload)
+                const res = await api.post('/auth/employee/register', payload)
+                targetId = res.data?.data?.user?._id || formData.email
             }
+
+            // Save assigned vehicle location(s)
+            const selectedLocs = formData.assignedLocations && formData.assignedLocations.length > 0 ? formData.assignedLocations : [formData.assignedVehicle || 'Godown']
+            setEmployeeVehicle(targetId || formData.email, selectedLocs)
+
             setShowModal(false)
             fetchEmployees()
         } catch (err) {
@@ -182,7 +212,7 @@ export default function EmployeesPage() {
                 <div className="staff-hero-top">
                     <div>
                         <h1 className="staff-hero-title">👥 Staff Management</h1>
-                        <p className="staff-hero-subtitle">{employees.length} staff · {activeEmployees.length} active now</p>
+                        <p className="staff-hero-subtitle">{employees.length} / {maxStaffLimit} staff allowed · {activeEmployees.length} active now</p>
                     </div>
                     <div className="staff-hero-actions">
                         <div className="staff-search-wrap">
@@ -259,9 +289,24 @@ export default function EmployeesPage() {
                                                 <div className="staff-card-info">
                                                     <div className="staff-card-name">{emp.name}</div>
                                                     <div className="staff-card-email">{emp.email}</div>
-                                                    <span className={`staff-role-badge ${emp.role}`}>
-                                                        {ROLE_ICONS[emp.role] || '👤'} {emp.role?.toUpperCase()}
-                                                    </span>
+                                                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', marginTop: '4px' }}>
+                                                        <span className={`staff-role-badge ${emp.role}`}>
+                                                            {ROLE_ICONS[emp.role] || '👤'} {emp.role?.toUpperCase()}
+                                                        </span>
+                                                        {getAssignedLocations(emp).map(l => (
+                                                            <span key={l} style={{
+                                                                fontSize: '11px',
+                                                                fontWeight: '600',
+                                                                padding: '2px 8px',
+                                                                borderRadius: '12px',
+                                                                background: l === 'Godown' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(16, 185, 129, 0.15)',
+                                                                color: l === 'Godown' ? '#2563eb' : '#059669',
+                                                                border: '1px solid ' + (l === 'Godown' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(16, 185, 129, 0.3)')
+                                                            }}>
+                                                                {l === 'Godown' ? '🏢 Godown' : `🚚 ${l}`}
+                                                            </span>
+                                                        ))}
+                                                    </div>
                                                 </div>
                                                 {canShowReviews && (
                                                     <div className="staff-rating-pill">
@@ -654,6 +699,40 @@ export default function EmployeesPage() {
                                         <option key={r} value={r}>{ROLE_ICONS[r]} {r.charAt(0).toUpperCase() + r.slice(1)}</option>
                                     ))}
                                 </select>
+                            </div>
+
+                            <div className="staff-form-group">
+                                <label>🚚 Allocated Storage / Vehicle Location(s)</label>
+                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '6px' }}>
+                                    {getVehicleLocations().map(loc => {
+                                        const currentList = formData.assignedLocations || [formData.assignedVehicle || 'Godown']
+                                        const isSelected = currentList.includes(loc)
+                                        return (
+                                            <button
+                                                key={loc}
+                                                type="button"
+                                                style={{
+                                                    padding: '6px 12px',
+                                                    borderRadius: '20px',
+                                                    fontSize: '12px',
+                                                    fontWeight: '600',
+                                                    cursor: 'pointer',
+                                                    border: '1px solid ' + (isSelected ? '#2563eb' : 'var(--border)'),
+                                                    background: isSelected ? 'rgba(37, 99, 235, 0.15)' : 'var(--bg-secondary)',
+                                                    color: isSelected ? '#2563eb' : 'var(--text-secondary)',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                                onClick={() => {
+                                                    let next = isSelected ? currentList.filter(l => l !== loc) : [...currentList, loc]
+                                                    if (next.length === 0) next = ['Godown']
+                                                    setFormData({ ...formData, assignedLocations: next, assignedVehicle: next[0] })
+                                                }}
+                                            >
+                                                {loc === 'Godown' ? '🏢 Godown' : `🚚 ${loc}`} {isSelected ? '✓' : ''}
+                                            </button>
+                                        )
+                                    })}
+                                </div>
                             </div>
 
                             {formData.role === 'waiter' && (

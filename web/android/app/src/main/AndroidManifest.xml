@@ -41,6 +41,13 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Camera & Storage permissions (required for Web File Explorer / Camera capture) -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+
     <!-- Bluetooth permissions (required for BT thermal printer) -->
     <!-- Android 12+ (API 31+) -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
@@ -53,6 +60,10 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
+    <!-- Declare Camera feature -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
     <!-- Declare Bluetooth feature (not required, but useful for filtering) -->
     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
 
@@ -60,3 +71,4 @@
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
 
 </manifest>
+

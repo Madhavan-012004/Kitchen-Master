@@ -34,17 +34,20 @@ export default function NetworkErrorOverlay() {
     const [visible, setVisible] = useState(false)
     const timerRef = useRef(null)
 
-    // Animate in/out
+    // Animate in/out — ONLY show overlay on login page / when unauthenticated!
+    // Once logged in, offline billing operates smoothly via OfflineSyncBadge without blocking UI.
     useEffect(() => {
-        if (isOffline) {
-            setVisible(true)
-            setCountdown(COUNTDOWN_START)
+        const path = window.location.hash?.replace('#', '') || window.location.pathname;
+        const isLoginPage = path.includes('/login') || !localStorage.getItem('km_token');
+
+        if (isOffline && isLoginPage) {
+            setVisible(true);
+            setCountdown(COUNTDOWN_START);
         } else {
-            // Small delay to let the fade-out animation play
-            const t = setTimeout(() => setVisible(false), 500)
-            return () => clearTimeout(t)
+            const t = setTimeout(() => setVisible(false), 300);
+            return () => clearTimeout(t);
         }
-    }, [isOffline])
+    }, [isOffline]);
 
     // Auto-retry countdown
     useEffect(() => {

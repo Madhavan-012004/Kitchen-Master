@@ -6,9 +6,179 @@ import { useTheme } from '../context/ThemeContext.jsx'
 import { usePOSMode } from '../context/POSModeContext.jsx'
 import { useLanguage } from '../context/LanguageContext.jsx'
 import { useTranslation } from 'react-i18next'
+import { useMaintenance, parseServerDate } from '../context/MaintenanceContext.jsx'
+import { useMobileView } from '../context/MobileViewContext.jsx'
+import GlobalMobileNav from './GlobalMobileNav.jsx'
+import OfflineSyncBadge from './OfflineSyncBadge.jsx'
 import './Layout.css'
 
 import logo from '../assets/LOGO.jpeg'
+
+function UpcomingMaintenanceIntimation() {
+    const { upcomingBanner } = useMaintenance()
+    const [timeLeftStr, setTimeLeftStr] = React.useState('')
+    const [showTooltip, setShowTooltip] = React.useState(false)
+    const [bannerDismissed, setBannerDismissed] = React.useState(false)
+
+    React.useEffect(() => {
+        if (!upcomingBanner?.fromTime) return
+        const startsAt = parseServerDate(upcomingBanner.fromTime)
+        if (!startsAt) return
+
+        const updateCount = () => {
+            const now = new Date()
+            const diff = startsAt.getTime() - now.getTime()
+
+            if (diff <= 0) {
+                setTimeLeftStr('Starting now...')
+            } else {
+                const mins = Math.floor(diff / (1000 * 60))
+                const hrs = Math.floor(mins / 60)
+                const remMins = mins % 60
+
+                if (hrs > 0) {
+                    setTimeLeftStr(`in ${hrs}h ${remMins}m`)
+                } else {
+                    setTimeLeftStr(`in ${remMins}m`)
+                }
+            }
+        }
+
+        updateCount()
+        const timer = setInterval(updateCount, 10000)
+        return () => clearInterval(timer)
+    }, [upcomingBanner])
+
+    // If NO maintenance is scheduled/upcoming, render ABSOLUTELY NOTHING!
+    if (!upcomingBanner) return null
+
+    const startsAtDate = parseServerDate(upcomingBanner.fromTime)
+    const endsAtDate = parseServerDate(upcomingBanner.toTime)
+
+    const fromTimeStr = startsAtDate ? startsAtDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : ''
+    const fromDateStr = startsAtDate ? startsAtDate.toLocaleDateString('en-US', { day: '2-digit', month: 'short' }) : ''
+    const toTimeStr = endsAtDate ? endsAtDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : ''
+    const toDateStr = endsAtDate ? endsAtDate.toLocaleDateString('en-US', { day: '2-digit', month: 'short' }) : ''
+
+    const reasonTitle = upcomingBanner.title || 'Scheduled System Maintenance'
+    const reasonDetails = upcomingBanner.message || 'The system will undergo scheduled maintenance to upgrade server cluster performance.'
+
+    return (
+        <>
+            {/* Optional Slim Announcement Banner across the top if start is within 2 hours */}
+            {!bannerDismissed && (
+                <div style={{
+                    background: 'linear-gradient(90deg, #fffbe6 0%, #fef3c7 100%)',
+                    borderBottom: '1px solid #fcd34d',
+                    color: '#92400e',
+                    padding: '6px 16px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '12px',
+                    boxShadow: 'inset 0 -1px 0 rgba(245, 158, 11, 0.2)'
+                }}>
+                    <span style={{ fontSize: '14px' }}>⚠️</span>
+                    <span>
+                        <strong>Upcoming Maintenance Notice:</strong> {reasonTitle} — From: <u>{fromDateStr} {fromTimeStr}</u> To: <u>{toDateStr} {toTimeStr}</u> ({timeLeftStr})
+                    </span>
+                    <span
+                        onClick={() => setBannerDismissed(true)}
+                        style={{ cursor: 'pointer', opacity: 0.6, fontSize: '13px', marginLeft: '8px' }}
+                        title="Dismiss announcement bar"
+                    >✕</span>
+                </div>
+            )}
+
+            {/* Top Navbar Chip */}
+            <div className="upcoming-maint-intimation-wrapper" style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', marginLeft: 'auto', marginRight: '8px' }}>
+                <div
+                    className="upcoming-maint-chip"
+                    onClick={() => setShowTooltip(!showTooltip)}
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        background: 'rgba(245, 158, 11, 0.12)',
+                        border: '1px solid rgba(245, 158, 11, 0.4)',
+                        color: '#d97706',
+                        padding: '5px 12px',
+                        borderRadius: '20px',
+                        fontSize: '11.5px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        transition: 'all 0.2s ease',
+                        boxShadow: '0 2px 8px rgba(245, 158, 11, 0.15)'
+                    }}
+                    title="Click to view full maintenance schedule & reason"
+                >
+                    <span className="maint-pulse-dot" style={{
+                        width: 7, height: 7, borderRadius: '50%', background: '#f59e0b',
+                        boxShadow: '0 0 6px #f59e0b',
+                        display: 'inline-block'
+                    }} />
+                    <span>⚠️ Maintenance: {fromTimeStr} - {toTimeStr} ({timeLeftStr})</span>
+                </div>
+
+                {showTooltip && (
+                    <div style={{
+                        position: 'absolute',
+                        top: 'calc(100% + 8px)',
+                        right: 0,
+                        width: '320px',
+                        background: '#ffffff',
+                        color: '#1e293b',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '14px',
+                        padding: '16px 18px',
+                        boxShadow: '0 10px 30px -5px rgba(0,0,0,0.12), 0 8px 10px -6px rgba(0,0,0,0.08)',
+                        zIndex: 9999,
+                        textAlign: 'left',
+                        fontSize: '12px',
+                        lineHeight: '1.5'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                            <span style={{ fontWeight: 700, color: '#d97706', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                                ⚠️ Scheduled Maintenance
+                            </span>
+                            <span style={{ cursor: 'pointer', opacity: 0.5, fontSize: '14px' }} onClick={() => setShowTooltip(false)}>✕</span>
+                        </div>
+
+                        <div style={{ fontWeight: 800, color: '#0f172a', marginBottom: '4px', fontSize: '14px' }}>
+                            {reasonTitle}
+                        </div>
+
+                        <div style={{ color: '#64748b', marginBottom: '12px', fontSize: '12px', lineHeight: 1.45 }}>
+                            {reasonDetails}
+                        </div>
+
+                        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px', fontSize: '11.5px', color: '#334155', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span style={{ color: '#64748b' }}>📅 <strong>From (Starts):</strong></span>
+                                <span style={{ fontWeight: 700, color: '#0f172a' }}>{fromDateStr} at {fromTimeStr}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span style={{ color: '#64748b' }}>⏳ <strong>To (Ends):</strong></span>
+                                <span style={{ fontWeight: 700, color: '#0f172a' }}>{toDateStr} at {toTimeStr}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', paddingTop: '6px', marginTop: '2px' }}>
+                                <span style={{ color: '#d97706', fontWeight: 600 }}>⏱️ <strong>Commences:</strong></span>
+                                <span style={{ fontWeight: 800, color: '#d97706' }}>{timeLeftStr}</span>
+                            </div>
+                        </div>
+
+                        <div style={{ marginTop: '10px', fontSize: '10.5px', color: '#94a3b8', textAlign: 'center' }}>
+                            Please save any open billing work before the maintenance start time.
+                        </div>
+                    </div>
+                )}
+            </div>
+        </>
+    )
+}
 
 const NAV_ITEMS = [
     { path: 'pos', icon: '🖥️', tKey: 'billing_short', section: 'pos' },
@@ -19,16 +189,16 @@ const NAV_ITEMS = [
     { path: 'employees', icon: '👥', tKey: 'staff', section: 'employees' },
     { path: 'analytics', icon: '📊', tKey: 'analytics', section: 'analytics' },
     { path: 'attendance', icon: '📍', tKey: 'attendance', section: 'attendance' },
-    { path: 'ai-assistant', icon: '✨', tKey: 'assistant' },
+    { path: 'ai-assistant', icon: '✨', tKey: 'assistant', section: 'assistant' },
     { path: 'inventory', icon: '📦', tKey: 'inventory', section: 'inventory' },
     { path: 'tailoring-jobs', icon: '🧵', tKey: 'tailoring', section: 'tailoring' },
     { path: 'expenditures', icon: '💰', tKey: 'expenditures', section: 'expenditures' },
-    { path: 'kanban', icon: '📋', tKey: 'kanban' },
-    { path: 'customers', icon: '👥', tKey: 'customers' },
+    { path: 'kanban', icon: '📋', tKey: 'kanban', section: 'kanban' },
+    { path: 'customers', icon: '👥', tKey: 'customers', section: 'customers' },
     { path: 'poultry-clients', icon: '👥', tKey: 'customers', section: 'pos' },
     { path: 'poultry-history', icon: '📜', tKey: 'ledger_short', section: 'pos' },
-    { path: 'whatsapp', icon: '📱', tKey: 'whatsapp' },
-    { path: 'profile', icon: '⚙️', tKey: 'settings' },
+    { path: 'whatsapp', icon: '📱', tKey: 'whatsapp', section: 'whatsapp' },
+    { path: 'profile', icon: '⚙️', tKey: 'settings', section: 'profile' },
 ]
 
 const TOP_NAV_ITEMS = [
@@ -38,7 +208,7 @@ const TOP_NAV_ITEMS = [
     { path: 'orders', tKey: 'history_short', section: 'orders' },
     { path: 'poultry-clients', tKey: 'customers', section: 'pos' },
     { path: 'poultry-history', tKey: 'ledger_short', section: 'pos' },
-    { path: 'profile', tKey: 'settings_short' }
+    { path: 'profile', tKey: 'settings_short', section: 'profile' }
 ]
 
 const SIDE_NAV_ITEMS = [
@@ -50,13 +220,14 @@ const SIDE_NAV_ITEMS = [
     { path: 'inventory', icon: '📦', tKey: 'inventory', section: 'inventory' },
     { path: 'tailoring-jobs', icon: '✂️', tKey: 'tailoring', section: 'tailoring' },
     { path: 'expenditures', icon: '💰', tKey: 'expenditures', section: 'expenditures' },
-    { path: 'kanban', icon: '📋', tKey: 'kanban' },
-    { path: 'customers', icon: '👥', tKey: 'customers' },
+    { path: 'kanban', icon: '📋', tKey: 'kanban', section: 'kanban' },
+    { path: 'customers', icon: '👥', tKey: 'customers', section: 'customers' },
     { path: 'poultry-clients', icon: '👥', tKey: 'customers', section: 'pos' },
     { path: 'poultry-history', icon: '📜', tKey: 'ledger_short', section: 'pos' },
-    { path: 'whatsapp', icon: '📱', tKey: 'whatsapp' },
-    { path: 'ai-assistant', icon: '🤖', tKey: 'assistant' },
+    { path: 'whatsapp', icon: '📱', tKey: 'whatsapp', section: 'whatsapp' },
+    { path: 'ai-assistant', icon: '🤖', tKey: 'assistant', section: 'assistant' },
 ]
+
 
 // ─── License Expiry Banner ────────────────────────────────────────────────────
 function LicenseExpiryBanner({ user, t }) {
@@ -100,7 +271,7 @@ export default function Layout() {
     const { user, logout, canAccess, attendance, checkIn, checkOut } = useAuth()
     const { accessibleRestaurants, selectedRestaurantId, selectRestaurant } = useStakeholder()
     const { theme, toggleTheme } = useTheme()
-    const { supermarketMode, toggleSupermarketMode, isClothing, isMarket, cycleMode, isPoultry } = usePOSMode()
+    const { supermarketMode, toggleSupermarketMode, isClothing, isMarket, cycleMode, isPoultry, isRestaurant } = usePOSMode()
     const { itemNameLanguage, setItemNameLanguage } = useLanguage()
     const { t, i18n } = useTranslation()
     const navigate = useNavigate()
@@ -154,8 +325,10 @@ export default function Layout() {
         navigate('/login')
     }
 
+    const { isMobileView } = useMobileView()
+
     return (
-        <div className={`layout ${isSidebarOpen ? 'sidebar-open' : 'sidebar-collapsed'}`}>
+        <div className={`layout ${isSidebarOpen ? 'sidebar-open' : 'sidebar-collapsed'} ${isMobileView ? 'global-mobile-layout' : ''}`}>
 
             {/* ── ProBloom License Expiry Banner ── */}
             <LicenseExpiryBanner user={user} t={t} />
@@ -191,6 +364,12 @@ export default function Layout() {
                     ))}
                 </div>
                 <div className="top-bar-right">
+                    {/* UNIVERSAL OFFLINE SYNC STATUS BADGE */}
+                    <OfflineSyncBadge />
+
+                    {/* UPCOMING MAINTENANCE INTIMATION CHIP (Renders ONLY when maintenance is scheduled) */}
+                    <UpcomingMaintenanceIntimation />
+
                     {/* PREMIUM SEGMENTED LANGUAGE CONTROL */}
                     <div className="premium-lang-switcher" title={itemNameLanguage === 'ta' ? 'Names: English' : 'பெயர்: தமிழ்'}>
                         <div className={`lang-segment ${itemNameLanguage === 'en' ? 'active' : ''}`} onClick={() => setItemNameLanguage('en')}>
@@ -330,7 +509,7 @@ export default function Layout() {
                         </div>
                     </div>
 
-                    {user?.role !== 'owner' && (
+                    {user?.role !== 'owner' && isRestaurant && (
                         <button
                             className={`attendance-action-btn ${attendance.isActive ? 'active' : ''}`}
                             onClick={handleAttendanceAction}
@@ -339,6 +518,10 @@ export default function Layout() {
                             {loading ? 'Processing...' : (attendance.isActive ? '🚩 Finish Shift (Check Out)' : '📍 Start Shift (Check In)')}
                         </button>
                     )}
+
+                    <button className="sidebar-logout-btn" onClick={handleLogout}>
+                        ↪ {t('common.sign_out')}
+                    </button>
                 </div>
             </aside>
 
@@ -346,6 +529,9 @@ export default function Layout() {
             <main className="main-content">
                 <Outlet />
             </main>
+
+            {/* GLOBAL MOBILE BOTTOM NAVIGATION BAR */}
+            <GlobalMobileNav onOpenMenu={() => setIsSidebarOpen(true)} />
         </div>
     )
 }

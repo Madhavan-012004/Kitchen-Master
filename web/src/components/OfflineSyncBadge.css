@@ -1,0 +1,119 @@
+.offline-sync-container {
+    display: inline-flex;
+    align-items: center;
+    position: relative;
+    font-size: 0.82rem;
+    font-family: inherit;
+}
+
+.offline-sync-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-weight: 600;
+    line-height: 1;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+.online-synced {
+    background: rgba(34, 197, 94, 0.12);
+    color: #16a34a;
+    border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.offline-warning {
+    background: rgba(245, 158, 11, 0.14);
+    color: #d97706;
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    animation: pulseSlow 2s infinite ease-in-out;
+}
+
+.sync-action-btn {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    color: #ffffff;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+}
+
+.sync-action-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(37, 99, 235, 0.4);
+}
+
+.sync-action-btn.syncing {
+    opacity: 0.8;
+    cursor: wait;
+}
+
+.sync-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.green-dot {
+    background-color: #22c55e;
+    box-shadow: 0 0 6px #22c55e;
+}
+
+.amber-dot {
+    background-color: #f59e0b;
+    box-shadow: 0 0 6px #f59e0b;
+}
+
+.sync-toast-popup {
+    position: absolute;
+    top: 110%;
+    right: 0;
+    background: #1e293b;
+    color: #38bdf8;
+    padding: 6px 12px;
+    border-radius: 8px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+    white-space: nowrap;
+    z-index: 1000;
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    animation: slideFadeIn 0.3s ease;
+}
+
+@keyframes pulseSlow {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.7;
+    }
+}
+
+@keyframes slideFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ── Mobile Responsive Compact Badge ── */
+@media (max-width: 768px) {
+    .offline-sync-pill {
+        padding: 4px 6px !important;
+        font-size: 0.72rem !important;
+        gap: 0 !important;
+    }
+
+    .offline-sync-pill .sync-text {
+        display: none !important;
+    }
+}

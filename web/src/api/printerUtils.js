@@ -11,6 +11,8 @@
  */
 
 import api from './client';
+import { getProcessedLogoEscPosBytes, processLogoForThermalCanvas } from '../utils/logoPrinterUtils';
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DETECT: Is the iMin SDK available? (only in iMin Android WebView APK)
@@ -226,8 +228,9 @@ async function usbWrite(data) {
  *   Item | Qty | Rate | Amount columns → Subtotal → Total (bold+tall) →
  *   Items count → Thank You → Powered by ProBloom
  */
-function buildUsbBillBytes(order) {
+async function buildUsbBillBytes(order) {
     const user = JSON.parse(localStorage.getItem('km_user') || '{}');
+    const settings = getPrinterSettings();
     const printGst = order.printWithGst || (order.taxAmount && order.taxAmount > 0);
     const shopName = user.restaurantName || user.shopName || 'SHOP';
 
@@ -271,6 +274,21 @@ function buildUsbBillBytes(order) {
 
     const bytes = [
         ...ESC_INIT,
+    ];
+
+    // ── Insert Centered Thermal Logo if Enabled ──
+    if (settings.printLogoOnBill && settings.logoUrl) {
+        try {
+            const logoBytes = await getProcessedLogoEscPosBytes(settings.logoUrl, 576);
+            if (logoBytes) {
+                bytes.push(...logoBytes);
+            }
+        } catch (e) {
+            console.warn('USB Logo print failed:', e);
+        }
+    }
+
+    bytes.push(
         ...ESC_SIZE_NORMAL,
         ...GS_SIZE_NORMAL,
 
@@ -283,6 +301,7 @@ function buildUsbBillBytes(order) {
         ...ESC_UNBOLD,
         ...textToBytes('TAX INVOICE\n\n'),
         ...ESC_LEFT,
+
 
         // ── Headers Left / Right
         ...textToBytes(splitLayout('SERIAL NO ' + serialNo, dateStr)),
@@ -362,8 +381,9 @@ function buildUsbBillBytes(order) {
 /**
  * Build ESC/POS test page bytes — matches the same 3-inch design style.
  */
-function buildUsbTestBytes() {
+async function buildUsbTestBytes() {
     const user = JSON.parse(localStorage.getItem('km_user') || '{}');
+    const settings = getPrinterSettings();
     const shopName = user.restaurantName || user.shopName || 'SHOP';
     const address = user.address || '';
     const phone = user.phone || '';
@@ -378,11 +398,26 @@ function buildUsbTestBytes() {
 
     const bytes = [
         ...ESC_INIT,
+    ];
+
+    if (settings.printLogoOnBill && settings.logoUrl) {
+        try {
+            const logoBytes = await getProcessedLogoEscPosBytes(settings.logoUrl, 576);
+            if (logoBytes) {
+                bytes.push(...logoBytes);
+            }
+        } catch (e) {
+            console.warn('USB test logo error:', e);
+        }
+    }
+
+    bytes.push(
         ...ESC_CENTER, ...ESC_BOLD,
         ...textToBytes('** TEST PRINT **\n'),
         ...ESC_UNBOLD,
         ...ESC_BOLD, ...textToBytes(center(shopName)), ...ESC_UNBOLD,
         ...ESC_CENTER,
+
         ...(address ? textToBytes(address + '\n') : []),
         ...(phone ? textToBytes('Ph: ' + phone + '\n') : []),
         ...ESC_LEFT,
@@ -466,11 +501,14 @@ export function getPrinterSettings() {
             btPrinterAddress: local.btPrinterAddress || user.btPrinterAddress || '',
             kitchenPrinterIp: local.kitchenPrinterIp || user.kitchenPrinterIp || '',
             counterPrinterIp: local.counterPrinterIp || user.counterPrinterIp || '',
+            printLogoOnBill: local.printLogoOnBill !== undefined ? local.printLogoOnBill : (user.printLogoOnBill !== undefined ? user.printLogoOnBill : true),
+            logoUrl: local.logoUrl || user.logoUrl || user.logo || user.restaurantLogo || '',
         };
     } catch {
-        return { connectionType: 'network' };
+        return { connectionType: 'network', printLogoOnBill: true };
     }
 }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // INITIALIZE PRINTER ON APP LOAD (keeps connection persistent)
@@ -556,7 +594,7 @@ export async function printBill(orderIdOrObject, options = {}) {
     if (connectionType === 'usb') {
         try {
             const order = await getOrderDetails();
-            const bytes = buildUsbBillBytes({ ...order, ...options });
+            const bytes = await buildUsbBillBytes({ ...order, ...options });
             await usbWrite(bytes);
             return { success: true, message: 'Bill sent to USB printer.' };
         } catch (e) {
@@ -564,6 +602,7 @@ export async function printBill(orderIdOrObject, options = {}) {
             return { success: false, message: e.message };
         }
     }
+
 
     // Network / Default — send to backend
     try {
@@ -712,13 +751,14 @@ export async function testPrint(connectionType, options = {}) {
     // USB — handled fully in browser
     if (connectionType === 'usb') {
         try {
-            const bytes = buildUsbTestBytes();
+            const bytes = await buildUsbTestBytes();
             await usbWrite(bytes);
             return { success: true, message: 'Test page sent to USB printer successfully!' };
         } catch (e) {
             return { success: false, message: e.message };
         }
     }
+
 
     try {
         const res = await api.post('print/test', {
@@ -797,9 +837,23 @@ async function iMinPrintBill(order, paperWidth = 58) {
         const printGst = order.printWithGst || (order.taxAmount && order.taxAmount > 0);
 
         sdk.printerInit();
+        const settings = getPrinterSettings();
+        if (settings.printLogoOnBill && settings.logoUrl) {
+            try {
+                sdk.setAlignment(1);
+                const pWidth = paperWidth === 80 ? 576 : 384;
+                const processed = await processLogoForThermalCanvas(settings.logoUrl, pWidth);
+                if (typeof sdk.printSingleBitmap === 'function') {
+                    sdk.printSingleBitmap(processed.dataUrl);
+                }
+            } catch (e) {
+                console.warn('iMin logo print error:', e);
+            }
+        }
         sdk.setAlignment(1); // center
         sdk.setTextSizeMultiple(1, 1);
         sdk.printText((user.restaurantName || 'RESTAURANT') + '\n');
+
         sdk.setAlignment(0);
         if (user.address) sdk.printText(user.address + '\n');
         if (user.phone) sdk.printText('Ph: ' + user.phone + '\n');
@@ -1056,6 +1110,16 @@ async function bluetoothPrintBill(order) {
 
         await btWrite(ESC_INIT, btAddress);
 
+        // ── Print Logo if enabled ──
+        if (settings.printLogoOnBill && settings.logoUrl) {
+            try {
+                const logoBytes = await getProcessedLogoEscPosBytes(settings.logoUrl, 576);
+                if (logoBytes) await btWrite(logoBytes, btAddress);
+            } catch (e) {
+                console.warn('3-inch BT logo print error:', e);
+            }
+        }
+
         // ── Header ──
         await btWrite(ALIGN_CENTER, btAddress);
         await btWrite(BOLD_ON, btAddress);
@@ -1211,6 +1275,7 @@ async function bluetoothPrintBill(order) {
 const MINI_SEP = '--------------------------------\n'; // 32 dashes
 
 async function miniBluetoothTestPrint(btAddress) {
+    const settings = getPrinterSettings();
     try {
         const ESC_INIT = new Uint8Array([0x1b, 0x40]);
         const ESC_ALIGN_CENTER = new Uint8Array([0x1b, 0x61, 0x01]);
@@ -1219,6 +1284,12 @@ async function miniBluetoothTestPrint(btAddress) {
         const backend = getBluetoothBackend();
         if (!backend) throw new Error('No Bluetooth backend available.');
         await btWrite(ESC_INIT, btAddress);
+        if (settings.printLogoOnBill && settings.logoUrl) {
+            try {
+                const logoBytes = await getProcessedLogoEscPosBytes(settings.logoUrl, 384);
+                if (logoBytes) await btWrite(logoBytes, btAddress);
+            } catch (e) { console.warn('Mini test print logo error:', e); }
+        }
         await btWrite(ESC_ALIGN_CENTER, btAddress);
         await btWrite('TEST PRINT\n', btAddress);
         await btWrite(ESC_ALIGN_LEFT, btAddress);
@@ -1251,6 +1322,16 @@ async function miniBluetoothPrintBill(order) {
         const MINI_SEP = '- - - - - - - - - - - - - - - -\n';
 
         await btWrite(ESC_INIT, btAddress);
+
+        // ── Print Logo if enabled ──
+        if (settings.printLogoOnBill && settings.logoUrl) {
+            try {
+                const logoBytes = await getProcessedLogoEscPosBytes(settings.logoUrl, 384);
+                if (logoBytes) await btWrite(logoBytes, btAddress);
+            } catch (e) {
+                console.warn('2-inch BT logo print error:', e);
+            }
+        }
 
         // ── Shop Header ──
         await btWrite(ALIGN_CENTER, btAddress);

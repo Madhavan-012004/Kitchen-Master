@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import api from '../api/client.js'
 import { useStakeholder } from '../context/StakeholderContext.jsx'
 import { usePOSMode } from '../context/POSModeContext.jsx'
 import StakeholderRestaurantTabs from '../components/StakeholderRestaurantTabs'
+import { getVehicleLocations, getAllLocationStocks, getStockMovements, getEmployeeVehicles, getItemLocationStock } from '../services/vehicleLocationService.js'
 import './Analytics.css'
 
 // Recharts imports for professional graphics
@@ -22,11 +23,30 @@ export default function AnalyticsPage() {
     const [reportLoading, setReportLoading] = useState(false)
     const [showSelector, setShowSelector] = useState(false)
     const [selectedDate, setSelectedDate] = useState('')
+
+    // Universal Report Filter States
+    const [filterFromDate, setFilterFromDate] = useState('')
+    const [filterToDate, setFilterToDate] = useState('')
+    const [filterSearch, setFilterSearch] = useState('')
+    const [filterCategory, setFilterCategory] = useState('')
+    const [filterClient, setFilterClient] = useState('')
+    const [filterLocation, setFilterLocation] = useState('')
+    const [filterEmployee, setFilterEmployee] = useState('')
+
+    // Raw datasets for offline/frontend calculations
+    const [allOrders, setAllOrders] = useState([])
+    const [allInventory, setAllInventory] = useState([])
+
     const reports = [
+        { id: 'free-stock-report', label: '1. Free / Complimentary Stock Report', icon: '🎁' },
+        { id: 'returned-stock-report', label: '2. Returned Stock Report', icon: '↩️' },
+        { id: 'sales-report', label: '3. Sales Analytics Report', icon: '📝' },
+        { id: 'sales-gst-report', label: '4. GST Sales Report', icon: '💰' },
+        { id: 'sales-non-gst-report', label: '5. Non-GST Sales Report', icon: '💳' },
+        { id: 'client-wise-sales', label: '6. Client-Wise Sales Report', icon: '🏪' },
+        { id: 'location-wise-stock', label: '7. Vehicle/Location-Wise Stock Management', icon: '📍' },
+        { id: 'stock-audit-trail', label: '8. Stock Movement / Audit Trail Report', icon: '🔍' },
         { id: 'sales-summary', label: 'Sales Summary', icon: '📊' },
-        { id: 'sales-report', label: 'Sales Report', icon: '📝' },
-        { id: 'sales-gst-report', label: 'Sales Report (With GST)', icon: '💰' },
-        { id: 'sales-non-gst-report', label: 'Sales Report (Without GST)', icon: '💳' },
         { id: 'payment-mode-sales', label: 'Payment Mode Wise Report', icon: '💳' },
         { id: 'monthly-day-wise', label: 'Monthly Day wise Report', icon: '📅' },
         { id: 'end-day-report', label: 'End Day Report', icon: '🏁' },
@@ -45,8 +65,38 @@ export default function AnalyticsPage() {
         { id: 'cashier-wise-sales', label: 'Cashier wise sales Report', icon: '👤' },
         { id: 'hsn-summary', label: 'HSN Summary', icon: '🔢' },
         { id: 'cancelled-item-summary', label: 'Cancelled Item Summary', icon: '❌' },
-        { id: 'month-wise-stock-report', label: 'Month Wise Stock Report', icon: '📅' }
+        { id: 'month-wise-stock-report', label: 'Month Wise Stock Report', icon: '📅' },
+        { id: 'inventory-category-report', label: 'Inventory Category Report', icon: '📂' }
     ]
+
+    // Download CSV Utility
+    const handleExportCSV = (filename, columns, dataRows) => {
+        if (!dataRows || dataRows.length === 0) {
+            alert('No data available to export!');
+            return;
+        }
+        const headers = columns.map(c => c.label).join(',');
+        const rows = dataRows.map(row => {
+            return columns.map(c => {
+                let val = row[c.key];
+                if (val === undefined || val === null) val = '';
+                if (typeof val === 'string') {
+                    val = `"${val.replace(/"/g, '""')}"`;
+                }
+                return val;
+            }).join(',');
+        });
+        const csvContent = '\uFEFF' + [headers, ...rows].join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `${filename}_${new Date().toISOString().slice(0, 10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+    };
 
     const fetchAnalytics = async () => {
         setLoading(true)
@@ -58,7 +108,35 @@ export default function AnalyticsPage() {
                 url += `&from=${from}&to=${to}`
             }
             const res = await api.get(url)
-            let fetchedData = res.data.data;
+            let fetchedData = res.data?.data || { summary: { totalRevenue: 0, grossProfit: 0, netProfit: 0, totalOrders: 0 } };
+
+            // Also fetch raw order history & inventory items for offline report calculations
+            try {
+                const [ordersRes, invRes] = await Promise.all([
+                    api.get('/orders/history').catch(() => ({ data: { data: [] } })),
+                    api.get('/inventory').catch(() => ({ data: { data: [] } }))
+                ]);
+                let bOrders = ordersRes.data?.data || [];
+                const pOrders = JSON.parse(localStorage.getItem('poultry_history_bills') || '[]');
+
+                // Format pOrders into uniform structure
+                const formattedPoultry = pOrders.map(p => ({
+                    ...p,
+                    orderNumber: p.billNumber || p.id || 'PLT-OFF',
+                    date: p.date || p.createdAt || new Date().toISOString(),
+                    customer: p.customerName || (p.notes && p.notes.includes('CLIENTNAME:') ? p.notes.split('CLIENTNAME:')[1].split('||')[0] : 'Walk-in'),
+                    location: p.assignedVehicle || (p.notes && p.notes.includes('LOCATION:') ? p.notes.split('LOCATION:')[1].split('||')[0] : 'Godown'),
+                    employee: p.employeeName || 'Biller',
+                    items: p.items || []
+                }));
+
+                const combinedOrders = [...bOrders, ...formattedPoultry];
+                setAllOrders(combinedOrders);
+                setAllInventory(invRes.data?.data || []);
+            } catch (err) {
+                console.warn('Raw orders fetch error', err);
+            }
+
             if (fetchedData && fetchedData.topItems) {
                 const tailoringItems = fetchedData.topItems.filter(i => i._id && i._id.startsWith('Tailoring: '));
                 const tRev = tailoringItems.reduce((acc, curr) => acc + (curr.totalRevenue || 0), 0);
@@ -68,9 +146,60 @@ export default function AnalyticsPage() {
                     fetchedData.summary.netProfit -= tRev;
                 }
             }
+
+            // ── Pure JS Alone: Aggregate Poultry POS Bills into Analytics Dashboard ──
+            try {
+                const poultryHistory = JSON.parse(localStorage.getItem('poultry_history_bills') || '[]');
+                if (poultryHistory.length > 0) {
+                    let now = new Date();
+                    let minDate = new Date(0);
+                    if (period === 'today') {
+                        minDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                    } else if (period === '7d') {
+                        minDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                    } else if (period === '30d') {
+                        minDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                    } else if (period === 'custom' && selectedDate) {
+                        minDate = new Date(`${selectedDate}T00:00:00`);
+                        now = new Date(`${selectedDate}T23:59:59`);
+                    }
+
+                    const filteredPoultry = poultryHistory.filter(b => {
+                        const bTime = new Date(b.date || b.createdAt || Date.now());
+                        return bTime >= minDate && bTime <= now;
+                    });
+
+                    const pRev = filteredPoultry.reduce((sum, b) => sum + (parseFloat(b.total) || 0), 0);
+                    const pCount = filteredPoultry.length;
+
+                    if (!fetchedData.summary) {
+                        fetchedData.summary = { totalRevenue: 0, grossProfit: 0, netProfit: 0, totalOrders: 0 };
+                    }
+
+                    fetchedData.summary.totalRevenue = (fetchedData.summary.totalRevenue || 0) + pRev;
+                    fetchedData.summary.grossProfit = (fetchedData.summary.grossProfit || 0) + pRev;
+                    fetchedData.summary.netProfit = (fetchedData.summary.netProfit || 0) + pRev;
+                    fetchedData.summary.totalOrders = (fetchedData.summary.totalOrders || 0) + pCount;
+                }
+            } catch (pErr) {
+                console.warn('Poultry bills JS aggregation error', pErr);
+            }
+
             setData(fetchedData)
         } catch (e) {
             console.error(e)
+            try {
+                const poultryHistory = JSON.parse(localStorage.getItem('poultry_history_bills') || '[]');
+                const pRev = poultryHistory.reduce((sum, b) => sum + (parseFloat(b.total) || 0), 0);
+                setData({
+                    summary: {
+                        totalRevenue: pRev,
+                        grossProfit: pRev,
+                        netProfit: pRev,
+                        totalOrders: poultryHistory.length
+                    }
+                });
+            } catch (err) { }
         } finally {
             setLoading(false)
         }
@@ -79,8 +208,8 @@ export default function AnalyticsPage() {
     const fetchReportData = async (reportId) => {
         setReportLoading(true)
         try {
-            const res = await api.get(`/analytics/report-data?type=${reportId}`)
-            setReportData(res.data.data)
+            const res = await api.get(`/analytics/report-data?type=${reportId}`).catch(() => ({ data: { data: null } }))
+            setReportData(res.data?.data || null)
         } catch (e) {
             console.error(e)
         } finally {
@@ -103,7 +232,7 @@ export default function AnalyticsPage() {
             const blob = new Blob([res.data], { type: mimeMap[format] })
             const url = window.URL.createObjectURL(blob)
             const link = document.createElement('a')
-            link.href = url
+            link.href = url;
             link.setAttribute('download', `${reportId}.${extMap[format]}`)
             document.body.appendChild(link)
             link.click()
@@ -125,6 +254,59 @@ export default function AnalyticsPage() {
         }
     }, [selectedReport])
 
+    // Compute Summary Card Metrics for Main Dashboard
+    const dashboardMetrics = useMemo(() => {
+        const pOrders = JSON.parse(localStorage.getItem('poultry_history_bills') || '[]');
+        const combined = [...allOrders, ...pOrders];
+
+        let totalGstSales = 0;
+        let totalNonGstSales = 0;
+        let totalReturnsVal = 0;
+        let totalFreeVal = 0;
+
+        combined.forEach(o => {
+            const items = o.items || [];
+            let orderGst = 0;
+            items.forEach(i => {
+                const qty = parseFloat(i.quantity || i.qty) || 0;
+                const amt = parseFloat(i.amount || (qty * (i.rate || 0))) || 0;
+                const isFree = i.itemType === 'FREE' || i.isFree || i.rate === 0;
+                const isReturn = i.itemType === 'RETURN' || i.isReturn;
+
+                if (isFree) totalFreeVal += (qty * (i.buyingPrice || i.costPerUnit || 10));
+                if (isReturn) totalReturnsVal += amt;
+                if ((i.gstPercent || 0) > 0 || (i.gstAmount || 0) > 0) orderGst += amt;
+            });
+
+            if (orderGst > 0) totalGstSales += (o.total || 0);
+            else totalNonGstSales += (o.total || 0);
+        });
+
+        const movements = getStockMovements();
+        const locations = getVehicleLocations();
+        const allLocStocks = getAllLocationStocks();
+
+        let stockValuation = 0;
+        let lowStockCount = 0;
+
+        allInventory.forEach(inv => {
+            const qty = parseFloat(inv.currentStock) || 0;
+            const cost = parseFloat(inv.costPerUnit || inv.buyingPrice) || 0;
+            stockValuation += (qty * cost);
+            if (qty <= (inv.lowStockThreshold || 5)) lowStockCount++;
+        });
+
+        return {
+            totalGstSales,
+            totalNonGstSales,
+            totalReturnsVal,
+            totalFreeVal,
+            stockValuation,
+            lowStockCount,
+            movementCount: movements.length,
+            locationCount: locations.length
+        };
+    }, [allOrders, allInventory]);
 
     const kpis = [
         {
@@ -137,180 +319,955 @@ export default function AnalyticsPage() {
             borderColor: 'rgba(198,245,61,0.5)'
         },
         {
-            label: 'Gross Profit',
-            value: `₹${Math.round(data?.summary?.grossProfit || 0).toLocaleString('en-IN')}`,
-            icon: '💎',
+            label: 'GST Sales',
+            value: `₹${Math.round(dashboardMetrics.totalGstSales).toLocaleString('en-IN')}`,
+            icon: '🏛️',
+            bg: 'rgba(59,130,246,0.1)',
+            color: '#60a5fa',
+            trend: 'Taxed Sales',
+            borderColor: 'rgba(59,130,246,0.5)'
+        },
+        {
+            label: 'Non-GST Sales',
+            value: `₹${Math.round(dashboardMetrics.totalNonGstSales).toLocaleString('en-IN')}`,
+            icon: '💳',
             bg: 'rgba(139,92,246,0.1)',
             color: '#a78bfa',
-            trend: 'After COGS',
+            trend: 'Exempt Sales',
             borderColor: 'rgba(139,92,246,0.5)'
         },
         {
-            label: 'Total Expense',
-            value: `₹${Math.round(data?.summary?.totalExpense || 0).toLocaleString('en-IN')}`,
-            icon: '💸',
+            label: 'Stock Returns',
+            value: `₹${Math.round(dashboardMetrics.totalReturnsVal).toLocaleString('en-IN')}`,
+            icon: '↩️',
             bg: 'rgba(239,68,68,0.1)',
             color: '#ef4444',
-            trend: 'Expenditure',
+            trend: 'Returned',
             borderColor: 'rgba(239,68,68,0.5)'
         },
         {
-            label: 'Net Profit',
-            value: `₹${Math.round(data?.summary?.netProfit || 0).toLocaleString('en-IN')}`,
-            icon: '📈',
-            bg: 'rgba(45,212,121,0.1)',
-            color: '#2DD479',
-            trend: `${data?.summary?.profitMargin?.toFixed(1) || 0}% Margin`,
-            borderColor: 'rgba(45,212,121,0.5)'
+            label: 'Free Stock Given',
+            value: `₹${Math.round(dashboardMetrics.totalFreeVal).toLocaleString('en-IN')}`,
+            icon: '🎁',
+            bg: 'rgba(16,185,129,0.1)',
+            color: '#10b981',
+            trend: 'Complimentary',
+            borderColor: 'rgba(16,185,129,0.5)'
         },
         {
-            label: 'Total Orders',
-            value: data?.summary?.totalOrders || 0,
-            icon: '🧾',
-            bg: 'rgba(59,130,246,0.1)',
-            color: '#60a5fa',
-            trend: '+8.2%',
-            borderColor: 'rgba(59,130,246,0.5)'
+            label: 'Stock Valuation',
+            value: `₹${Math.round(dashboardMetrics.stockValuation).toLocaleString('en-IN')}`,
+            icon: '📦',
+            bg: 'rgba(245,158,11,0.1)',
+            color: '#f59e0b',
+            trend: `${dashboardMetrics.lowStockCount} Low Stock`,
+            borderColor: 'rgba(245,158,11,0.5)'
+        },
+        {
+            label: 'Storage Spaces',
+            value: `${dashboardMetrics.locationCount} Spaces`,
+            icon: '📍',
+            bg: 'rgba(236,72,153,0.1)',
+            color: '#ec4899',
+            trend: `${dashboardMetrics.movementCount} Logs`,
+            borderColor: 'rgba(236,72,153,0.5)'
         }
     ]
 
     const renderReportView = () => {
         if (reportLoading) return <div className="loading-centered"><div className="spinner"></div></div>
-        if (!reportData && selectedReport) return <div className="loading-centered">No data available for this report</div>
 
-        const downloadBar = (
+        // Universal Filter Component Bar
+        const filterToolbar = (
+            <div className="an-report-filter-bar">
+                <div className="filter-item">
+                    <span className="filter-label">From:</span>
+                    <input type="date" className="filter-input" value={filterFromDate} onChange={e => setFilterFromDate(e.target.value)} />
+                </div>
+                <div className="filter-item">
+                    <span className="filter-label">To:</span>
+                    <input type="date" className="filter-input" value={filterToDate} onChange={e => setFilterToDate(e.target.value)} />
+                </div>
+                <div className="filter-item">
+                    <span className="filter-label">Search / Item:</span>
+                    <input type="text" className="filter-input" placeholder="Search product..." value={filterSearch} onChange={e => setFilterSearch(e.target.value)} />
+                </div>
+                <div className="filter-item">
+                    <span className="filter-label">Location:</span>
+                    <select className="filter-input" value={filterLocation} onChange={e => setFilterLocation(e.target.value)}>
+                        <option value="">All Storage Spaces</option>
+                        {getVehicleLocations().map(loc => (
+                            <option key={loc} value={loc}>{loc}</option>
+                        ))}
+                    </select>
+                </div>
+                <div className="filter-item">
+                    <span className="filter-label">Client:</span>
+                    <input type="text" className="filter-input" placeholder="Client name..." value={filterClient} onChange={e => setFilterClient(e.target.value)} />
+                </div>
+                <div className="filter-item">
+                    <span className="filter-label">Employee:</span>
+                    <input type="text" className="filter-input" placeholder="Staff..." value={filterEmployee} onChange={e => setFilterEmployee(e.target.value)} />
+                </div>
+                {(filterFromDate || filterToDate || filterSearch || filterLocation || filterClient || filterEmployee) && (
+                    <button className="clear-filter-btn" onClick={() => {
+                        setFilterFromDate(''); setFilterToDate(''); setFilterSearch(''); setFilterLocation(''); setFilterClient(''); setFilterEmployee('');
+                    }}>✕ Clear Filters</button>
+                )}
+            </div>
+        );
+
+        const renderDownloadBar = (cols, exportData, filename) => (
             <div className="export-format-bar">
                 <span className="export-label">Export As:</span>
-                <button className="export-btn export-pdf" onClick={() => handleDownload(selectedReport.id, 'pdf')}>
+                <button className="export-btn export-csv" onClick={() => handleExportCSV(filename || selectedReport?.id || 'report', cols, exportData)} style={{ background: 'rgba(198,245,61,0.15)', color: '#C6F53D', border: '1px solid rgba(198,245,61,0.4)' }}>
+                    <span className="export-icon">📥</span> CSV / Excel
+                </button>
+                <button className="export-btn export-pdf" onClick={() => handleDownload(selectedReport?.id, 'pdf')}>
                     <span className="export-icon">📄</span> PDF
                 </button>
-                <button className="export-btn export-word" onClick={() => handleDownload(selectedReport.id, 'word')}>
+                <button className="export-btn export-word" onClick={() => handleDownload(selectedReport?.id, 'word')}>
                     <span className="export-icon">📝</span> Word
                 </button>
-                <button className="export-btn export-excel" onClick={() => handleDownload(selectedReport.id, 'excel')} style={{ background: 'rgba(0, 214, 143, 0.1)', color: '#00D68F', border: '1px solid rgba(0, 214, 143, 0.3)' }}>
-                    <span className="export-icon">📊</span> Excel
-                </button>
-                <button className="export-btn export-json" onClick={() => handleDownload(selectedReport.id, 'json')}>
+                <button className="export-btn export-json" onClick={() => handleDownload(selectedReport?.id, 'json')}>
                     <span className="export-icon">{'{ }'}</span> JSON
                 </button>
             </div>
-        )
+        );
+
+        // Combined orders dataset (API + local storage poultry bills)
+        const combinedOrders = allOrders.length > 0 ? allOrders : (JSON.parse(localStorage.getItem('poultry_history_bills') || '[]'));
+
+        // Helper filter logic for order line items
+        const passesFilters = (itemDateStr, itemLocation, clientName, empName, prodName) => {
+            if (filterFromDate && new Date(itemDateStr) < new Date(`${filterFromDate}T00:00:00`)) return false;
+            if (filterToDate && new Date(itemDateStr) > new Date(`${filterToDate}T23:59:59`)) return false;
+            if (filterLocation && String(itemLocation || '').toLowerCase() !== filterLocation.toLowerCase()) return false;
+            if (filterClient && !String(clientName || '').toLowerCase().includes(filterClient.toLowerCase())) return false;
+            if (filterEmployee && !String(empName || '').toLowerCase().includes(filterEmployee.toLowerCase())) return false;
+            if (filterSearch && !String(prodName || '').toLowerCase().includes(filterSearch.toLowerCase())) return false;
+            return true;
+        };
 
         switch (selectedReport?.id) {
-            case 'sales-summary':
+
+            // ── 1. Free/Complimentary Stock Report ───────────────────────
+            case 'free-stock-report': {
+                const freeRows = [];
+                combinedOrders.forEach(o => {
+                    const dateStr = o.date || o.createdAt || new Date().toISOString();
+                    const client = o.customer || o.customerName || (o.notes && o.notes.includes('CLIENTNAME:') ? o.notes.split('CLIENTNAME:')[1].split('||')[0] : 'Walk-in');
+                    const loc = o.location || o.assignedVehicle || (o.notes && o.notes.includes('LOCATION:') ? o.notes.split('LOCATION:')[1].split('||')[0] : 'Godown');
+                    const emp = o.employee || o.employeeName || 'Biller';
+
+                    (o.items || []).forEach(i => {
+                        const isFree = i.itemType === 'FREE' || i.isFree || parseFloat(i.rate) === 0;
+                        const name = i.itemName || i.name;
+                        if (isFree && passesFilters(dateStr, loc, client, emp, name)) {
+                            const qty = parseFloat(i.quantity || i.qty) || 0;
+                            const estRate = parseFloat(i.buyingPrice || i.costPerUnit || i.originalRate) || 10;
+                            freeRows.push({
+                                date: new Date(dateStr).toLocaleDateString('en-IN'),
+                                billNo: o.orderNumber || o.billNumber || o.id || 'PLT-FREE',
+                                product: name,
+                                category: i.category || 'General',
+                                quantity: qty,
+                                unit: i.quantityType || i.type || 'pcs',
+                                estRate: estRate,
+                                totalVal: qty * estRate,
+                                location: loc,
+                                client: client,
+                                employee: emp
+                            });
+                        }
+                    });
+                });
+
+                const totalFreeQty = freeRows.reduce((sum, r) => sum + r.quantity, 0);
+                const totalFreeVal = freeRows.reduce((sum, r) => sum + r.totalVal, 0);
+
+                const cols = [
+                    { label: 'Date', key: 'date' },
+                    { label: 'Bill #', key: 'billNo' },
+                    { label: 'Product Name', key: 'product' },
+                    { label: 'Category', key: 'category' },
+                    { label: 'Qty Given', key: 'quantity' },
+                    { label: 'Unit', key: 'unit' },
+                    { label: 'Est. Unit Value', key: 'estRate' },
+                    { label: 'Total Value', key: 'totalVal' },
+                    { label: 'Location', key: 'location' },
+                    { label: 'Client', key: 'client' },
+                    { label: 'Employee', key: 'employee' }
+                ];
+
                 return (
                     <div className="report-content-view">
-                        <div className="report-summary-grid">
-                            <div className="summary-val-card">
-                                <span className="label">Gross Sales</span>
-                                <span className="val">₹{reportData?.summary?.totalRevenue?.toLocaleString('en-IN') || 0}</span>
+                        {filterToolbar}
+                        <div className="report-summary-grid mini">
+                            <div className="summary-val-card" style={{ background: 'rgba(16,185,129,0.08)' }}>
+                                <span className="label">Total Free Items</span>
+                                <span className="val" style={{ color: '#10b981' }}>{freeRows.length} Transactions</span>
                             </div>
-                            <div className="summary-val-card">
-                                <span className="label">Total Orders</span>
-                                <span className="val">{reportData?.summary?.totalOrders || 0}</span>
+                            <div className="summary-val-card" style={{ background: 'rgba(59,130,246,0.08)' }}>
+                                <span className="label">Total Free Quantity</span>
+                                <span className="val" style={{ color: '#60a5fa' }}>{totalFreeQty} Units</span>
                             </div>
-                            <div className="summary-val-card">
-                                <span className="label">Income</span>
-                                <span className="val">₹{reportData?.income || 0}</span>
-                            </div>
-                            <div className="summary-val-card">
-                                <span className="label">Expense</span>
-                                <span className="val">₹{reportData?.expense || 0}</span>
+                            <div className="summary-val-card" style={{ background: 'rgba(198,245,61,0.08)' }}>
+                                <span className="label">Total Value Given</span>
+                                <span className="val" style={{ color: '#C6F53D' }}>₹{totalFreeVal.toLocaleString('en-IN')}</span>
                             </div>
                         </div>
-                        {downloadBar}
-                    </div>
-                )
-            case 'sales-report':
-                return (
-                    <div className="report-content-view">
                         <div className="report-table-wrapper">
                             <table className="premium-table">
                                 <thead>
                                     <tr>
-                                        <th>Order #</th>
                                         <th>Date</th>
-                                        <th>Customer</th>
-                                        <th>Total</th>
-                                        <th>Status</th>
+                                        <th>Bill #</th>
+                                        <th>Product</th>
+                                        <th>Category</th>
+                                        <th>Qty</th>
+                                        <th>Location</th>
+                                        <th>Client</th>
+                                        <th>Employee</th>
+                                        <th>Total Value</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {reportData?.sales?.map((s, i) => (
-                                        <tr key={i}>
-                                            <td>{s.orderNumber}</td>
-                                            <td>{new Date(s.date).toLocaleDateString()}</td>
-                                            <td>{s.customer || '-'}</td>
-                                            <td>₹{s.total?.toLocaleString()}</td>
-                                            <td><span className={`status-pill ${s.status.toLowerCase()}`}>{s.status}</span></td>
+                                    {freeRows.map((r, idx) => (
+                                        <tr key={idx}>
+                                            <td>{r.date}</td>
+                                            <td><b>{r.billNo}</b></td>
+                                            <td>{r.product}</td>
+                                            <td>{r.category}</td>
+                                            <td><b style={{ color: '#10b981' }}>{r.quantity} {r.unit}</b></td>
+                                            <td><span className="status-pill warning">{r.location}</span></td>
+                                            <td>{r.client}</td>
+                                            <td>{r.employee}</td>
+                                            <td><b style={{ color: '#C6F53D' }}>₹{r.totalVal.toLocaleString('en-IN')}</b></td>
                                         </tr>
                                     ))}
+                                    {freeRows.length === 0 && (
+                                        <tr>
+                                            <td colSpan="9" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                                                No free/complimentary stock items found matching the selected filters.
+                                            </td>
+                                        </tr>
+                                    )}
                                 </tbody>
                             </table>
                         </div>
-                        <div className="report-footer-summary">
-                            <span>Total Revenue: <b>₹{reportData?.totalRevenue?.toLocaleString()}</b></span>
-                        </div>
-                        {downloadBar}
+                        {renderDownloadBar(cols, freeRows, 'Free_Stock_Report')}
                     </div>
-                )
-            case 'sales-gst-report':
+                );
+            }
+
+            // ── 2. Returned Stock Report ───────────────────────────────
+            case 'returned-stock-report': {
+                const returnRows = [];
+                combinedOrders.forEach(o => {
+                    const dateStr = o.date || o.createdAt || new Date().toISOString();
+                    const client = o.customer || o.customerName || (o.notes && o.notes.includes('CLIENTNAME:') ? o.notes.split('CLIENTNAME:')[1].split('||')[0] : 'Walk-in');
+                    const loc = o.location || o.assignedVehicle || (o.notes && o.notes.includes('LOCATION:') ? o.notes.split('LOCATION:')[1].split('||')[0] : 'Godown');
+                    const emp = o.employee || o.employeeName || 'Biller';
+
+                    (o.items || []).forEach(i => {
+                        const isReturn = i.itemType === 'RETURN' || i.isReturn;
+                        const name = i.itemName || i.name;
+                        if (isReturn && passesFilters(dateStr, loc, client, emp, name)) {
+                            const qty = parseFloat(i.quantity || i.qty) || 0;
+                            const amt = parseFloat(i.amount || (qty * (i.rate || 0))) || 0;
+                            returnRows.push({
+                                date: new Date(dateStr).toLocaleDateString('en-IN'),
+                                billNo: o.orderNumber || o.billNumber || o.id || 'PLT-RET',
+                                product: name,
+                                returnedQty: qty,
+                                unit: i.quantityType || i.type || 'pcs',
+                                returnVal: amt,
+                                location: loc,
+                                client: client,
+                                employee: emp
+                            });
+                        }
+                    });
+                });
+
+                const totalReturnedQty = returnRows.reduce((sum, r) => sum + r.returnedQty, 0);
+                const totalReturnedVal = returnRows.reduce((sum, r) => sum + r.returnVal, 0);
+
+                const cols = [
+                    { label: 'Date', key: 'date' },
+                    { label: 'Bill #', key: 'billNo' },
+                    { label: 'Product Name', key: 'product' },
+                    { label: 'Returned Qty', key: 'returnedQty' },
+                    { label: 'Unit', key: 'unit' },
+                    { label: 'Return Value', key: 'returnVal' },
+                    { label: 'Location', key: 'location' },
+                    { label: 'Client', key: 'client' },
+                    { label: 'Employee', key: 'employee' }
+                ];
+
                 return (
                     <div className="report-content-view">
+                        {filterToolbar}
                         <div className="report-summary-grid mini">
-                            <div className="summary-val-card" style={{ background: 'rgba(37,99,235,0.07)' }}>
-                                <span className="label">Total Revenue (incl. GST)</span>
-                                <span className="val">₹{reportData?.totalRevenue?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            <div className="summary-val-card error">
+                                <span className="label">Returned Items Count</span>
+                                <span className="val">{returnRows.length} Records</span>
                             </div>
-                            <div className="summary-val-card" style={{ background: 'rgba(45,212,121,0.07)' }}>
-                                <span className="label">Base Revenue (excl. GST)</span>
-                                <span className="val" style={{ color: '#2DD479' }}>₹{reportData?.totalBaseRevenue?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            <div className="summary-val-card warning">
+                                <span className="label">Total Returned Qty</span>
+                                <span className="val">{totalReturnedQty} Units</span>
                             </div>
-                            <div className="summary-val-card" style={{ background: 'rgba(239,68,68,0.07)' }}>
-                                <span className="label">Total GST Collected</span>
-                                <span className="val" style={{ color: '#ef4444' }}>₹{reportData?.totalTaxCollected?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            <div className="summary-val-card error">
+                                <span className="label">Total Return Value</span>
+                                <span className="val">₹{totalReturnedVal.toLocaleString('en-IN')}</span>
                             </div>
                         </div>
                         <div className="report-table-wrapper">
                             <table className="premium-table">
                                 <thead>
                                     <tr>
-                                        <th>Order #</th>
                                         <th>Date</th>
-                                        <th>Customer</th>
-                                        <th>Payment</th>
-                                        <th>Base Amt</th>
-                                        <th style={{ color: '#ef4444' }}>GST Amt</th>
-                                        <th>Total</th>
+                                        <th>Bill #</th>
+                                        <th>Product</th>
+                                        <th>Qty</th>
+                                        <th>Return Value</th>
+                                        <th>Location</th>
+                                        <th>Client</th>
+                                        <th>Employee</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {reportData?.sales?.map((s, i) => {
-                                        const tax = s.taxAmount || 0
-                                        const base = s.baseAmount ?? (s.total - tax)
-                                        return (
-                                            <tr key={i}>
-                                                <td>{s.orderNumber}</td>
-                                                <td>{new Date(s.date).toLocaleDateString()}</td>
-                                                <td>{s.customer || 'Walk-in'}</td>
-                                                <td>{String(s.payment || '-')}</td>
-                                                <td>₹{base.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                                                <td style={{ color: '#ef4444' }}>₹{tax.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                                                <td><b>₹{s.total?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></td>
-                                            </tr>
-                                        )
-                                    })}
+                                    {returnRows.map((r, idx) => (
+                                        <tr key={idx}>
+                                            <td>{r.date}</td>
+                                            <td><b>{r.billNo}</b></td>
+                                            <td>{r.product}</td>
+                                            <td><b style={{ color: '#ef4444' }}>{r.returnedQty} {r.unit}</b></td>
+                                            <td><b style={{ color: '#ef4444' }}>₹{r.returnVal.toLocaleString('en-IN')}</b></td>
+                                            <td><span className="status-pill warning">{r.location}</span></td>
+                                            <td>{r.client}</td>
+                                            <td>{r.employee}</td>
+                                        </tr>
+                                    ))}
+                                    {returnRows.length === 0 && (
+                                        <tr>
+                                            <td colSpan="8" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                                                No returned stock records found matching the selected filters.
+                                            </td>
+                                        </tr>
+                                    )}
                                 </tbody>
                             </table>
                         </div>
-                        <div className="report-footer-summary">
-                            <span>CGST: <b>₹{((reportData?.totalTaxCollected || 0) / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></span>
-                            &nbsp;&nbsp;|
-                            <span> SGST: <b>₹{((reportData?.totalTaxCollected || 0) / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></span>
-                        </div>
-                        {downloadBar}
+                        {renderDownloadBar(cols, returnRows, 'Returned_Stock_Report')}
                     </div>
-                )
+                );
+            }
+
+            // ── 3. Sales Analytics Report ──────────────────────────────
+            case 'sales-report': {
+                const salesRows = [];
+                combinedOrders.forEach(o => {
+                    const dateStr = o.date || o.createdAt || new Date().toISOString();
+                    const client = o.customer || o.customerName || (o.notes && o.notes.includes('CLIENTNAME:') ? o.notes.split('CLIENTNAME:')[1].split('||')[0] : 'Walk-in');
+                    const loc = o.location || o.assignedVehicle || (o.notes && o.notes.includes('LOCATION:') ? o.notes.split('LOCATION:')[1].split('||')[0] : 'Godown');
+                    const emp = o.employee || o.employeeName || 'Biller';
+                    const itemsSummary = (o.items || []).map(i => `${i.itemName || i.name} (x${i.quantity || i.qty})`).join(', ');
+
+                    if (passesFilters(dateStr, loc, client, emp, itemsSummary)) {
+                        salesRows.push({
+                            date: new Date(dateStr).toLocaleDateString('en-IN'),
+                            billNo: o.orderNumber || o.billNumber || o.id || 'PLT-SALE',
+                            client: client,
+                            itemsCount: (o.items || []).length,
+                            itemsSummary: itemsSummary || 'Sales Order',
+                            total: parseFloat(o.total) || 0,
+                            payment: o.paymentMethod || o.payment || 'CASH',
+                            location: loc,
+                            employee: emp,
+                            status: o.paymentStatus || 'PAID'
+                        });
+                    }
+                });
+
+                const totalRev = salesRows.reduce((sum, r) => sum + r.total, 0);
+
+                const cols = [
+                    { label: 'Date', key: 'date' },
+                    { label: 'Bill #', key: 'billNo' },
+                    { label: 'Client / Customer', key: 'client' },
+                    { label: 'Items Summary', key: 'itemsSummary' },
+                    { label: 'Total Value', key: 'total' },
+                    { label: 'Payment Method', key: 'payment' },
+                    { label: 'Location', key: 'location' },
+                    { label: 'Employee', key: 'employee' },
+                    { label: 'Status', key: 'status' }
+                ];
+
+                return (
+                    <div className="report-content-view">
+                        {filterToolbar}
+                        <div className="report-summary-grid mini">
+                            <div className="summary-val-card" style={{ background: 'rgba(198,245,61,0.08)' }}>
+                                <span className="label">Total Sales Revenue</span>
+                                <span className="val" style={{ color: '#C6F53D' }}>₹{totalRev.toLocaleString('en-IN')}</span>
+                            </div>
+                            <div className="summary-val-card" style={{ background: 'rgba(59,130,246,0.08)' }}>
+                                <span className="label">Total Transactions</span>
+                                <span className="val" style={{ color: '#60a5fa' }}>{salesRows.length} Bills</span>
+                            </div>
+                            <div className="summary-val-card" style={{ background: 'rgba(139,92,246,0.08)' }}>
+                                <span className="label">Avg Transaction Value</span>
+                                <span className="val" style={{ color: '#a78bfa' }}>₹{salesRows.length > 0 ? Math.round(totalRev / salesRows.length).toLocaleString('en-IN') : 0}</span>
+                            </div>
+                        </div>
+                        <div className="report-table-wrapper">
+                            <table className="premium-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Bill #</th>
+                                        <th>Client</th>
+                                        <th>Items Summary</th>
+                                        <th>Total</th>
+                                        <th>Payment</th>
+                                        <th>Location</th>
+                                        <th>Employee</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {salesRows.map((r, idx) => (
+                                        <tr key={idx}>
+                                            <td>{r.date}</td>
+                                            <td><b>{r.billNo}</b></td>
+                                            <td>{r.client}</td>
+                                            <td><span style={{ fontSize: '0.85em', opacity: 0.85 }}>{r.itemsSummary}</span></td>
+                                            <td><b style={{ color: '#C6F53D' }}>₹{r.total.toLocaleString('en-IN')}</b></td>
+                                            <td><span className="status-pill success">{r.payment}</span></td>
+                                            <td><span className="status-pill warning">{r.location}</span></td>
+                                            <td>{r.employee}</td>
+                                        </tr>
+                                    ))}
+                                    {salesRows.length === 0 && (
+                                        <tr>
+                                            <td colSpan="8" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                                                No sales transactions found matching the selected filters.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                        {renderDownloadBar(cols, salesRows, 'Sales_Analytics_Report')}
+                    </div>
+                );
+            }
+
+            // ── 4. GST Sales Report ────────────────────────────────────
+            case 'sales-gst-report': {
+                const gstRows = [];
+                combinedOrders.forEach(o => {
+                    const dateStr = o.date || o.createdAt || new Date().toISOString();
+                    const client = o.customer || o.customerName || (o.notes && o.notes.includes('CLIENTNAME:') ? o.notes.split('CLIENTNAME:')[1].split('||')[0] : 'Walk-in');
+                    const loc = o.location || o.assignedVehicle || (o.notes && o.notes.includes('LOCATION:') ? o.notes.split('LOCATION:')[1].split('||')[0] : 'Godown');
+                    const emp = o.employee || o.employeeName || 'Biller';
+
+                    (o.items || []).forEach(i => {
+                        const gstRate = parseFloat(i.gstPercent || i.taxRate || 18) || 0;
+                        const isGstItem = gstRate > 0 || (i.gstAmount || 0) > 0;
+                        const name = i.itemName || i.name;
+
+                        if (isGstItem && passesFilters(dateStr, loc, client, emp, name)) {
+                            const qty = parseFloat(i.quantity || i.qty) || 0;
+                            const totalVal = parseFloat(i.amount || (qty * (i.rate || 0))) || 0;
+                            const taxAmt = i.gstAmount ? parseFloat(i.gstAmount) : (totalVal * gstRate / (100 + gstRate));
+                            const baseAmt = totalVal - taxAmt;
+                            const cgst = taxAmt / 2;
+                            const sgst = taxAmt / 2;
+
+                            gstRows.push({
+                                date: new Date(dateStr).toLocaleDateString('en-IN'),
+                                billNo: o.orderNumber || o.billNumber || o.id || 'GST-SALE',
+                                client: client,
+                                product: name,
+                                quantity: qty,
+                                baseAmt: +baseAmt.toFixed(2),
+                                gstRate: gstRate,
+                                cgst: +cgst.toFixed(2),
+                                sgst: +sgst.toFixed(2),
+                                totalGst: +taxAmt.toFixed(2),
+                                totalVal: +totalVal.toFixed(2),
+                                location: loc,
+                                employee: emp
+                            });
+                        }
+                    });
+                });
+
+                const totalBase = gstRows.reduce((sum, r) => sum + r.baseAmt, 0);
+                const totalGst = gstRows.reduce((sum, r) => sum + r.totalGst, 0);
+                const totalFinal = gstRows.reduce((sum, r) => sum + r.totalVal, 0);
+
+                const cols = [
+                    { label: 'Date', key: 'date' },
+                    { label: 'Bill #', key: 'billNo' },
+                    { label: 'Client', key: 'client' },
+                    { label: 'Product Name', key: 'product' },
+                    { label: 'Qty Sold', key: 'quantity' },
+                    { label: 'Taxable Base (₹)', key: 'baseAmt' },
+                    { label: 'GST Rate (%)', key: 'gstRate' },
+                    { label: 'CGST (₹)', key: 'cgst' },
+                    { label: 'SGST (₹)', key: 'sgst' },
+                    { label: 'Total GST (₹)', key: 'totalGst' },
+                    { label: 'Final Total (₹)', key: 'totalVal' },
+                    { label: 'Location', key: 'location' },
+                    { label: 'Employee', key: 'employee' }
+                ];
+
+                return (
+                    <div className="report-content-view">
+                        {filterToolbar}
+                        <div className="report-summary-grid mini">
+                            <div className="summary-val-card" style={{ background: 'rgba(59,130,246,0.08)' }}>
+                                <span className="label">Taxable Base Revenue</span>
+                                <span className="val" style={{ color: '#60a5fa' }}>₹{totalBase.toLocaleString('en-IN')}</span>
+                            </div>
+                            <div className="summary-val-card error">
+                                <span className="label">Total GST Collected</span>
+                                <span className="val">₹{totalGst.toLocaleString('en-IN')}</span>
+                            </div>
+                            <div className="summary-val-card" style={{ background: 'rgba(198,245,61,0.08)' }}>
+                                <span className="label">Total Final Sales</span>
+                                <span className="val" style={{ color: '#C6F53D' }}>₹{totalFinal.toLocaleString('en-IN')}</span>
+                            </div>
+                        </div>
+                        <div className="report-table-wrapper">
+                            <table className="premium-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Bill #</th>
+                                        <th>Client</th>
+                                        <th>Product</th>
+                                        <th>Base Amt</th>
+                                        <th>GST Rate</th>
+                                        <th>CGST</th>
+                                        <th>SGST</th>
+                                        <th>Total GST</th>
+                                        <th>Total Sales</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {gstRows.map((r, idx) => (
+                                        <tr key={idx}>
+                                            <td>{r.date}</td>
+                                            <td><b>{r.billNo}</b></td>
+                                            <td>{r.client}</td>
+                                            <td>{r.product}</td>
+                                            <td>₹{r.baseAmt.toLocaleString('en-IN')}</td>
+                                            <td>{r.gstRate}%</td>
+                                            <td>₹{r.cgst.toLocaleString('en-IN')}</td>
+                                            <td>₹{r.sgst.toLocaleString('en-IN')}</td>
+                                            <td><b style={{ color: '#ef4444' }}>₹{r.totalGst.toLocaleString('en-IN')}</b></td>
+                                            <td><b style={{ color: '#C6F53D' }}>₹{r.totalVal.toLocaleString('en-IN')}</b></td>
+                                        </tr>
+                                    ))}
+                                    {gstRows.length === 0 && (
+                                        <tr>
+                                            <td colSpan="10" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                                                No GST sales transactions found matching the selected filters.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                        {renderDownloadBar(cols, gstRows, 'GST_Sales_Report')}
+                    </div>
+                );
+            }
+
+            // ── 5. Non-GST Sales Report ────────────────────────────────
+            case 'sales-non-gst-report': {
+                const nonGstRows = [];
+                combinedOrders.forEach(o => {
+                    const dateStr = o.date || o.createdAt || new Date().toISOString();
+                    const client = o.customer || o.customerName || (o.notes && o.notes.includes('CLIENTNAME:') ? o.notes.split('CLIENTNAME:')[1].split('||')[0] : 'Walk-in');
+                    const loc = o.location || o.assignedVehicle || (o.notes && o.notes.includes('LOCATION:') ? o.notes.split('LOCATION:')[1].split('||')[0] : 'Godown');
+                    const emp = o.employee || o.employeeName || 'Biller';
+
+                    (o.items || []).forEach(i => {
+                        const gstRate = parseFloat(i.gstPercent || i.taxRate || 0) || 0;
+                        const isNonGstItem = gstRate === 0 && !i.gstAmount;
+                        const name = i.itemName || i.name;
+
+                        if (isNonGstItem && passesFilters(dateStr, loc, client, emp, name)) {
+                            const qty = parseFloat(i.quantity || i.qty) || 0;
+                            const rate = parseFloat(i.rate) || 0;
+                            const totalVal = parseFloat(i.amount || (qty * rate)) || 0;
+
+                            nonGstRows.push({
+                                date: new Date(dateStr).toLocaleDateString('en-IN'),
+                                billNo: o.orderNumber || o.billNumber || o.id || 'NONGST-SALE',
+                                client: client,
+                                product: name,
+                                quantity: qty,
+                                sellingPrice: rate,
+                                totalVal: totalVal,
+                                location: loc,
+                                employee: emp
+                            });
+                        }
+                    });
+                });
+
+                const totalNonGstVal = nonGstRows.reduce((sum, r) => sum + r.totalVal, 0);
+
+                const cols = [
+                    { label: 'Date', key: 'date' },
+                    { label: 'Bill #', key: 'billNo' },
+                    { label: 'Client', key: 'client' },
+                    { label: 'Product Name', key: 'product' },
+                    { label: 'Quantity', key: 'quantity' },
+                    { label: 'Selling Price (₹)', key: 'sellingPrice' },
+                    { label: 'Total Amount (₹)', key: 'totalVal' },
+                    { label: 'Storage Location', key: 'location' },
+                    { label: 'Employee', key: 'employee' }
+                ];
+
+                return (
+                    <div className="report-content-view">
+                        {filterToolbar}
+                        <div className="report-summary-grid mini">
+                            <div className="summary-val-card" style={{ background: 'rgba(139,92,246,0.08)' }}>
+                                <span className="label">Total Non-GST Sales</span>
+                                <span className="val" style={{ color: '#a78bfa' }}>₹{totalNonGstVal.toLocaleString('en-IN')}</span>
+                            </div>
+                            <div className="summary-val-card" style={{ background: 'rgba(59,130,246,0.08)' }}>
+                                <span className="label">Items Sold (No Tax)</span>
+                                <span className="val" style={{ color: '#60a5fa' }}>{nonGstRows.length} Line Items</span>
+                            </div>
+                        </div>
+                        <div className="report-table-wrapper">
+                            <table className="premium-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Bill #</th>
+                                        <th>Client</th>
+                                        <th>Product</th>
+                                        <th>Qty</th>
+                                        <th>Selling Price</th>
+                                        <th>Total Amount</th>
+                                        <th>Location</th>
+                                        <th>Employee</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {nonGstRows.map((r, idx) => (
+                                        <tr key={idx}>
+                                            <td>{r.date}</td>
+                                            <td><b>{r.billNo}</b></td>
+                                            <td>{r.client}</td>
+                                            <td>{r.product}</td>
+                                            <td>{r.quantity}</td>
+                                            <td>₹{r.sellingPrice}</td>
+                                            <td><b style={{ color: '#a78bfa' }}>₹{r.totalVal.toLocaleString('en-IN')}</b></td>
+                                            <td><span className="status-pill warning">{r.location}</span></td>
+                                            <td>{r.employee}</td>
+                                        </tr>
+                                    ))}
+                                    {nonGstRows.length === 0 && (
+                                        <tr>
+                                            <td colSpan="9" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                                                No Non-GST sales records found matching the selected filters.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                        {renderDownloadBar(cols, nonGstRows, 'Non_GST_Sales_Report')}
+                    </div>
+                );
+            }
+
+            // ── 6. Client-Wise Sales Report ────────────────────────────
+            case 'client-wise-sales': {
+                const clientRows = [];
+                combinedOrders.forEach(o => {
+                    const dateStr = o.date || o.createdAt || new Date().toISOString();
+                    const client = o.customer || o.customerName || (o.notes && o.notes.includes('CLIENTNAME:') ? o.notes.split('CLIENTNAME:')[1].split('||')[0] : 'Walk-in');
+                    const loc = o.location || o.assignedVehicle || (o.notes && o.notes.includes('LOCATION:') ? o.notes.split('LOCATION:')[1].split('||')[0] : 'Godown');
+                    const emp = o.employee || o.employeeName || 'Biller';
+
+                    (o.items || []).forEach(i => {
+                        const name = i.itemName || i.name;
+                        if (passesFilters(dateStr, loc, client, emp, name)) {
+                            const qty = parseFloat(i.quantity || i.qty) || 0;
+                            const totalVal = parseFloat(i.amount || (qty * (i.rate || 0))) || 0;
+                            const isGst = (i.gstPercent || 0) > 0 || (i.gstAmount || 0) > 0;
+
+                            clientRows.push({
+                                client: client,
+                                billNo: o.orderNumber || o.billNumber || o.id || 'CLI-SALE',
+                                date: new Date(dateStr).toLocaleDateString('en-IN'),
+                                product: name,
+                                quantity: qty,
+                                totalVal: totalVal,
+                                taxClass: isGst ? 'GST' : 'Non-GST',
+                                location: loc,
+                                employee: emp
+                            });
+                        }
+                    });
+                });
+
+                const uniqueClients = [...new Set(clientRows.map(r => r.client))].length;
+                const grandTotal = clientRows.reduce((sum, r) => sum + r.totalVal, 0);
+
+                const cols = [
+                    { label: 'Client Name', key: 'client' },
+                    { label: 'Bill #', key: 'billNo' },
+                    { label: 'Date', key: 'date' },
+                    { label: 'Product Name', key: 'product' },
+                    { label: 'Qty Sold', key: 'quantity' },
+                    { label: 'Total Value (₹)', key: 'totalVal' },
+                    { label: 'Tax Classification', key: 'taxClass' },
+                    { label: 'Storage Location', key: 'location' },
+                    { label: 'Employee', key: 'employee' }
+                ];
+
+                return (
+                    <div className="report-content-view">
+                        {filterToolbar}
+                        <div className="report-summary-grid mini">
+                            <div className="summary-val-card" style={{ background: 'rgba(198,245,61,0.08)' }}>
+                                <span className="label">Total Client Sales</span>
+                                <span className="val" style={{ color: '#C6F53D' }}>₹{grandTotal.toLocaleString('en-IN')}</span>
+                            </div>
+                            <div className="summary-val-card" style={{ background: 'rgba(59,130,246,0.08)' }}>
+                                <span className="label">Clients Served</span>
+                                <span className="val" style={{ color: '#60a5fa' }}>{uniqueClients} Clients</span>
+                            </div>
+                        </div>
+                        <div className="report-table-wrapper">
+                            <table className="premium-table">
+                                <thead>
+                                    <tr>
+                                        <th>Client Name</th>
+                                        <th>Bill #</th>
+                                        <th>Date</th>
+                                        <th>Product</th>
+                                        <th>Qty</th>
+                                        <th>Total Value</th>
+                                        <th>Tax Type</th>
+                                        <th>Location</th>
+                                        <th>Employee</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {clientRows.map((r, idx) => (
+                                        <tr key={idx}>
+                                            <td><b>{r.client}</b></td>
+                                            <td>{r.billNo}</td>
+                                            <td>{r.date}</td>
+                                            <td>{r.product}</td>
+                                            <td>{r.quantity}</td>
+                                            <td><b style={{ color: '#C6F53D' }}>₹{r.totalVal.toLocaleString('en-IN')}</b></td>
+                                            <td><span className={`status-pill ${r.taxClass === 'GST' ? 'success' : 'muted'}`}>{r.taxClass}</span></td>
+                                            <td><span className="status-pill warning">{r.location}</span></td>
+                                            <td>{r.employee}</td>
+                                        </tr>
+                                    ))}
+                                    {clientRows.length === 0 && (
+                                        <tr>
+                                            <td colSpan="9" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                                                No client sales records found matching the selected filters.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                        {renderDownloadBar(cols, clientRows, 'Client_Wise_Sales_Report')}
+                    </div>
+                );
+            }
+
+            // ── 7. Vehicle/Location-Wise Stock Report ──────────────────
+            case 'location-wise-stock': {
+                const locations = getVehicleLocations();
+                const allLocStocks = getAllLocationStocks();
+                const locationRows = [];
+
+                locations.forEach(loc => {
+                    if (filterLocation && loc.toLowerCase() !== filterLocation.toLowerCase()) return;
+
+                    allInventory.forEach(inv => {
+                        const itemId = String(inv._id || inv.id || inv.name);
+                        const locStockMap = allLocStocks[itemId] || { 'Godown': inv.currentStock || 0 };
+                        const currentLocStock = parseFloat(locStockMap[loc] || 0);
+
+                        if (filterSearch && !inv.name.toLowerCase().includes(filterSearch.toLowerCase())) return;
+
+                        if (currentLocStock > 0 || !filterSearch) {
+                            const cost = parseFloat(inv.costPerUnit || inv.buyingPrice) || 0;
+                            locationRows.push({
+                                location: loc,
+                                item: inv.name,
+                                category: inv.category || 'General',
+                                stock: currentLocStock,
+                                unit: inv.unit || 'pcs',
+                                costPerUnit: cost,
+                                totalVal: currentLocStock * cost
+                            });
+                        }
+                    });
+                });
+
+                const totalLocStockVal = locationRows.reduce((sum, r) => sum + r.totalVal, 0);
+
+                const cols = [
+                    { label: 'Storage Space / Location', key: 'location' },
+                    { label: 'Item Name', key: 'item' },
+                    { label: 'Category', key: 'category' },
+                    { label: 'Current Stock', key: 'stock' },
+                    { label: 'Unit', key: 'unit' },
+                    { label: 'Cost / Unit (₹)', key: 'costPerUnit' },
+                    { label: 'Location Stock Value (₹)', key: 'totalVal' }
+                ];
+
+                return (
+                    <div className="report-content-view">
+                        {filterToolbar}
+                        <div className="report-summary-grid mini">
+                            <div className="summary-val-card" style={{ background: 'rgba(236,72,153,0.08)' }}>
+                                <span className="label">Total Locations</span>
+                                <span className="val" style={{ color: '#ec4899' }}>{locations.length} Spaces</span>
+                            </div>
+                            <div className="summary-val-card" style={{ background: 'rgba(245,158,11,0.08)' }}>
+                                <span className="label">Total Location Stock Value</span>
+                                <span className="val" style={{ color: '#f59e0b' }}>₹{totalLocStockVal.toLocaleString('en-IN')}</span>
+                            </div>
+                        </div>
+                        <div className="report-table-wrapper">
+                            <table className="premium-table">
+                                <thead>
+                                    <tr>
+                                        <th>Storage Space</th>
+                                        <th>Item Name</th>
+                                        <th>Category</th>
+                                        <th>Stock</th>
+                                        <th>Cost/Unit</th>
+                                        <th>Total Valuation</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {locationRows.map((r, idx) => (
+                                        <tr key={idx}>
+                                            <td><span className="status-pill warning">{r.location}</span></td>
+                                            <td><b>{r.item}</b></td>
+                                            <td>{r.category}</td>
+                                            <td><b style={{ color: '#C6F53D' }}>{r.stock} {r.unit}</b></td>
+                                            <td>₹{r.costPerUnit}</td>
+                                            <td><b style={{ color: '#f59e0b' }}>₹{r.totalVal.toLocaleString('en-IN')}</b></td>
+                                        </tr>
+                                    ))}
+                                    {locationRows.length === 0 && (
+                                        <tr>
+                                            <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                                                No location stock records found.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                        {renderDownloadBar(cols, locationRows, 'Location_Wise_Stock_Report')}
+                    </div>
+                );
+            }
+
+            // ── 8. Stock Movement / Audit Trail Report ─────────────────
+            case 'stock-audit-trail': {
+                const movements = getStockMovements();
+                const filteredMovements = movements.filter(m => {
+                    const dateStr = m.timestamp;
+                    if (filterFromDate && new Date(dateStr) < new Date(`${filterFromDate}T00:00:00`)) return false;
+                    if (filterToDate && new Date(dateStr) > new Date(`${filterToDate}T23:59:59`)) return false;
+                    if (filterSearch && !m.itemName.toLowerCase().includes(filterSearch.toLowerCase())) return false;
+                    if (filterLocation && m.sourceLocation.toLowerCase() !== filterLocation.toLowerCase() && m.destinationLocation.toLowerCase() !== filterLocation.toLowerCase()) return false;
+                    if (filterEmployee && !m.employee.toLowerCase().includes(filterEmployee.toLowerCase())) return false;
+                    return true;
+                });
+
+                const cols = [
+                    { label: 'Timestamp', key: 'timestamp' },
+                    { label: 'Action Type', key: 'action' },
+                    { label: 'Item Name', key: 'itemName' },
+                    { label: 'Quantity', key: 'quantity' },
+                    { label: 'Source Location', key: 'sourceLocation' },
+                    { label: 'Destination Location', key: 'destinationLocation' },
+                    { label: 'Employee', key: 'employee' },
+                    { label: 'Ref / Bill #', key: 'refNo' }
+                ];
+
+                return (
+                    <div className="report-content-view">
+                        {filterToolbar}
+                        <div className="report-summary-grid mini">
+                            <div className="summary-val-card" style={{ background: 'rgba(59,130,246,0.08)' }}>
+                                <span className="label">Total Audit Trail Logs</span>
+                                <span className="val" style={{ color: '#60a5fa' }}>{filteredMovements.length} Events</span>
+                            </div>
+                        </div>
+                        <div className="report-table-wrapper">
+                            <table className="premium-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date &amp; Time</th>
+                                        <th>Action</th>
+                                        <th>Item Name</th>
+                                        <th>Qty</th>
+                                        <th>From</th>
+                                        <th>To</th>
+                                        <th>Employee</th>
+                                        <th>Ref #</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filteredMovements.map((m, idx) => (
+                                        <tr key={idx}>
+                                            <td>{new Date(m.timestamp).toLocaleString('en-IN')}</td>
+                                            <td>
+                                                <span className={`status-pill ${m.action === 'SALE' ? 'success' : m.action === 'TRANSFER' ? 'warning' : m.action === 'RETURN' ? 'error' : 'info'}`}>
+                                                    {m.action}
+                                                </span>
+                                            </td>
+                                            <td><b>{m.itemName}</b></td>
+                                            <td><b>{m.quantity}</b></td>
+                                            <td>{m.sourceLocation}</td>
+                                            <td>{m.destinationLocation}</td>
+                                            <td>{m.employee}</td>
+                                            <td>{m.refNo}</td>
+                                        </tr>
+                                    ))}
+                                    {filteredMovements.length === 0 && (
+                                        <tr>
+                                            <td colSpan="8" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                                                No stock audit movements found matching the filters.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                        {renderDownloadBar(cols, filteredMovements, 'Stock_Audit_Trail_Report')}
+                    </div>
+                );
+            }
             case 'sales-non-gst-report':
                 return (
                     <div className="report-content-view">
@@ -607,6 +1564,7 @@ export default function AnalyticsPage() {
                         {downloadBar}
                     </div>
                 )
+            case 'inventory-category-report':
             case 'stock-report':
             case 'recipe-stock':
             case 'total-inventory-valuation':
@@ -1219,7 +2177,7 @@ export default function AnalyticsPage() {
                         </div>
 
                         {/* ── Product Sales Board ── */}
-                        <div className="dashboard-card" style={{ gridColumn: 'span 2' }}>
+                        <div className="dashboard-card product-sales-card">
                             <div className="card-custom-header" style={{ marginBottom: '16px' }}>
                                 <h3 className="card-title">🛒 Product Sales — What's Selling</h3>
                                 <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
@@ -1228,7 +2186,7 @@ export default function AnalyticsPage() {
                             </div>
 
                             {data?.topItems?.length > 0 ? (
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                                <div className="product-sales-grid">
                                     {/* Left: Table with progress bars */}
                                     <div style={{ overflowX: 'auto' }}>
                                         <table className="premium-table" style={{ fontSize: '13px' }}>

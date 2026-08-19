@@ -4,6 +4,14 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { usePOSMode } from '../context/POSModeContext.jsx'
 import { useTheme } from '../context/ThemeContext.jsx'
 import { useNavigate } from 'react-router-dom'
+import DeviceLimitModal from '../components/DeviceLimitModal.jsx'
+import {
+    getTenantDeviceLimit,
+    getActiveDeviceSessions,
+    isCurrentDeviceRegistered,
+    registerCurrentDeviceSession,
+    logoutDeviceSession
+} from '../utils/deviceHelper.js'
 import './Login.css'
 
 import logo from '../assets/LOGO.jpeg'
@@ -24,6 +32,12 @@ export default function LoginPage() {
     const [forgotNewPassword, setForgotNewPassword] = useState('')
     const [forgotStep, setForgotStep] = useState(1) // 1: Email, 2: OTP & Password
     const [licenseError, setLicenseError] = useState('')
+
+    // Device limit management states
+    const [pendingAuth, setPendingAuth] = useState(null)
+    const [showDeviceModal, setShowDeviceModal] = useState(false)
+    const [activeDevices, setActiveDevices] = useState([])
+    const [maxDevicesLimit, setMaxDevicesLimit] = useState(3)
 
     const { login } = useAuth()
     const { setSupermarketMode, setStoreMode } = usePOSMode()
@@ -49,26 +63,19 @@ export default function LoginPage() {
             )
         }
 
-        api.get('/master/banners/active')
-            .then(res => {
-                if (res.data?.data && !window.location.search.includes('hq=override')) {
-                    navigate('/maintenance')
-                }
-            })
-            .catch(() => {
-                // Ignore errors
-            })
-
-        // Fetch license status quickly (non-blocking, short timeout)
-        api.get('/license/status', { timeout: 3000 })
-            .then(res => {
-                if (res.data && res.data.valid === false) {
-                    setLicenseError(res.data.message || 'No valid license found.')
-                }
-            })
-            .catch(() => {
-                // License check failed silently — do not block login
-            })
+        // Fetch license status quickly (non-blocking, short timeout) — skip during maintenance
+        const isMaintenanceActive = localStorage.getItem('km_maintenance_active') === 'true'
+        if (!isMaintenanceActive) {
+            api.get('/license/status', { timeout: 3000 })
+                .then(res => {
+                    if (res.data && res.data.valid === false) {
+                        setLicenseError(res.data.message || 'No valid license found.')
+                    }
+                })
+                .catch(() => {
+                    // License check failed silently — do not block login
+                })
+        }
     }, [])
 
     const handleForgotPasswordSubmit = async (e) => {
@@ -97,14 +104,32 @@ export default function LoginPage() {
         }
     }
 
+    const finalizeLogin = (user, token) => {
+        login(user, token)
+        setStoreMode(user.preferredPosMode || 'restaurant')
+        if (user.isProBloomAdmin) {
+            navigate('/probloom-hq')
+        } else {
+            navigate('/pos')
+        }
+    }
+
+    const handleSelectLogoutDevice = (deviceIdToLogout) => {
+        if (!pendingAuth) return
+        const identifier = pendingAuth.user.email || pendingAuth.user.id || pendingAuth.user._id
+        logoutDeviceSession(identifier, deviceIdToLogout)
+        registerCurrentDeviceSession(identifier)
+        setShowDeviceModal(false)
+        finalizeLogin(pendingAuth.user, pendingAuth.token)
+        setPendingAuth(null)
+    }
+
     const handleLogin = async (e) => {
         e.preventDefault()
         setError('')
         setLoading(true)
 
         try {
-            // Connection mode is determined by Spring Boot profile at startup.
-            // No need to call setConnectionMode here — it caused long delays at login.
             const isEmail = loginId.includes('@')
 
             if (isEmail) {
@@ -115,16 +140,23 @@ export default function LoginPage() {
                     longitude: coords?.longitude
                 })
                 const { token, user } = res.data.data
-                login(user, token)
 
-                // Set POS mode preference
-                setStoreMode(user.preferredPosMode || 'restaurant')
+                // Device limit check
+                const identifier = user.email || user.id || user._id
+                const maxDevs = getTenantDeviceLimit(user)
+                const currentSessions = getActiveDeviceSessions(identifier)
+                const isRegistered = isCurrentDeviceRegistered(identifier)
 
-                if (user.isProBloomAdmin) {
-                    navigate('/probloom-hq')
-                } else {
-                    navigate('/pos')
+                if (!isRegistered && currentSessions.length >= maxDevs) {
+                    setPendingAuth({ user, token })
+                    setActiveDevices(currentSessions)
+                    setMaxDevicesLimit(maxDevs)
+                    setShowDeviceModal(true)
+                    return
                 }
+
+                registerCurrentDeviceSession(identifier)
+                finalizeLogin(user, token)
             } else {
                 // Stakeholder Login with Phone
                 const res = await api.post('/stakeholder/login', {
@@ -358,6 +390,18 @@ export default function LoginPage() {
                 )}
 
                 <p className="login-hint">Billing Management System v1.0 • Secure Terminal</p>
+
+                {showDeviceModal && (
+                    <DeviceLimitModal
+                        activeDevices={activeDevices}
+                        maxDevices={maxDevicesLimit}
+                        onSelectLogoutDevice={handleSelectLogoutDevice}
+                        onCancel={() => {
+                            setShowDeviceModal(false)
+                            setPendingAuth(null)
+                        }}
+                    />
+                )}
             </div>
         </div>
     )

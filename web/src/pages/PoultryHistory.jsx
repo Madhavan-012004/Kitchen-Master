@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../api/client.js';
 import socket from '../api/socket.js';
+import { filterOrdersForUser, extractBillerMeta } from '../utils/billNumberUtils.js';
 import './PoultryHistory.css';
 
 export default function PoultryHistory() {
@@ -153,6 +154,9 @@ export default function PoultryHistory() {
             // Filtering in JS
             const fromTime = new Date(from + 'T00:00:00').getTime();
             const toTime = new Date(to + 'T23:59:59').getTime();
+
+            const currentUser = JSON.parse(localStorage.getItem('km_user') || '{}');
+            fetchedBills = filterOrdersForUser(fetchedBills, currentUser);
 
             fetchedBills = fetchedBills.filter((b) => {
                 const bTime = new Date(b.createdAt || new Date().toISOString()).getTime();
@@ -391,6 +395,7 @@ export default function PoultryHistory() {
                                     <th>Bill #</th>
                                     <th>Date &amp; Time</th>
                                     <th>Client</th>
+                                    <th>Biller</th>
                                     <th>Items</th>
                                     <th>Subtotal</th>
                                     <th>Discount</th>
@@ -403,6 +408,7 @@ export default function PoultryHistory() {
                                 {bills.map(bill => {
                                     const billId = bill._id || bill.id;
                                     const isExpanded = expandedBill === billId;
+                                    const billerMeta = extractBillerMeta(bill);
                                     return (
                                         <React.Fragment key={billId}>
                                             <tr
@@ -412,6 +418,11 @@ export default function PoultryHistory() {
                                                 <td className="ph-bill-num">#{bill.billNumber || bill.orderNumber || String(billId).slice(-6)}</td>
                                                 <td className="ph-date">{fmtDate(bill.createdAt || bill.date)}</td>
                                                 <td className="ph-client">{bill.clientName || bill.client?.name || <span className="ph-walkin">Walk-in</span>}</td>
+                                                <td className="ph-biller">
+                                                    <span style={{ fontSize: '11px', background: 'rgba(59,130,246,0.1)', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.3)', padding: '2px 6px', borderRadius: '10px', fontWeight: 600 }}>
+                                                        👤 {billerMeta.billerName} {billerMeta.employeeCode ? `(${billerMeta.employeeCode})` : ''}
+                                                    </span>
+                                                </td>
                                                 <td className="ph-items-count">{(bill.items || []).length} item{(bill.items || []).length !== 1 ? 's' : ''}</td>
                                                 <td>{fmtMoney(bill.subtotal)}</td>
                                                 <td className="ph-discount">{bill.discount > 0 ? `— ${fmtMoney(bill.discount)}` : '—'}</td>

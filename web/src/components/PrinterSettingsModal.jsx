@@ -6,6 +6,7 @@ import {
     isIMinAvailable,
     getPrinterSettings,
 } from '../api/printerUtils';
+import { processLogoForThermalCanvas } from '../utils/logoPrinterUtils';
 import api from '../api/client';
 
 // Detect which BT backend is available at render time (matches printerUtils.js priority)
@@ -37,6 +38,11 @@ export default function PrinterSettingsModal({ isOpen, onClose, onSaved }) {
     const [btAddress, setBtAddress] = useState(initialSettings.btPrinterAddress || '');
     const [iminPaperWidth, setIminPaperWidth] = useState(initialSettings.iminPaperWidth || 58);
     const [scaleDeviceName, setScaleDeviceName] = useState(initialSettings.usbScaleDeviceName || '');
+    const [printLogoOnBill, setPrintLogoOnBill] = useState(initialSettings.printLogoOnBill !== false);
+    const [logoUrl, setLogoUrl] = useState(initialSettings.logoUrl || '');
+    const [previewPaperWidth, setPreviewPaperWidth] = useState(80);
+    const [previewDataUrl, setPreviewDataUrl] = useState('');
+    const [processingLogo, setProcessingLogo] = useState(false);
 
     const [osPrinters, setOsPrinters] = useState([]);
     const [loadingPrinters, setLoadingPrinters] = useState(false);
@@ -71,8 +77,45 @@ export default function PrinterSettingsModal({ isOpen, onClose, onSaved }) {
         setBtAddress(s.btPrinterAddress || '');
         setIminPaperWidth(s.iminPaperWidth || 58);
         setScaleDeviceName(s.usbScaleDeviceName || '');
+        setPrintLogoOnBill(s.printLogoOnBill !== false);
+        setLogoUrl(s.logoUrl || '');
         setTestResult(null);
     }, [isOpen]);
+
+    // Live preview generator for thermal logo
+    useEffect(() => {
+        let isMounted = true;
+        if (!logoUrl) {
+            setPreviewDataUrl('');
+            return;
+        }
+        setProcessingLogo(true);
+        const paperDots = previewPaperWidth === 58 ? 384 : 576;
+        processLogoForThermalCanvas(logoUrl, paperDots)
+            .then(res => {
+                if (isMounted) setPreviewDataUrl(res.dataUrl);
+            })
+            .catch(err => {
+                console.warn('Preview process failed:', err);
+                if (isMounted) setPreviewDataUrl('');
+            })
+            .finally(() => {
+                if (isMounted) setProcessingLogo(false);
+            });
+        return () => { isMounted = false; };
+    }, [logoUrl, previewPaperWidth]);
+
+    const handleFileUpload = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            if (event.target?.result) {
+                setLogoUrl(event.target.result);
+            }
+        };
+        reader.readAsDataURL(file);
+    };
 
     const fetchOsPrinters = useCallback(async () => {
         setLoadingPrinters(true);
@@ -122,6 +165,8 @@ export default function PrinterSettingsModal({ isOpen, onClose, onSaved }) {
                 btPrinterAddress: btAddress,
                 iminPaperWidth,
                 usbScaleDeviceName: scaleDeviceName,
+                printLogoOnBill,
+                logoUrl,
             };
             const res = await api.put('auth/profile', payload);
             const updatedUser = res.data?.data || res.data;
@@ -140,6 +185,7 @@ export default function PrinterSettingsModal({ isOpen, onClose, onSaved }) {
         }
         setSaveLoading(false);
     };
+
 
     if (!isOpen) return null;
 
@@ -485,12 +531,109 @@ export default function PrinterSettingsModal({ isOpen, onClose, onSaved }) {
                         </div>
                     )}
 
+                    {/* ── Section: Logo Configuration ── */}
+                    <div className="psm-section psm-logo-section">
+                        <div className="psm-section-header">
+                            <h3 className="psm-section-title">🖼️ Print Logo Configuration</h3>
+                            <div className="psm-toggle-switch">
+                                <label className="psm-switch">
+                                    <input
+                                        type="checkbox"
+                                        checked={printLogoOnBill}
+                                        onChange={e => setPrintLogoOnBill(e.target.checked)}
+                                    />
+                                    <span className="psm-slider round"></span>
+                                </label>
+                                <span className={`psm-toggle-label ${printLogoOnBill ? 'active' : ''}`}>
+                                    {printLogoOnBill ? 'Print Logo ON' : 'Print Logo OFF'}
+                                </span>
+                            </div>
+                        </div>
+
+                        {printLogoOnBill && (
+                            <div className="psm-logo-body">
+                                <div className="psm-field">
+                                    <label>Business Logo File / Image URL</label>
+                                    <div className="psm-logo-input-row">
+                                        <input
+                                            className="psm-input"
+                                            type="text"
+                                            placeholder="https://example.com/logo.png or upload file"
+                                            value={logoUrl}
+                                            onChange={e => setLogoUrl(e.target.value)}
+                                        />
+                                        <label className="psm-btn-upload">
+                                            📁 Upload Logo
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                onChange={handleFileUpload}
+                                                style={{ display: 'none' }}
+                                            />
+                                        </label>
+                                    </div>
+                                    <span className="psm-field-hint">
+                                        The logo will automatically be converted to high-contrast monochrome and scaled for thermal printers.
+                                    </span>
+                                </div>
+
+                                {logoUrl && (
+                                    <div className="psm-logo-preview-box">
+                                        <div className="psm-preview-header">
+                                            <span>🖨️ Thermal Print Preview</span>
+                                            <div className="psm-width-pills">
+                                                <button
+                                                    type="button"
+                                                    className={`psm-pill ${previewPaperWidth === 58 ? 'active' : ''}`}
+                                                    onClick={() => setPreviewPaperWidth(58)}
+                                                >
+                                                    2-inch (58mm)
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className={`psm-pill ${previewPaperWidth === 80 ? 'active' : ''}`}
+                                                    onClick={() => setPreviewPaperWidth(80)}
+                                                >
+                                                    3-inch (80mm)
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div className="psm-preview-canvas-container">
+                                            {processingLogo ? (
+                                                <div className="psm-preview-loading">⏳ Processing thermal monochrome logo...</div>
+                                            ) : previewDataUrl ? (
+                                                <div className="psm-thermal-paper-mock">
+                                                    <div className="psm-thermal-paper-cut"></div>
+                                                    <img
+                                                        src={previewDataUrl}
+                                                        alt="Thermal Logo Preview"
+                                                        className="psm-thermal-logo-img"
+                                                    />
+                                                    <div className="psm-thermal-receipt-text">
+                                                        [ Centered at Top of Bill ]
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="psm-preview-error">⚠️ Failed to process logo. Please check image URL or upload file.</div>
+                                            )}
+                                        </div>
+                                        <span className="psm-preview-badge">
+                                            ✨ Monochrome Dithered &amp; Centered (Optimized for 2" &amp; 3" Thermal Printers)
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
                     {/* ── Test Result ── */}
                     {testResult && (
                         <div className={`psm-result ${testResult.success ? 'success' : 'error'}`}>
                             {testResult.success ? '✅' : '❌'} {testResult.message}
                         </div>
                     )}
+
                 </div>
 
                 {/* Footer Actions */}

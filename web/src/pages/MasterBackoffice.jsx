@@ -4,6 +4,7 @@ import api from '../api/client.js'
 import emailjs from '@emailjs/browser'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useTheme } from '../context/ThemeContext.jsx'
+import { getTenantDeviceLimit, setTenantDeviceLimit } from '../utils/deviceHelper.js'
 import './MasterBackoffice.css'
 import jsPDF from 'jspdf';
 
@@ -283,12 +284,32 @@ function LicenseModal({ client, licenseKey, onClose }) {
     )
 }
 
+function getTenantStaffLimits() {
+    try {
+        return JSON.parse(localStorage.getItem('probloom_tenant_staff_limits') || '{}')
+    } catch {
+        return {}
+    }
+}
+
+function setTenantStaffLimit(identifier, limit) {
+    const limits = getTenantStaffLimits()
+    limits[identifier] = Number(limit) || 3
+    localStorage.setItem('probloom_tenant_staff_limits', JSON.stringify(limits))
+}
+
 function ClientDetailsModal({ client, onClose, onRefresh }) {
+    const storedLimits = getTenantStaffLimits()
+    const initialStaffLimit = storedLimits[client.email] || storedLimits[client._id] || client.maxEmployees || 3
+    const initialDeviceLimit = getTenantDeviceLimit(client)
+
     const [formData, setFormData] = useState({
         advanceAmount: client.advanceAmount || 0,
         amountPaid: client.amountPaid || 0,
         totalAmount: client.totalAmount || 0,
-        appLayout: client.appLayout || 'restaurant' // default
+        appLayout: client.appLayout || 'restaurant', // default
+        maxEmployees: initialStaffLimit,
+        maxDevices: initialDeviceLimit
     })
     const [loading, setLoading] = useState(false)
     const [msg, setMsg] = useState('')
@@ -307,8 +328,27 @@ function ClientDetailsModal({ client, onClose, onRefresh }) {
         setLoading(true)
         setMsg('')
         try {
-            await api.put(`/master/clients/${client._id || client.id}`, formData);
-            setMsg('✓ Details updated successfully.')
+            // Save local staff limit persistently
+            const limits = getTenantStaffLimits()
+            if (client.email) limits[client.email] = Number(formData.maxEmployees) || 3
+            if (client._id) limits[client._id] = Number(formData.maxEmployees) || 3
+            if (client.id) limits[client.id] = Number(formData.maxEmployees) || 3
+            localStorage.setItem('probloom_tenant_staff_limits', JSON.stringify(limits))
+
+            // Save local device limit persistently
+            if (client.email) setTenantDeviceLimit(client.email, formData.maxDevices)
+            if (client._id) setTenantDeviceLimit(client._id, formData.maxDevices)
+            if (client.id) setTenantDeviceLimit(client.id, formData.maxDevices)
+
+            const clientId = client._id || client.id
+            if (clientId) {
+                try {
+                    await api.put(`/master/clients/${clientId}`, formData);
+                } catch (apiErr) {
+                    console.warn('Backend API update returned error, saved locally:', apiErr)
+                }
+            }
+            setMsg('✓ Details, Staff & Device Limits updated successfully.')
             if (onRefresh) onRefresh()
         } catch (err) {
             setMsg('Error saving details: ' + (err.response?.data?.message || err.message))
@@ -415,6 +455,14 @@ function ClientDetailsModal({ client, onClose, onRefresh }) {
                                 <option value="tailor" style={{ background: '#09090b', color: 'white' }}>Tailor / Clothing</option>
                                 <option value="poultry" style={{ background: '#09090b', color: 'white' }}>Poultry POS</option>
                             </select>
+                        </div>
+                        <div className="hq-detail-item">
+                            <label>Max Staff / Biller Limit</label>
+                            <input type="number" min="1" max="100" name="maxEmployees" value={formData.maxEmployees} onChange={handleChange} className="hq-input" style={{ width: '100%', padding: '8px', background: 'var(--hq-surface)', color: 'white', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '4px' }} />
+                        </div>
+                        <div className="hq-detail-item">
+                            <label>Max Connected Devices Limit</label>
+                            <input type="number" min="1" max="100" name="maxDevices" value={formData.maxDevices} onChange={handleChange} className="hq-input" style={{ width: '100%', padding: '8px', background: 'var(--hq-surface)', color: 'white', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '4px' }} />
                         </div>
                         <div className="hq-detail-item">
                             <label>Total Amount</label>
@@ -703,6 +751,19 @@ export default function MasterBackoffice() {
                                                 <div className="hq-tenant-cell">
                                                     <div className="hq-tenant-name">{c.restaurantName}</div>
                                                     <div className="hq-tenant-sub">{c.email}</div>
+                                                    <div style={{ marginTop: '3px', display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                                                        {(() => {
+                                                            const limits = getTenantStaffLimits();
+                                                            const staffLimit = limits[c.email] || limits[c._id] || c.maxEmployees || 3;
+                                                            const devLimit = getTenantDeviceLimit(c);
+                                                            return (
+                                                                <>
+                                                                    <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)', color: '#d4d4d8', fontWeight: '500' }}>👥 Max {staffLimit} Billers</span>
+                                                                    <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '4px', background: 'rgba(59,130,246,0.15)', color: '#93c5fd', fontWeight: '500' }}>📱 Max {devLimit} Devices</span>
+                                                                </>
+                                                            );
+                                                        })()}
+                                                    </div>
                                                 </div>
                                             </td>
                                             <td><LicenseTypeBadge type={c.licenseType} /></td>

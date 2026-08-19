@@ -3,14 +3,85 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { useTheme } from '../context/ThemeContext.jsx';
 import { usePOSMode } from '../context/POSModeContext.jsx';
 import { useLanguage } from '../context/LanguageContext.jsx';
+import { useMobileView } from '../context/MobileViewContext.jsx';
 import api from '../api/client.js';
 import PrinterSettingsModal from '../components/PrinterSettingsModal.jsx';
+import { getLinePOSLocations, setLinePOSLocations } from './useLinePOS.js';
 import './Profile.css';
 import './WaitlistMonitor.css';  // TV Monitor modal styles
+
+// ─── Line POS: View Toggle ───────────────────────────────────────────────────
+function LinePOSViewToggle() {
+    const [view, setView] = useState(() => localStorage.getItem('linePosView') || 'web');
+    const toggle = (val) => { setView(val); localStorage.setItem('linePosView', val); };
+    const btn = (val, label, icon) => (
+        <button
+            onClick={() => toggle(val)}
+            style={{
+                flex: 1, padding: '10px', borderRadius: '8px', border: `1px solid ${view === val ? '#3b82f6' : '#cbd5e1'}`,
+                background: view === val ? 'rgba(59,130,246,0.1)' : 'transparent',
+                color: view === val ? '#3b82f6' : '#64748b',
+                fontWeight: view === val ? 700 : 400, fontSize: '13px', cursor: 'pointer', transition: 'all .15s'
+            }}
+        >{icon} {label}</button>
+    );
+    return (
+        <div style={{ display: 'flex', gap: 8, maxWidth: 320 }}>
+            {btn('web', 'Web View', '🖥️')}
+            {btn('mobile', 'Mobile View', '📱')}
+        </div>
+    );
+}
+
+// ─── Line POS: Location Manager ──────────────────────────────────────────────
+function LinePOSLocationManager() {
+    const [locs, setLocs] = useState(() => getLinePOSLocations().filter(l => l !== 'All'));
+    const [newLoc, setNewLoc] = useState('');
+    const save = (updated) => { setLocs(updated); setLinePOSLocations(updated); };
+    const add = () => {
+        const v = newLoc.trim();
+        if (!v || locs.includes(v)) return;
+        save([...locs, v]);
+        setNewLoc('');
+    };
+    const remove = (loc) => save(locs.filter(l => l !== loc));
+    return (
+        <div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                <input
+                    value={newLoc}
+                    onChange={e => setNewLoc(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && add()}
+                    placeholder="e.g. Vehicle 3, Warehouse…"
+                    style={{ flex: 1, background: '#e2e8f0', border: 'none', padding: '10px 14px', borderRadius: '8px', fontSize: '13px' }}
+                />
+                <button
+                    onClick={add}
+                    style={{ background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 16px', fontWeight: 700, cursor: 'pointer' }}
+                >+ Add</button>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {locs.map(loc => (
+                    <span key={loc} style={{ background: '#e2e8f0', borderRadius: '20px', padding: '6px 14px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        📍 {loc}
+                        <span
+                            onClick={() => remove(loc)}
+                            style={{ cursor: 'pointer', color: '#ef4444', fontWeight: 700, fontSize: 15 }}
+                        >×</span>
+                    </span>
+                ))}
+                {locs.length === 0 && <span style={{ fontSize: 13, color: '#94a3b8' }}>No locations yet. Add one above.</span>}
+            </div>
+        </div>
+    );
+}
+
+
 
 export default function ProfilePage() {
     const { user, updateUser } = useAuth();
     const { theme, toggleTheme, accentColor, updateAccentColor } = useTheme();
+    const { mobileViewMode, setMobileViewMode } = useMobileView();
     const {
         language, setLanguage,
         printLanguage, setPrintLanguage,
@@ -20,6 +91,7 @@ export default function ProfilePage() {
     const [loading, setLoading] = useState(false);
     const [toast, setToast] = useState({ show: false, type: '', text: '' });
     const [showPrinterModal, setShowPrinterModal] = useState(false);
+    const [isMobilePickerOpen, setIsMobilePickerOpen] = useState(false);
 
     const canEdit = ['owner', 'manager', 'stakeholder'].includes(user?.role?.toLowerCase());
 
@@ -474,6 +546,7 @@ export default function ProfilePage() {
     const mapRef = useRef(null);
     const markerRef = useRef(null);
     const fileInputRef = useRef(null);
+    const cameraInputRef = useRef(null);
 
     const handleLogoClick = () => {
         if (fileInputRef.current) fileInputRef.current.click();
@@ -838,6 +911,62 @@ export default function ProfilePage() {
 
 
                 <fieldset disabled={!canEdit} style={{ border: 'none', padding: 0, margin: 0, width: '100%' }}>
+                    {/* CUSTOM MOBILE SECTION SELECTOR DROPDOWN (Stays 100% Inside Mobile Screen) */}
+                    <div className="mobile-admin-section-picker">
+                        <label className="mobile-picker-label">⚙️ Select Settings Section:</label>
+                        <div className="custom-mobile-picker-wrapper">
+                            <button
+                                type="button"
+                                className="custom-mobile-picker-trigger"
+                                onClick={() => setIsMobilePickerOpen(!isMobilePickerOpen)}
+                            >
+                                <span className="trigger-text">
+                                    {activeTab === 'profile' && '🏢 Company Profile'}
+                                    {activeTab === 'pos' && '⚙️ Configuration'}
+                                    {activeTab === 'security' && '🔒 Security & Billing'}
+                                    {activeTab === 'tables' && '🪑 Tables & Regions'}
+                                    {activeTab === 'printer' && '🖨️ Printers'}
+                                    {activeTab === 'online' && '🌐 Online Orders'}
+                                    {activeTab === 'whatsapp' && '💬 WhatsApp'}
+                                    {activeTab === 'stockCategories' && '📦 Stock Categories'}
+                                    {activeTab === 'other' && '🎨 App & Layout Settings'}
+                                    {activeTab === 'stakeholder' && '👥 Team Management'}
+                                </span>
+                                <span className="trigger-arrow">{isMobilePickerOpen ? '▲' : '▼'}</span>
+                            </button>
+
+                            {isMobilePickerOpen && (
+                                <div className="custom-mobile-picker-menu animate-fade-in">
+                                    {[
+                                        { id: 'profile', label: '🏢 Company Profile' },
+                                        { id: 'pos', label: '⚙️ Configuration' },
+                                        { id: 'security', label: '🔒 Security & Billing' },
+                                        { id: 'tables', label: '🪑 Tables & Regions' },
+                                        { id: 'printer', label: '🖨️ Printers' },
+                                        { id: 'online', label: '🌐 Online Orders' },
+                                        { id: 'whatsapp', label: '💬 WhatsApp' },
+                                        { id: 'stockCategories', label: '📦 Stock Categories' },
+                                        { id: 'other', label: '🎨 App & Layout Settings' },
+                                        { id: 'stakeholder', label: '👥 Team Management' }
+                                    ].map(tab => (
+                                        <button
+                                            key={tab.id}
+                                            type="button"
+                                            className={`custom-mobile-picker-option ${activeTab === tab.id ? 'active' : ''}`}
+                                            onClick={() => {
+                                                setActiveTab(tab.id);
+                                                setIsMobilePickerOpen(false);
+                                            }}
+                                        >
+                                            <span>{tab.label}</span>
+                                            {activeTab === tab.id && <span className="active-check">✓</span>}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
                     <div className="admin-layout">
                         <div className="admin-sidebar">
                             <button className={`admin-tab ${activeTab === 'profile' ? 'active' : ''}`} onClick={() => setActiveTab('profile')}>
@@ -903,7 +1032,7 @@ export default function ProfilePage() {
                             {/* SECTION: COMPANY PROFILE */}
                             <div style={{ display: activeTab === 'profile' ? 'block' : 'none' }}>
                                 <div className="profile-card">
-                                    <div className="profile-grid" style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: '40px' }}>
+                                    <div className="profile-grid">
                                         <div className="profile-image-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px' }}>
                                             <div
                                                 style={{ width: '180px', height: '180px', background: '#1e293b', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '72px', fontWeight: 'bold', cursor: 'pointer', overflow: 'hidden', position: 'relative' }}
@@ -918,11 +1047,35 @@ export default function ProfilePage() {
                                                 {loading && <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span className="spinner"></span></div>}
                                             </div>
                                             <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Recommended: 400x400px</span>
+                                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center', width: '100%', maxWidth: '240px' }}>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => fileInputRef.current?.click()}
+                                                    style={{ flex: 1, padding: '8px 12px', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+                                                >
+                                                    📁 Gallery
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => cameraInputRef.current?.click()}
+                                                    style={{ flex: 1, padding: '8px 12px', background: 'rgba(99, 102, 241, 0.12)', border: '1px solid rgba(99, 102, 241, 0.35)', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', color: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+                                                >
+                                                    📸 Camera
+                                                </button>
+                                            </div>
                                             <input
                                                 type="file"
                                                 ref={fileInputRef}
                                                 onChange={handleLogoUpload}
                                                 accept="image/*"
+                                                style={{ display: 'none' }}
+                                            />
+                                            <input
+                                                type="file"
+                                                ref={cameraInputRef}
+                                                onChange={handleLogoUpload}
+                                                accept="image/*"
+                                                capture="environment"
                                                 style={{ display: 'none' }}
                                             />
                                         </div>
@@ -931,7 +1084,7 @@ export default function ProfilePage() {
                                                 <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px', display: 'block' }}>Company / Shop Name</label>
                                                 <input name="restaurantName" className="form-input" value={formData.restaurantName || ''} onChange={handleInputChange} style={{ width: '100%', background: '#e2e8f0', border: 'none', padding: '14px 16px', borderRadius: '10px' }} />
                                             </div>
-                                            <div className="form-group-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                                            <div className="form-group-grid">
                                                 <div className="form-field">
                                                     <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px', display: 'block' }}>Owner Name</label>
                                                     <input name="name" className="form-input" value={formData.name || ''} onChange={handleInputChange} style={{ width: '100%', background: '#e2e8f0', border: 'none', padding: '14px 16px', borderRadius: '10px' }} />
@@ -950,7 +1103,7 @@ export default function ProfilePage() {
                                                         {loading ? 'GETTING SIGNAL...' : 'SYNC LOCATION'}
                                                     </button>
                                                 </div>
-                                                <div className="form-field full-width" style={{ gridColumn: 'span 2' }}>
+                                                <div className="form-field full-width">
                                                     <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px', display: 'block' }}>Full Address</label>
                                                     <input name="address" className="form-input" value={formData.address || ''} onChange={handleInputChange} style={{ width: '100%', background: '#e2e8f0', border: 'none', padding: '14px 16px', borderRadius: '10px' }} />
                                                 </div>
@@ -1036,6 +1189,32 @@ export default function ProfilePage() {
                                     </div>
                                 </div>
                             </div>
+
+                            {/* ── LINE POS SETTINGS ── */}
+                            <div style={{ display: activeTab === 'pos' ? 'block' : 'none' }}>
+                                <div className="setting-section-header" style={{ color: '#475569', fontSize: '14px', fontWeight: '700', letterSpacing: '0.05em', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{ fontSize: '16px' }}>🚚</span> DISTRIBUTOR POS SETTINGS
+                                </div>
+                                <div className="profile-card" style={{ padding: '25px', marginBottom: '30px' }}>
+                                    {/* View preference toggle */}
+                                    <div style={{ marginBottom: '20px' }}>
+                                        <h4 style={{ margin: '0 0 6px', fontSize: '15px', fontWeight: '600', color: 'var(--text-primary)' }}>Default View</h4>
+                                        <p style={{ margin: '0 0 14px', fontSize: '13px', color: '#64748b' }}>
+                                            Choose whether Distributor POS opens in Web View (3-column desktop layout) or Mobile View (bottom-tab layout) by default.
+                                        </p>
+                                        <LinePOSViewToggle />
+                                    </div>
+                                    {/* Location manager */}
+                                    <div>
+                                        <h4 style={{ margin: '0 0 6px', fontSize: '15px', fontWeight: '600', color: 'var(--text-primary)' }}>Inventory Locations</h4>
+                                        <p style={{ margin: '0 0 14px', fontSize: '13px', color: '#64748b' }}>
+                                            Define locations (e.g. Godown, Vehicle 1, Vehicle 2) to group inventory. These appear as filters in the Distributor POS item grid.
+                                        </p>
+                                        <LinePOSLocationManager />
+                                    </div>
+                                </div>
+                            </div>
+
 
                             {/* SECTION: SECURITY & BILLING */}
                             <div style={{ display: activeTab === 'security' ? 'block' : 'none' }}>
@@ -1483,12 +1662,21 @@ export default function ProfilePage() {
 
                                             <div className="form-group-grid" style={{ marginTop: '15px' }}>
                                                 <div className="form-field">
+                                                    <label>Global App View Mode</label>
+                                                    <select className="form-input" value={mobileViewMode} onChange={(e) => setMobileViewMode(e.target.value)} style={{ fontWeight: '600' }}>
+                                                        <option value="auto">⚡ Auto (Adaptive)</option>
+                                                        <option value="mobile">📱 Always Mobile View</option>
+                                                        <option value="web">🖥️ Always Web View</option>
+                                                    </select>
+                                                </div>
+                                                <div className="form-field">
                                                     <label>Preferred POS interface</label>
                                                     <select name="preferredPosMode" className="form-input" value={formData.preferredPosMode || 'restaurant'} onChange={handleInputChange}>
                                                         <option value="restaurant">Restaurant POS</option>
                                                         <option value="supermarket">Supermarket POS</option>
                                                         <option value="clothing">Clothing POS</option>
                                                         <option value="poultry">Poultry Shop POS</option>
+                                                        <option value="line">Distributor POS (Salesman / Line)</option>
                                                     </select>
                                                 </div>
                                                 <div className="form-field">
