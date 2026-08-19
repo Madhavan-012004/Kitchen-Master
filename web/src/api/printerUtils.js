@@ -310,8 +310,9 @@ async function buildUsbBillBytes(order) {
 
         // ── Columns
         ...textToBytes(billRowVerbose('ITEM_NAME', 'QTY', 'RATE', 'TOTAL')),
-        ...textToBytes(DIV + '\n'),
-    ];
+        ...textToBytes(DIV + '\n')
+    );
+
 
     let itemCount = 0;
     let totalQty = 0;
@@ -431,9 +432,10 @@ async function buildUsbTestBytes() {
         ...textToBytes('Powered by ProBloom\n'),
         ...ESC_LEFT,
         ...ESC_FEED,
-        ...ESC_CUT,
-    ];
+        ...ESC_CUT
+    );
     return new Uint8Array(bytes);
+
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

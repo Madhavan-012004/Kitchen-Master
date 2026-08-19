@@ -6,7 +6,6 @@ const NAV_LINKS = [
   { label: 'Why ProBloom', href: '#why' },
   { label: 'Features', href: '#modules' },
   { label: 'Download', href: '#download' },
-  { label: 'Pricing', href: '#pricing' },
 ]
 
 export default function Navbar() {

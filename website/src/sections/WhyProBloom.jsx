@@ -3,6 +3,13 @@ import './WhyProBloom.css'
 
 const EDGES = [
   {
+    icon: '💼',
+    tag: 'Versatility',
+    title: 'Multi-Vertical POS Engine',
+    desc: 'Switch effortlessly between Restaurant, Poultry, Fashion Retail, Tailoring, Distributor Wholesale, or Supermarket mode with tailored billing, units, and stock workflows.',
+    highlight: 'One platform for every business type.',
+  },
+  {
     icon: '⚡',
     tag: 'Performance',
     title: 'Lightning-Fast Offline Mode',
@@ -41,7 +48,7 @@ const EDGES = [
     icon: '🛠️',
     tag: 'Support',
     title: '24×7 Dedicated Support',
-    desc: "You're not a ticket number. Every ProBloom merchant gets a dedicated account manager, live chat, and a direct escalation line — because your dinner rush won't wait.",
+    desc: "You're not a ticket number. Every ProBloom merchant gets a dedicated account manager, live chat, and a direct escalation line — because your business won't wait.",
     highlight: 'A partner, not a vendor.',
   },
 ]
@@ -113,7 +120,7 @@ export default function WhyProBloom() {
             onClick={() => document.querySelector('#get-started')?.scrollIntoView({ behavior: 'smooth' })}
           >
             Start Your Free Trial
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
           </button>
         </div>
       </div>

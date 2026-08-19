@@ -22,18 +22,17 @@ export default function Hero() {
           </h1>
 
           <p className="hero__subtitle">
-            ProBloom is the all-in-one POS, billing, KDS, inventory &amp; analytics
-            platform for restaurants, hotels, and supermarkets — built for businesses
-            that refuse to settle for average.
+            ProBloom is the all-in-one POS, billing &amp; management ecosystem for restaurants,
+            poultry outlets, fashion retail, custom tailoring, wholesale distributors, and supermarkets — built for businesses that refuse to settle for average.
           </p>
 
           <div className="hero__cta-row">
             <button className="btn-primary hero__cta-main" onClick={() => scrollTo('#get-started')}>
               Get ProBloom Free
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
             </button>
             <button className="btn-secondary btn-secondary--on-dark" onClick={() => scrollTo('#modules')}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3" /></svg>
               See How It Works
             </button>
           </div>

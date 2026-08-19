@@ -49,9 +49,11 @@ export function MaintenanceProvider({ children }) {
 
         // 1. Try server API first
         try {
-            console.debug('[Maintenance] Checking /master/banners/active...')
-            const res = await api.get('/master/banners/active', { timeout: 8000 })
-            if (res.data?.data) {
+            const res = await api.get('/master/banners/active', {
+                timeout: 8000,
+                validateStatus: status => status >= 200 && status < 600
+            })
+            if (res && res.status === 200 && res.data?.data) {
                 const b = res.data.data
                 const now = new Date()
                 const from = parseServerDate(b.fromTime)
@@ -63,7 +65,7 @@ export function MaintenanceProvider({ children }) {
                 }
             }
         } catch (err) {
-            console.warn('[Maintenance] Server check failed, using local cache:', err.message)
+            // Silently fallback to local cache
         }
 
         // 2. Check local cache fallback

@@ -1268,45 +1268,6 @@ export default function AnalyticsPage() {
                     </div>
                 );
             }
-            case 'sales-non-gst-report':
-                return (
-                    <div className="report-content-view">
-                        <div className="report-summary-grid mini">
-                            <div className="summary-val-card" style={{ background: 'rgba(45,212,121,0.07)' }}>
-                                <span className="label">Total Revenue (No GST)</span>
-                                <span className="val" style={{ color: '#2DD479' }}>₹{reportData?.totalRevenue?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                            </div>
-                        </div>
-                        <div className="report-table-wrapper">
-                            <table className="premium-table">
-                                <thead>
-                                    <tr>
-                                        <th>Order #</th>
-                                        <th>Date</th>
-                                        <th>Customer</th>
-                                        <th>Payment</th>
-                                        <th>Total</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {reportData?.sales?.map((s, i) => (
-                                        <tr key={i}>
-                                            <td>{s.orderNumber}</td>
-                                            <td>{new Date(s.date).toLocaleDateString()}</td>
-                                            <td>{s.customer || 'Walk-in'}</td>
-                                            <td>{String(s.payment || '-')}</td>
-                                            <td><b>₹{s.total?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                        <div className="report-footer-summary">
-                            <span>Total: <b>₹{reportData?.totalRevenue?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></span>
-                        </div>
-                        {downloadBar}
-                    </div>
-                )
             case 'payment-mode-sales':
                 return (
                     <div className="report-content-view">

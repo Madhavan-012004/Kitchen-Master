@@ -6,7 +6,6 @@ import WhyProBloom from './sections/WhyProBloom'
 import Modules from './sections/Modules'
 import Stats from './sections/Stats'
 import DownloadHub from './sections/DownloadHub'
-import Pricing from './sections/Pricing'
 import Testimonials from './sections/Testimonials'
 import GetStarted from './sections/GetStarted'
 import Footer from './components/Footer'
@@ -24,7 +23,6 @@ export default function App() {
         <WhyProBloom />
         <Modules />
         <DownloadHub />
-        <Pricing />
         <Testimonials />
         <GetStarted onSuccess={setSuccessData} />
       </main>

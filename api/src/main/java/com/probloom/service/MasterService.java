@@ -486,12 +486,20 @@ public class MasterService {
     }
 
     public java.util.Optional<com.probloom.model.entity.MaintenanceBanner> getActiveBanner() {
-        LocalDateTime now = LocalDateTime.now();
-        List<com.probloom.model.entity.MaintenanceBanner> banners = bannerRepository.findAll();
-        for (com.probloom.model.entity.MaintenanceBanner b : banners) {
-            if (Boolean.TRUE.equals(b.getIsActive()) && now.isAfter(b.getFromTime()) && now.isBefore(b.getToTime())) {
-                return java.util.Optional.of(b);
+        try {
+            LocalDateTime now = LocalDateTime.now();
+            List<com.probloom.model.entity.MaintenanceBanner> banners = bannerRepository.findAll();
+            for (com.probloom.model.entity.MaintenanceBanner b : banners) {
+                if (Boolean.TRUE.equals(b.getIsActive())
+                        && b.getFromTime() != null
+                        && b.getToTime() != null
+                        && now.isAfter(b.getFromTime())
+                        && now.isBefore(b.getToTime())) {
+                    return java.util.Optional.of(b);
+                }
             }
+        } catch (Exception e) {
+            System.err.println("[MasterService] Failed to fetch active maintenance banner: " + e.getMessage());
         }
         return java.util.Optional.empty();
     }

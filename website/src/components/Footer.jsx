@@ -1,22 +1,22 @@
 import './Footer.css'
 
 const FOOTER_LINKS = {
-  Product: [
-    { label: 'POS & Billing', href: '#modules' },
-    { label: 'Inventory', href: '#modules' },
-    { label: 'Kitchen Display', href: '#modules' },
-    { label: 'Pricing', href: '#pricing' },
-    { label: 'Download Apps', href: '#download' },
+  'POS Verticals': [
+    { label: 'Restaurant & Dining POS', href: '#modules' },
+    { label: 'Poultry & Meat POS', href: '#modules' },
+    { label: 'Clothing & Fashion POS', href: '#modules' },
+    { label: 'Tailoring & Job Card POS', href: '#modules' },
+    { label: 'Distributor Mobile POS', href: '#modules' },
+    { label: 'Supermarket & Retail POS', href: '#modules' },
   ],
   Company: [
     { label: 'About ProBloom', href: '#about' },
     { label: 'Why ProBloom', href: '#why' },
+    { label: 'Download Hub', href: '#download' },
     { label: 'Testimonials', href: '#testimonials' },
-    { label: 'Careers', href: '#' },
-    { label: 'Blog', href: '#' },
   ],
   Support: [
-    { label: 'Help Center', href: '#' },
+    { label: 'Help & Support', href: '#' },
     { label: 'Contact Us', href: 'mailto:admin.probloom@gmail.com' },
     { label: 'System Status', href: '#' },
     { label: 'Privacy Policy', href: '#' },
@@ -50,7 +50,7 @@ export default function Footer() {
             onClick={() => document.querySelector('#get-started')?.scrollIntoView({ behavior: 'smooth' })}
           >
             Get Started Free
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
           </button>
         </div>
       </div>
@@ -65,11 +65,11 @@ export default function Footer() {
               <span>Pro<span className="accent">Bloom</span></span>
             </div>
             <p className="footer__brand-desc">
-              The complete, modern POS & management ecosystem for restaurants, hotels, and retail businesses across India.
+              The unified multi-POS &amp; business management ecosystem for restaurants, poultry outlets, clothing retail, tailoring, distribution, and supermarkets across India.
             </p>
             <div className="footer__contact">
-              <a href="tel:+919000000000" className="footer__contact-item">
-                📞 +91 90000 00000
+              <a href="tel:+916381537195" className="footer__contact-item">
+                📞 +91 63815 37195
               </a>
               <a href="mailto:admin.probloom@gmail.com" className="footer__contact-item">
                 ✉️ admin.probloom@gmail.com
